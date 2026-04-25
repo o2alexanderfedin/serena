@@ -9,7 +9,6 @@ without affecting added listeners.
 from __future__ import annotations
 
 import threading
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -31,7 +30,7 @@ def test_add_and_remove_listener_receive_payload(handler: LanguageServerProcess)
     a = MagicMock()
     b = MagicMock()
     ha = handler.add_notification_listener("$/progress", a)
-    hb = handler.add_notification_listener("$/progress", b)
+    handler.add_notification_listener("$/progress", b)
     handler._dispatch_notification("$/progress", {"value": 1})
     a.assert_called_once_with({"value": 1})
     b.assert_called_once_with({"value": 1})
