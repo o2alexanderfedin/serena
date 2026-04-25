@@ -612,6 +612,44 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
                 else:
                     raise ValueError(f"Unhandled documentChange kind: {kind!r}")
 
+    def _restore_snapshot(self, snapshot: dict[str, str], applied: list[dict[str, Any]]) -> None:
+        """Walk applied operations in reverse, undoing each via snapshot.
+
+        For each touched URI:
+        - ``__NONEXISTENT__`` sentinel -> file existed-not before, delete now.
+        - ``__DIRECTORY__`` sentinel -> directory was rmtree'd; cannot fully
+          restore (deep snapshot is out of scope for v1.0). Best effort:
+          re-create empty dir to preserve tree shape.
+        - any other string -> file existed before; rewrite content.
+        """
+        # Reverse the applied log to undo create/rename in the right order.
+        for op in reversed(applied):
+            kind = op["kind"]
+            if kind == "renameFile" and not op.get("skipped"):
+                old_abs = os.path.join(
+                    self.project_root, self._relative_path_from_uri(op["oldUri"])
+                )
+                new_abs = os.path.join(
+                    self.project_root, self._relative_path_from_uri(op["newUri"])
+                )
+                # Move dst back to src (best-effort)
+                if os.path.exists(new_abs):
+                    os.replace(new_abs, old_abs)
+        # Then restore content per snapshot URI.
+        for uri, original in snapshot.items():
+            rel = self._relative_path_from_uri(uri)
+            abs_path = os.path.join(self.project_root, rel)
+            if original == "__NONEXISTENT__":
+                if os.path.exists(abs_path) and os.path.isfile(abs_path):
+                    os.remove(abs_path)
+            elif original == "__DIRECTORY__":
+                if not os.path.exists(abs_path):
+                    os.makedirs(abs_path, exist_ok=True)
+            else:
+                os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+                with open(abs_path, "w", encoding=self.encoding, newline=self.newline) as f:
+                    f.write(original)
+
     def _apply_workspace_edit(self, workspace_edit: ls_types.WorkspaceEdit) -> int:
         """Apply a WorkspaceEdit through the full Stage 1B matrix.
 
@@ -625,7 +663,11 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
         """
         snapshot: dict[str, str] = {}
         applied: list[dict[str, Any]] = []
-        self._drive_workspace_edit(workspace_edit, snapshot, applied)
+        try:
+            self._drive_workspace_edit(workspace_edit, snapshot, applied)
+        except Exception:
+            self._restore_snapshot(snapshot, applied)
+            raise
         return len(applied)
 
     def _apply_workspace_edit_with_report(
@@ -644,7 +686,11 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
         annotations = self._collect_change_annotations(cast(dict[str, Any], workspace_edit))
         snapshot: dict[str, str] = {}
         applied: list[dict[str, Any]] = []
-        self._drive_workspace_edit(workspace_edit, snapshot, applied)
+        try:
+            self._drive_workspace_edit(workspace_edit, snapshot, applied)
+        except Exception:
+            self._restore_snapshot(snapshot, applied)
+            raise
         return {
             "count": len(applied),
             "annotations": annotations,
