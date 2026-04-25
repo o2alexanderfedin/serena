@@ -670,6 +670,25 @@ class SolidLanguageServer(ABC):
         """
         return None
 
+    def _handle_semantic_tokens_refresh(self, params: Any) -> None:
+        """LSP `workspace/semanticTokens/refresh`: ACK with null per spec.
+
+        Server-side cache-invalidation hint — the server is telling us its
+        semantic-token data has changed and we should re-request. We ACK
+        passively at MVP; consumers that maintain semantic-token caches
+        will need to invalidate them in v0.2+.
+        """
+        return None
+
+    def _handle_diagnostic_refresh(self, params: Any) -> None:
+        """LSP `workspace/diagnostic/refresh`: ACK with null per spec.
+
+        Required by the diagnostics-delta gate (§4.1). basedpyright in
+        pull-mode (Phase 0 P4) may use this to signal that diagnostics
+        should be re-requested via textDocument/diagnostic.
+        """
+        return None
+
     def _install_default_request_handlers(self) -> None:
         """Register Stage 1A reverse-request handlers on self.server.
 
@@ -694,6 +713,8 @@ class SolidLanguageServer(ABC):
         self.server.on_request("client/unregisterCapability", self._handle_unregister_capability)
         self.server.on_request("window/showMessageRequest", self._handle_show_message_request)
         self.server.on_request("window/workDoneProgress/create", self._handle_work_done_progress_create)
+        self.server.on_request("workspace/semanticTokens/refresh", self._handle_semantic_tokens_refresh)
+        self.server.on_request("workspace/diagnostic/refresh", self._handle_diagnostic_refresh)
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         """
