@@ -73,19 +73,25 @@ class LspPool:
     def __init__(
         self,
         spawn_fn: Callable[[LspPoolKey], Any],
-        idle_shutdown_seconds: float,
+        idle_shutdown_seconds: float | None,
         ram_ceiling_mb: float,
         reaper_enabled: bool = True,
     ) -> None:
         """:param spawn_fn: factory invoked once per (key) miss to create a server.
         :param idle_shutdown_seconds: how long an entry can sit at inflight=0
-            before the reaper (T3) calls .stop() on it.
+            before the reaper (T3) calls .stop() on it. If None, read
+            O2_SCALPEL_LSP_IDLE_SHUTDOWN_SECONDS env var; default 600.0.
         :param ram_ceiling_mb: §16.1 hard ceiling; new spawn refused above this.
         :param reaper_enabled: whether to start the background reaper thread.
             Tests pass ``False`` to keep the per-test state deterministic.
         """
+        import os as _os
         self._spawn_fn = spawn_fn
-        self._idle_seconds = idle_shutdown_seconds
+        if idle_shutdown_seconds is None:
+            env = _os.environ.get("O2_SCALPEL_LSP_IDLE_SHUTDOWN_SECONDS")
+            self._idle_seconds = float(env) if env is not None else 600.0
+        else:
+            self._idle_seconds = float(idle_shutdown_seconds)
         self._ram_ceiling_mb = ram_ceiling_mb
         self._reaper_enabled = reaper_enabled
         self._entries: OrderedDict[LspPoolKey, _ServerEntry] = OrderedDict()
@@ -94,6 +100,10 @@ class LspPool:
         self._pre_ping_fail_count = 0
         self._idle_reaped_count = 0
         self._budget_reject_count = 0
+        self._reaper_event = threading.Event()
+        self._reaper_thread: threading.Thread | None = None
+        if reaper_enabled:
+            self.start_reaper()
 
     # --- public API ------------------------------------------------------
 
@@ -138,6 +148,7 @@ class LspPool:
 
     def shutdown_all(self) -> None:
         """Stop every server and clear the pool. Idempotent."""
+        self.stop_reaper()
         with self._pool_lock:
             entries = list(self._entries.values())
             self._entries.clear()
@@ -162,6 +173,66 @@ class LspPool:
                 idle_reaped_count=self._idle_reaped_count,
                 budget_reject_count=self._budget_reject_count,
             )
+
+    def start_reaper(self) -> None:
+        """Spawn the daemon reaper thread. Idempotent."""
+        if self._reaper_thread is not None and self._reaper_thread.is_alive():
+            return
+        self._reaper_event.clear()
+        t = threading.Thread(target=self._reaper_loop, name="lsp-pool-reaper", daemon=True)
+        self._reaper_thread = t
+        t.start()
+
+    def stop_reaper(self) -> None:
+        """Signal the reaper to exit and join. Idempotent."""
+        self._reaper_event.set()
+        t = self._reaper_thread
+        if t is not None:
+            t.join(timeout=2.0)
+        self._reaper_thread = None
+
+    def _reaper_loop(self) -> None:
+        # Tick at most every 60 s, and at least every idle_seconds/4 (so a
+        # short test idle window still gets timely reaping).
+        tick = max(0.01, min(60.0, self._idle_seconds / 4.0))
+        while not self._reaper_event.wait(tick):
+            try:
+                self._reap_idle_once()
+            except Exception:  # pragma: no cover
+                log.exception("LspPool reaper tick raised")
+
+    def _reap_idle_once(self) -> int:
+        """Reap entries whose inflight==0 and last_used_ts is older than idle_seconds.
+
+        Returns the count of entries reaped this tick.
+        """
+        now = self._now()
+        # Phase 1: collect candidates under the pool lock; do not call stop()
+        # while holding it (lock-order discipline mirrors Stage 1B
+        # TransactionStore._evict_lru).
+        candidates: list[tuple[LspPoolKey, _ServerEntry]] = []
+        with self._pool_lock:
+            for key, entry in list(self._entries.items()):
+                if entry.inflight == 0 and entry.server is not None and (now - entry.last_used_ts) >= self._idle_seconds:
+                    candidates.append((key, entry))
+                    # Remove eagerly so a concurrent acquire re-spawns rather
+                    # than racing the reaper into stop().
+                    self._entries.pop(key, None)
+        # Phase 2: actually stop them.
+        reaped = 0
+        for _key, entry in candidates:
+            srv = entry.server
+            if srv is None:
+                continue
+            try:
+                srv.stop()
+                reaped += 1
+            except Exception:  # pragma: no cover
+                log.exception("LspPool reap: stop() raised")
+        if reaped:
+            with self._pool_lock:
+                self._idle_reaped_count += reaped
+        return reaped
 
     # --- internals -------------------------------------------------------
 
