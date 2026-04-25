@@ -889,6 +889,46 @@ class SolidLanguageServer(ABC):
         """
         return params
 
+    @staticmethod
+    def is_in_workspace(
+        target: str,
+        roots: list[str],
+        extra_paths: list[str] | tuple[str, ...] = (),
+    ) -> bool:
+        """Path-prefix workspace-boundary check (Phase 0 P-WB / Q4 §7.1).
+
+        Resolves both target and roots via ``Path.resolve()`` so symlinks
+        land at their real location. Returns True iff the resolved target
+        is at-or-under at least one resolved root or extra_path.
+
+        ``extra_paths`` opts in additional directories — drives the
+        ``O2_SCALPEL_WORKSPACE_EXTRA_PATHS`` environment variable parsed
+        by the caller in Stage 1B.
+
+        Non-existent roots / extra_paths are silently skipped (an OSError
+        from ``Path.resolve()`` is treated as "no match"). Non-existent
+        targets resolve based on their string components — Stage 1B may
+        intentionally probe paths that don't yet exist (e.g., a CreateFile
+        edit's destination), so this case is supported.
+        """
+        try:
+            target_path = Path(target).resolve()
+        except OSError:
+            return False
+        candidates: list[Path] = []
+        for r in list(roots) + list(extra_paths):
+            try:
+                candidates.append(Path(r).resolve())
+            except OSError:
+                continue
+        for r in candidates:
+            try:
+                target_path.relative_to(r)
+                return True
+            except ValueError:
+                continue
+        return False
+
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         """
         Creates the dependency provider for this language server.
