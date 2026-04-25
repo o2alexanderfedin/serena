@@ -406,6 +406,47 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
         """Hook for T5 snippet stripping. T1 ships identity passthrough."""
         return text_edit
 
+    def _apply_create_file(
+        self,
+        change: dict[str, Any],
+        snapshot: dict[str, str],
+        applied: list[dict[str, Any]],
+    ) -> None:
+        """Apply a CreateFile resource operation.
+
+        Options matrix (per LSP §3.16 spec):
+        - neither flag + target absent: create empty file.
+        - neither flag + target present: raise FileExistsError.
+        - overwrite=True + target present: truncate to empty.
+        - ignoreIfExists=True + target present: silent skip (still counted).
+        - overwrite wins over ignoreIfExists when both are set.
+        """
+        uri: str = change["uri"]
+        options: dict[str, Any] = change.get("options", {})
+        overwrite: bool = bool(options.get("overwrite"))
+        ignore_if_exists: bool = bool(options.get("ignoreIfExists"))
+        relative_path = self._relative_path_from_uri(uri)
+        abs_path = os.path.join(self.project_root, relative_path)
+        already_exists = os.path.exists(abs_path)
+        # Snapshot for rollback: record "did not exist" sentinel so T8 can delete on restore.
+        if uri not in snapshot:
+            if already_exists:
+                snapshot[uri] = open(abs_path, encoding=self.encoding).read()
+            else:
+                snapshot[uri] = "__NONEXISTENT__"
+        if already_exists and not overwrite:
+            if ignore_if_exists:
+                applied.append({"kind": "createFile", "uri": uri, "skipped": True})
+                return
+            raise FileExistsError(
+                f"CreateFile target already exists and neither overwrite nor "
+                f"ignoreIfExists was set: {uri}"
+            )
+        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+        with open(abs_path, "w", encoding=self.encoding, newline=self.newline) as f:
+            f.write("")
+        applied.append({"kind": "createFile", "uri": uri, "skipped": False})
+
     def _apply_workspace_edit(self, workspace_edit: ls_types.WorkspaceEdit) -> int:
         """Apply a WorkspaceEdit through the full Stage 1B matrix.
 
@@ -432,10 +473,11 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
                 kind = change.get("kind")
                 if kind is None:
                     self._apply_text_document_edit(change, snapshot, applied)
+                elif kind == "create":
+                    self._apply_create_file(change, snapshot, applied)
                 else:
                     raise ValueError(
-                        f"Unhandled documentChange kind: {kind!r}; T1 ships only TextDocumentEdit. "
-                        f"T2/T3/T4 add CreateFile/DeleteFile/RenameFile."
+                        f"Unhandled documentChange kind: {kind!r}; T3/T4 add delete/rename."
                     )
         return len(applied)
 
