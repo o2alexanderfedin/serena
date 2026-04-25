@@ -210,17 +210,17 @@ class LspPool:
         # Phase 1: collect candidates under the pool lock; do not call stop()
         # while holding it (lock-order discipline mirrors Stage 1B
         # TransactionStore._evict_lru).
-        candidates: list[tuple[LspPoolKey, _ServerEntry]] = []
+        candidates: list[_ServerEntry] = []
         with self._pool_lock:
             for key, entry in list(self._entries.items()):
                 if entry.inflight == 0 and entry.server is not None and (now - entry.last_used_ts) >= self._idle_seconds:
-                    candidates.append((key, entry))
+                    candidates.append(entry)
                     # Remove eagerly so a concurrent acquire re-spawns rather
                     # than racing the reaper into stop().
                     self._entries.pop(key, None)
         # Phase 2: actually stop them.
         reaped = 0
-        for _key, entry in candidates:
+        for entry in candidates:
             srv = entry.server
             if srv is None:
                 continue
