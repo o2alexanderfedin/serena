@@ -76,6 +76,7 @@ class LspPool:
         idle_shutdown_seconds: float | None,
         ram_ceiling_mb: float,
         reaper_enabled: bool = True,
+        pre_ping_on_acquire: bool = True,
     ) -> None:
         """:param spawn_fn: factory invoked once per (key) miss to create a server.
         :param idle_shutdown_seconds: how long an entry can sit at inflight=0
@@ -84,6 +85,8 @@ class LspPool:
         :param ram_ceiling_mb: §16.1 hard ceiling; new spawn refused above this.
         :param reaper_enabled: whether to start the background reaper thread.
             Tests pass ``False`` to keep the per-test state deterministic.
+        :param pre_ping_on_acquire: whether to health-probe cached entries
+            before returning them. Tests may pass ``False`` to skip the probe.
         """
         import os as _os
         self._spawn_fn = spawn_fn
@@ -102,6 +105,7 @@ class LspPool:
         self._budget_reject_count = 0
         self._reaper_event = threading.Event()
         self._reaper_thread: threading.Thread | None = None
+        self._pre_ping_on_acquire = pre_ping_on_acquire
         if reaper_enabled:
             self.start_reaper()
 
@@ -110,12 +114,20 @@ class LspPool:
     def acquire(self, key: LspPoolKey) -> Any:
         """Return the server for ``key``; spawn lazily on miss.
 
-        Concurrent ``acquire(same key)`` calls share one spawn — guarded by a
-        per-entry lock obtained under the pool lock.
+        When ``pre_ping_on_acquire`` is set, a cached entry is health-probed
+        before being returned; on probe failure the entry is replaced
+        transparently — the caller never sees a dead handle.
         """
-        # Phase 1: locate-or-create the entry under the global lock. We may
-        # release it before spawning (spawn is slow; we don't want it to
-        # block other keys).
+        # First pass: cache hit?
+        with self._pool_lock:
+            entry = self._entries.get(key)
+            had_entry = entry is not None and entry.server is not None
+        if had_entry and self._pre_ping_on_acquire:
+            if not self.pre_ping(key):
+                # pre_ping has already popped the dead entry; fall through to
+                # the spawn path below.
+                pass
+        # Second pass: locate-or-create + spawn-if-needed.
         with self._pool_lock:
             entry = self._entries.get(key)
             if entry is None:
@@ -123,14 +135,11 @@ class LspPool:
                 self._entries[key] = entry
             entry.inflight += 1
             entry_lock = entry.entry_lock
-
-        # Phase 2: spawn if necessary, under the per-entry lock.
         with entry_lock:
             if entry.server is None:
                 log.info("LspPool spawn key=%s", key)
                 entry.server = self._spawn_fn(key)
                 self._spawn_count += 1
-        # Update bookkeeping under the global lock so stats() is consistent.
         with self._pool_lock:
             entry.last_used_ts = self._now()
             self._entries.move_to_end(key)
@@ -145,6 +154,42 @@ class LspPool:
             if entry.inflight > 0:
                 entry.inflight -= 1
             entry.last_used_ts = self._now()
+
+    def pre_ping(self, key: LspPoolKey) -> bool:
+        """Cheap health probe: ``request_workspace_symbol("")``.
+
+        Returns ``True`` if the server responded (any response counts; the
+        empty-query result is fine). Returns ``False`` if the call raised or
+        if no entry exists for ``key``. On failure, the dead entry is popped
+        from the pool — the next ``acquire(key)`` re-spawns naturally.
+        """
+        with self._pool_lock:
+            entry = self._entries.get(key)
+        if entry is None or entry.server is None:
+            return False
+        try:
+            entry.server.request_workspace_symbol("")
+            return True
+        except Exception:  # noqa: BLE001 — any failure means the child is dead.
+            log.warning("LspPool pre_ping FAIL key=%s — replacing", key)
+            with self._pool_lock:
+                # Only pop if it's still the same entry (avoid racing a
+                # concurrent reap or shutdown).
+                cur = self._entries.get(key)
+                if cur is entry:
+                    self._entries.pop(key, None)
+                self._pre_ping_fail_count += 1
+            try:
+                entry.server.stop()
+            except Exception:  # pragma: no cover
+                pass
+            return False
+
+    def pre_ping_all(self) -> dict[LspPoolKey, bool]:
+        """Pre-ping every active entry. Returns a per-key result map."""
+        with self._pool_lock:
+            keys = list(self._entries.keys())
+        return {k: self.pre_ping(k) for k in keys}
 
     def shutdown_all(self) -> None:
         """Stop every server and clear the pool. Idempotent."""
