@@ -447,6 +447,50 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
             f.write("")
         applied.append({"kind": "createFile", "uri": uri, "skipped": False})
 
+    def _apply_delete_file(
+        self,
+        change: dict[str, Any],
+        snapshot: dict[str, str],
+        applied: list[dict[str, Any]],
+    ) -> None:
+        """Apply a DeleteFile resource operation.
+
+        Options matrix (per LSP §3.16 spec):
+        - target present + file: delete (snapshot stores prior content for T10 inverse).
+        - target present + dir: raise IsADirectoryError unless recursive=True.
+        - target absent + neither flag: raise FileNotFoundError.
+        - target absent + ignoreIfNotExists=True: silent skip.
+        """
+        import shutil
+
+        uri: str = change["uri"]
+        options: dict[str, Any] = change.get("options", {})
+        recursive: bool = bool(options.get("recursive"))
+        ignore_if_not_exists: bool = bool(options.get("ignoreIfNotExists"))
+        relative_path = self._relative_path_from_uri(uri)
+        abs_path = os.path.join(self.project_root, relative_path)
+        if not os.path.exists(abs_path):
+            if ignore_if_not_exists:
+                applied.append({"kind": "deleteFile", "uri": uri, "skipped": True})
+                return
+            raise FileNotFoundError(
+                f"DeleteFile target does not exist and ignoreIfNotExists is not set: {uri}"
+            )
+        if os.path.isdir(abs_path):
+            if not recursive:
+                raise IsADirectoryError(
+                    f"DeleteFile target is a directory and recursive is not set: {uri}"
+                )
+            # Best-effort directory snapshot: record the dir path with sentinel
+            # so T10 inverse can flag it as non-restorable (we don't deep-snapshot trees).
+            snapshot[uri] = "__DIRECTORY__"
+            shutil.rmtree(abs_path)
+        else:
+            if uri not in snapshot:
+                snapshot[uri] = open(abs_path, encoding=self.encoding).read()
+            os.remove(abs_path)
+        applied.append({"kind": "deleteFile", "uri": uri, "skipped": False})
+
     def _apply_workspace_edit(self, workspace_edit: ls_types.WorkspaceEdit) -> int:
         """Apply a WorkspaceEdit through the full Stage 1B matrix.
 
@@ -475,9 +519,11 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
                     self._apply_text_document_edit(change, snapshot, applied)
                 elif kind == "create":
                     self._apply_create_file(change, snapshot, applied)
+                elif kind == "delete":
+                    self._apply_delete_file(change, snapshot, applied)
                 else:
                     raise ValueError(
-                        f"Unhandled documentChange kind: {kind!r}; T3/T4 add delete/rename."
+                        f"Unhandled documentChange kind: {kind!r}; T4 adds rename."
                     )
         return len(applied)
 
