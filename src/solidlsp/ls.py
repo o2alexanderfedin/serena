@@ -690,6 +690,50 @@ class SolidLanguageServer(ABC):
         self.server.on_request("workspace/semanticTokens/refresh", self._handle_semantic_tokens_refresh)
         self.server.on_request("workspace/diagnostic/refresh", self._handle_diagnostic_refresh)
 
+    def request_code_actions(
+        self,
+        file: str,
+        start: dict[str, int],
+        end: dict[str, int],
+        only: list[str] | None = None,
+        trigger_kind: int = 2,
+        diagnostics: list[dict[str, Any]] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Send `textDocument/codeAction`. Returns the raw CodeAction[] list.
+
+        The caller must call ``resolve_code_action()`` (T7) if any returned
+        action lacks a populated ``edit`` or ``command``. Phase 0 S6:
+        rust-analyzer is deferred-resolution — the top-level response carries
+        ``{title, kind, data, group?}`` only.
+
+        :param file: absolute path to the document
+        :param start: 0-indexed LSP position ``{line, character}``
+        :param end: 0-indexed LSP position
+        :param only: optional ``CodeActionKind`` allow-list
+            (e.g., ``["refactor.extract"]``); omitted from the wire payload
+            if None.
+        :param trigger_kind: 1=Invoked, 2=Automatic.
+        :param diagnostics: associated diagnostics; defaults to empty list.
+
+        Per-call timeout is governed by the instance-level
+        ``set_request_timeout()``; the underlying ``send_request`` does not
+        accept a per-call timeout argument.
+        """
+        uri = Path(file).as_uri()
+        context: dict[str, Any] = {
+            "diagnostics": diagnostics or [],
+            "triggerKind": trigger_kind,
+        }
+        if only is not None:
+            context["only"] = only
+        params = {
+            "textDocument": {"uri": uri},
+            "range": {"start": start, "end": end},
+            "context": context,
+        }
+        response = self.server.send_request("textDocument/codeAction", params)
+        return response if isinstance(response, list) else []
+
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         """
         Creates the dependency provider for this language server.
