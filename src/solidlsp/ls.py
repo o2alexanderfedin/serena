@@ -353,6 +353,20 @@ class SolidLanguageServer(ABC):
     DOCUMENT_SYMBOL_CACHE_VERSION = 4
     DOCUMENT_SYMBOL_CACHE_FILENAME = "document_symbols.pkl"
 
+    _INDEXING_TOKEN_PREFIXES: tuple[str, ...] = (
+        "rustAnalyzer/Fetching",
+        "rustAnalyzer/Building CrateGraph",
+        "rustAnalyzer/Building compile-time-deps",
+        "rustAnalyzer/Loading proc-macros",
+        "rustAnalyzer/cachePriming",
+        "rustAnalyzer/Roots Scanned",
+        "rust-analyzer/flycheck/",
+    )
+    """Phase 0 S1 captured token set. ``rust-analyzer/flycheck/`` is a
+    PREFIX (matches ``flycheck/0``, ``flycheck/1``, etc.); the others are
+    exact-match-or-prefix because RA emits them with no suffix in the
+    captured trace."""
+
     # Directories that should always be ignored regardless of language:
     # VCS internals, virtual environments, caches, and serena's own data.
     _ALWAYS_IGNORED_DIRS = frozenset(
@@ -556,6 +570,11 @@ class SolidLanguageServer(ABC):
         # not via the executeCommand response).
         self._pending_apply_edits: list[dict[str, Any]] = []
         self._apply_edits_lock = threading.Lock()
+
+        # Stage 1A T9: $/progress aggregation for wait_for_indexing()
+        self._progress_state: dict[str, str] = {}
+        self._progress_lock = threading.Lock()
+        self._progress_event = threading.Event()
 
         # Stage 1A T2: register reverse-request handlers BEFORE start_server()
         # so no LSP traffic can race the registration.
@@ -782,6 +801,64 @@ class SolidLanguageServer(ABC):
         response = self.server.send_request("workspace/executeCommand", params)
         drained = self.pop_pending_apply_edits()
         return response, drained
+
+    def _is_indexing_token(self, token: str) -> bool:
+        """True when ``token`` is one of the rust-analyzer indexing-class tokens.
+
+        Used by ``wait_for_indexing()`` to know which progress streams to
+        watch. See ``_INDEXING_TOKEN_PREFIXES`` for the canonical list.
+        """
+        if not isinstance(token, str) or not token:
+            return False
+        return any(token == p or token.startswith(p) for p in self._INDEXING_TOKEN_PREFIXES)
+
+    def _on_progress(self, params: dict[str, Any]) -> None:
+        """Listener fed by the ``$/progress`` notification tap.
+
+        T13 wires ``rust_analyzer.py`` to subscribe via
+        ``LanguageServerProcess.add_notification_listener``. Records the
+        last ``kind`` (begin/report/end) per token and signals
+        ``_progress_event`` when every observed indexing-class token has
+        reached ``end``.
+
+        Defensive: malformed payloads (missing token/value/kind, non-string
+        token, unknown kind) are silently dropped — the LSP spec forbids
+        them but we tolerate.
+        """
+        if not isinstance(params, dict):
+            return
+        token = params.get("token")
+        value = params.get("value") or {}
+        if not isinstance(token, str):
+            return
+        kind = value.get("kind")
+        if kind not in ("begin", "report", "end"):
+            return
+        with self._progress_lock:
+            self._progress_state[token] = kind
+            indexing_seen = [t for t in self._progress_state if self._is_indexing_token(t)]
+            if not indexing_seen:
+                return
+            active = [t for t in indexing_seen if self._progress_state[t] != "end"]
+            if not active:
+                self._progress_event.set()
+
+    def wait_for_indexing(self, timeout_s: float = 30.0) -> bool:
+        """Block until every observed indexing-class token has reached ``kind=end``.
+
+        Returns ``True`` if the event fired within the timeout, ``False``
+        on timeout. The internal event is cleared on return so the next
+        ``wait_for_indexing()`` call waits for a fresh indexing cycle.
+
+        If at the moment of call all observed indexing-class tokens are
+        already at ``kind=end``, the event has been pre-signaled by
+        ``_on_progress()`` and this returns ``True`` immediately.
+        """
+        signaled = self._progress_event.wait(timeout=timeout_s)
+        if signaled:
+            with self._progress_lock:
+                self._progress_event.clear()
+        return signaled
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         """
