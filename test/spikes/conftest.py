@@ -84,3 +84,69 @@ def slim_sls() -> _ConcreteSLS:
     on the returned object themselves (e.g., `_pending_apply_edits = []`).
     """
     return _ConcreteSLS.__new__(_ConcreteSLS)
+
+
+# --- Stage 1C fixtures ----------------------------------------------------
+
+import threading as _t1c_threading
+from collections.abc import Callable as _t1c_Callable
+from unittest.mock import MagicMock as _t1c_MagicMock
+
+import pytest as _t1c_pytest
+
+
+@_t1c_pytest.fixture
+def fake_sls_factory() -> _t1c_Callable[..., _t1c_MagicMock]:
+    """Return a factory that builds MagicMock-backed SolidLanguageServer stand-ins.
+
+    Each instance has the methods Stage 1C cares about: start_server (sync
+    context manager that returns self), is_running (returns True after
+    start), stop (flips is_running to False), request_workspace_symbol
+    (returns []). Callers can override any of those by setting attributes
+    on the returned mock.
+    """
+    def _make(language: str = "rust", project_root: str = "/tmp", crash_after_n_pings: int | None = None) -> _t1c_MagicMock:
+        m = _t1c_MagicMock(name=f"FakeSLS({language},{project_root})")
+        m.language = language
+        m.repository_root_path = project_root
+        m._is_running = False
+        m._ping_count = 0
+        m._crash_after = crash_after_n_pings
+
+        def _start_cm() -> _t1c_MagicMock:
+            from contextlib import contextmanager
+            @contextmanager
+            def _cm():  # type: ignore[no-untyped-def]
+                m._is_running = True
+                yield m
+                m._is_running = False
+            return _cm()
+        m.start_server.side_effect = _start_cm
+        m.is_running.side_effect = lambda: bool(m._is_running)
+
+        def _stop(shutdown_timeout: float = 2.0) -> None:  # noqa: ARG001
+            m._is_running = False
+        m.stop.side_effect = _stop
+
+        def _ping(query: str) -> list[dict[str, object]]:  # noqa: ARG001
+            m._ping_count += 1
+            if m._crash_after is not None and m._ping_count > m._crash_after:
+                raise RuntimeError("fake LSP child crashed")
+            return []
+        m.request_workspace_symbol.side_effect = _ping
+        return m
+    return _make
+
+
+@_t1c_pytest.fixture
+def slim_pool(fake_sls_factory):  # type: ignore[no-untyped-def]
+    """Fresh LspPool wired against fake_sls_factory; reaper disabled by short interval."""
+    from serena.refactoring.lsp_pool import LspPool
+    pool = LspPool(
+        spawn_fn=lambda key: fake_sls_factory(language=key.language, project_root=key.project_root),
+        idle_shutdown_seconds=0.05,
+        ram_ceiling_mb=4096.0,
+        reaper_enabled=False,
+    )
+    yield pool
+    pool.shutdown_all()
