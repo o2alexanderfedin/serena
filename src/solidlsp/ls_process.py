@@ -539,21 +539,37 @@ class LanguageServerProcess:
     def _dispatch_notification(self, method: str, params: Any) -> None:
         """Dispatch to the legacy primary handler (if any) and every additive listener.
 
-        Listener exceptions are caught and logged so a misbehaving listener cannot
-        break the dispatch pipeline.
+        Preserves three pre-T1 dispatch behaviors:
+        - asyncio.CancelledError is swallowed silently (cooperative cancellation).
+        - Other exceptions log via log.error only when not shutting down (suppress
+          shutdown-time spam).
+        - When no handler AND no listeners are registered, log.warning surfaces the
+          unhandled method so server-side surprises are not silently dropped.
+
+        Snapshotting `on_notification_listeners.get(method).values()` via list() is
+        GIL-atomic; we never mutate the inner dict in place during iteration.
         """
         primary = self.on_notification_handlers.get(method)
+        listeners = list((self.on_notification_listeners.get(method) or {}).values())
+        if primary is None and not listeners:
+            log.warning("Unhandled method '%s'", method)
+            return
         if primary is not None:
             try:
                 primary(params)
-            except Exception:
-                log.exception("primary notification handler for %s raised", method)
-        listeners = list((self.on_notification_listeners.get(method) or {}).values())
+            except asyncio.CancelledError:
+                return
+            except Exception as ex:
+                if not self._is_shutting_down:
+                    log.error("Error handling notification for method '%s': %s", method, ex, exc_info=ex)
         for cb in listeners:
             try:
                 cb(params)
-            except Exception:
-                log.exception("notification listener for %s raised", method)
+            except asyncio.CancelledError:
+                return
+            except Exception as ex:
+                if not self._is_shutting_down:
+                    log.error("Error in notification listener for method '%s': %s", method, ex, exc_info=ex)
 
     def _response_handler(self, response: StringDict) -> None:
         """
