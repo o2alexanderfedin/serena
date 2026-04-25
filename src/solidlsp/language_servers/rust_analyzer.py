@@ -9,7 +9,7 @@ import platform
 import shutil
 import subprocess
 import threading
-from typing import cast
+from typing import Any, cast
 
 from overrides import override
 
@@ -680,6 +680,20 @@ class RustAnalyzer(SolidLanguageServer):
         }
         return cast(InitializeParams, initialize_params)
 
+    def override_initialize_params(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Stage 1A T13: set ``experimental.snippetTextEdit=False`` so the
+        applier never has to strip ``$N`` snippet markers (Phase 0 S2).
+
+        Replaces the hard-coded ``True`` previously sent in
+        ``_get_initialize_params``; that line stays in place to preserve
+        the rest of the experimental block, but the hook flips it to
+        ``False`` after construction so this is the wire-final value.
+        """
+        caps = params.setdefault("capabilities", {})
+        exp = caps.setdefault("experimental", {})
+        exp["snippetTextEdit"] = False
+        return params
+
     def _start_server(self) -> None:
         """
         Starts the Rust Analyzer Language Server
@@ -717,7 +731,7 @@ class RustAnalyzer(SolidLanguageServer):
         self.server.on_notification("language/status", lang_status_handler)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_request("workspace/executeClientCommand", execute_client_command_handler)
-        self.server.on_notification("$/progress", do_nothing)
+        self.server.add_notification_listener("$/progress", self._on_progress)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
         self.server.on_notification("language/actionableNotification", do_nothing)
         self.server.on_notification("experimental/serverStatus", check_experimental_status)
