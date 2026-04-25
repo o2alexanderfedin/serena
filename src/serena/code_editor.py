@@ -491,6 +491,51 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
             os.remove(abs_path)
         applied.append({"kind": "deleteFile", "uri": uri, "skipped": False})
 
+    def _apply_rename_file(
+        self,
+        change: dict[str, Any],
+        snapshot: dict[str, str],
+        applied: list[dict[str, Any]],
+    ) -> None:
+        """Apply a RenameFile resource operation.
+
+        Options matrix:
+        - dst absent: rename freely.
+        - dst present + neither flag: raise FileExistsError.
+        - dst present + overwrite=True: replace dst (record dst content in snapshot).
+        - dst present + ignoreIfExists=True: silent skip (src and dst both untouched).
+        - overwrite wins over ignoreIfExists when both are set.
+        """
+        old_uri: str = change["oldUri"]
+        new_uri: str = change["newUri"]
+        options: dict[str, Any] = change.get("options", {})
+        overwrite: bool = bool(options.get("overwrite"))
+        ignore_if_exists: bool = bool(options.get("ignoreIfExists"))
+        old_rel = self._relative_path_from_uri(old_uri)
+        new_rel = self._relative_path_from_uri(new_uri)
+        old_abs = os.path.join(self.project_root, old_rel)
+        new_abs = os.path.join(self.project_root, new_rel)
+        # Snapshot src content so T10 inverse can recreate at oldUri
+        if old_uri not in snapshot:
+            try:
+                snapshot[old_uri] = open(old_abs, encoding=self.encoding).read()
+            except FileNotFoundError:
+                snapshot[old_uri] = "__NONEXISTENT__"
+        dst_existed = os.path.exists(new_abs)
+        if dst_existed and not overwrite:
+            if ignore_if_exists:
+                applied.append({"kind": "renameFile", "oldUri": old_uri, "newUri": new_uri, "skipped": True})
+                return
+            raise FileExistsError(
+                f"RenameFile destination exists and neither overwrite nor "
+                f"ignoreIfExists was set: {new_uri}"
+            )
+        if dst_existed and new_uri not in snapshot:
+            snapshot[new_uri] = open(new_abs, encoding=self.encoding).read()
+        os.makedirs(os.path.dirname(new_abs), exist_ok=True)
+        os.replace(old_abs, new_abs)  # os.replace overwrites on POSIX & Windows atomically
+        applied.append({"kind": "renameFile", "oldUri": old_uri, "newUri": new_uri, "skipped": False})
+
     def _apply_workspace_edit(self, workspace_edit: ls_types.WorkspaceEdit) -> int:
         """Apply a WorkspaceEdit through the full Stage 1B matrix.
 
@@ -521,10 +566,10 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
                     self._apply_create_file(change, snapshot, applied)
                 elif kind == "delete":
                     self._apply_delete_file(change, snapshot, applied)
+                elif kind == "rename":
+                    self._apply_rename_file(change, snapshot, applied)
                 else:
-                    raise ValueError(
-                        f"Unhandled documentChange kind: {kind!r}; T4 adds rename."
-                    )
+                    raise ValueError(f"Unhandled documentChange kind: {kind!r}")
         return len(applied)
 
     def rename_symbol(self, name_path: str, relative_path: str, new_name: str) -> str:
