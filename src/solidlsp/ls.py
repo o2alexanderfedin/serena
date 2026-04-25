@@ -628,6 +628,28 @@ class SolidLanguageServer(ABC):
             self._pending_apply_edits.clear()
             return out
 
+    def _handle_workspace_configuration(self, params: dict[str, Any]) -> list[dict[str, Any]]:
+        """LSP `workspace/configuration` request: one config per requested item.
+
+        Default-safe: empty objects. Subclasses (e.g., per-language strategy)
+        may override to inject server-specific settings. Phase 0 P4 finding:
+        basedpyright BLOCKS on this request if unanswered.
+        """
+        items = params.get("items") or []
+        return [{} for _ in items]
+
+    def _handle_register_capability(self, params: dict[str, Any]) -> None:
+        """LSP `client/registerCapability` request: ACK with null per spec.
+
+        rust-analyzer dynamically registers workspace/didChangeWatchedFiles
+        via this method (§4.1). We accept all registrations passively.
+        """
+        return None
+
+    def _handle_unregister_capability(self, params: dict[str, Any]) -> None:
+        """LSP `client/unregisterCapability` request: ACK with null per spec."""
+        return None
+
     def _install_default_request_handlers(self) -> None:
         """Register Stage 1A reverse-request handlers on self.server.
 
@@ -647,6 +669,9 @@ class SolidLanguageServer(ABC):
         registering its own handler after super.
         """
         self.server.on_request("workspace/applyEdit", self._handle_workspace_apply_edit)
+        self.server.on_request("workspace/configuration", self._handle_workspace_configuration)
+        self.server.on_request("client/registerCapability", self._handle_register_capability)
+        self.server.on_request("client/unregisterCapability", self._handle_unregister_capability)
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         """
