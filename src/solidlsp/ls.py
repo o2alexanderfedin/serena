@@ -585,6 +585,21 @@ class SolidLanguageServer(ABC):
         # so no LSP traffic can race the registration.
         self._install_default_request_handlers()
 
+        # Stage 1A T10: install single chokepoint for override_initialize_params.
+        # Subclasses call ``self.server.send.initialize(params)`` directly from
+        # their ``_start_server`` implementations; wrapping the bound method here
+        # ensures the override hook is applied to every initialize regardless of
+        # which subclass issues it. T13 will use this for RustAnalyzerLanguageServer
+        # to set experimental.snippetTextEdit=False (Phase 0 S2 fix replacing the
+        # previous hard-code at rust_analyzer.py:458).
+        _original_initialize = self.server.send.initialize
+
+        def _initialize_with_override(params: dict[str, Any]) -> Any:
+            params = self.override_initialize_params(params)
+            return _original_initialize(params)
+
+        self.server.send.initialize = _initialize_with_override  # type: ignore[method-assign]
+
         # Set up the pathspec matcher for the ignored paths
         # for all absolute paths in ignored_paths, convert them to relative paths
         processed_patterns = []
@@ -885,6 +900,20 @@ class SolidLanguageServer(ABC):
             with self._progress_lock:
                 self._progress_event.clear()
         return signaled
+
+    def override_initialize_params(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Hook for subclasses to mutate initialize params before they are sent.
+
+        Default: identity (returns params unchanged). Subclasses override to
+        inject capability tweaks. Phase 0 S2 finding: the previous fork
+        hard-coded ``experimental.snippetTextEdit=True`` at
+        ``rust_analyzer.py:458``; T13 will replace that with an override
+        here that sets the flag to False (defensive default per §4.1).
+
+        Subclasses may either mutate ``params`` in place and return it, or
+        return a new dict. Callers must use the returned value.
+        """
+        return params
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         """
