@@ -27,6 +27,10 @@ class PylspClient:
     Captures `workspace/applyEdit` reverse-requests because pylsp-rope returns
     its `WorkspaceEdit` payload via that channel, not via the `executeCommand`
     response. Each captured payload is appended to `self.apply_edits`.
+
+    Captures `textDocument/publishDiagnostics` notifications into
+    `self.diagnostics_by_uri[uri]` (last-write-wins) so spikes that need to
+    observe diagnostic deltas (e.g., P5a pylsp-mypy stale-rate) can read them.
     """
 
     def __init__(self, root: Path) -> None:
@@ -40,6 +44,7 @@ class PylspClient:
         self._responses: dict[int, dict[str, Any]] = {}
         self._lock = threading.Lock()
         self.apply_edits: list[dict[str, Any]] = []
+        self.diagnostics_by_uri: dict[str, list[dict[str, Any]]] = {}
         self._reader = threading.Thread(target=self._read_loop, daemon=True)
         self._reader.start()
         self.root = root
@@ -72,6 +77,12 @@ class PylspClient:
             elif payload.get("method") == "workspace/applyEdit" and "id" in payload:
                 self.apply_edits.append(payload.get("params", {}))
                 self._send({"jsonrpc": "2.0", "id": payload["id"], "result": {"applied": True}})
+            elif payload.get("method") == "textDocument/publishDiagnostics":
+                params = payload.get("params") or {}
+                uri = params.get("uri")
+                if uri:
+                    with self._lock:
+                        self.diagnostics_by_uri[uri] = list(params.get("diagnostics") or [])
 
     def _send(self, msg: dict[str, Any]) -> None:
         body = json.dumps(msg).encode("utf-8")
