@@ -33,7 +33,8 @@ SNIPPET_RE = re.compile(r"\$\d+|\$\{\d+")
 
 
 def _scan_edit_for_snippets(action: dict[str, Any], offenders: list[dict[str, Any]]) -> None:
-    edit = action.get("edit") if isinstance(action.get("edit"), dict) else {}
+    raw_edit = action.get("edit")
+    edit: dict[str, Any] = raw_edit if isinstance(raw_edit, dict) else {}
     text_edits: list[dict[str, Any]] = []
     for tde in edit.get("documentChanges") or []:
         if isinstance(tde, dict):
