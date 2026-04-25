@@ -650,6 +650,26 @@ class SolidLanguageServer(ABC):
         """LSP `client/unregisterCapability` request: ACK with null per spec."""
         return None
 
+    def _handle_show_message_request(self, params: dict[str, Any]) -> dict[str, Any] | None:
+        """LSP `window/showMessageRequest`: auto-accept the first offered action.
+
+        Non-destructive default. rust-analyzer "Reload workspace?" prompts and
+        similar fall through here. If the server offered no actions (params
+        lacks ``actions`` or it is empty), return None — the message-only
+        notification path.
+        """
+        actions = params.get("actions") or []
+        return actions[0] if actions else None
+
+    def _handle_work_done_progress_create(self, params: dict[str, Any]) -> None:
+        """LSP `window/workDoneProgress/create`: ACK with null per spec.
+
+        Required because we advertise ``progressSupport=true``; servers
+        (notably rust-analyzer) create progress tokens via this method
+        before emitting ``$/progress`` notifications under that token.
+        """
+        return None
+
     def _install_default_request_handlers(self) -> None:
         """Register Stage 1A reverse-request handlers on self.server.
 
@@ -672,6 +692,8 @@ class SolidLanguageServer(ABC):
         self.server.on_request("workspace/configuration", self._handle_workspace_configuration)
         self.server.on_request("client/registerCapability", self._handle_register_capability)
         self.server.on_request("client/unregisterCapability", self._handle_unregister_capability)
+        self.server.on_request("window/showMessageRequest", self._handle_show_message_request)
+        self.server.on_request("window/workDoneProgress/create", self._handle_work_done_progress_create)
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         """

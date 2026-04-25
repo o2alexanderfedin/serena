@@ -61,3 +61,26 @@ def python_lsp_pylsp(seed_python_root: Path) -> Iterator[SolidLanguageServer]:
     srv = SolidLanguageServer.create(cfg, str(seed_python_root))
     with srv.start_server():
         yield srv
+
+
+class _ConcreteSLS(SolidLanguageServer):
+    """Concrete SolidLanguageServer for ABC instantiation in pure unit tests.
+
+    `SolidLanguageServer._start_server` is the only abstract method on the
+    class itself; subclassing with a stub body lets `__new__` succeed without
+    having to spawn a real LSP child process. Used by Stage 1A T2/T3/T4/T5
+    handler unit tests that exercise reverse-request callbacks in isolation.
+    """
+
+    def _start_server(self) -> Iterator[SolidLanguageServer]:  # type: ignore[override]
+        raise NotImplementedError("test stub — _ConcreteSLS is for unit-only use")
+
+
+@pytest.fixture
+def slim_sls() -> _ConcreteSLS:
+    """Bypass `__init__` so unit tests don't need to spawn an LSP child process.
+
+    Tests that need specific instance state must set the relevant attributes
+    on the returned object themselves (e.g., `_pending_apply_edits = []`).
+    """
+    return _ConcreteSLS.__new__(_ConcreteSLS)
