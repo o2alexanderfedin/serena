@@ -610,6 +610,15 @@ class SolidLanguageServer(ABC):
         client/unregisterCapability, window/showMessageRequest,
         window/workDoneProgress/create, workspace/semanticTokens/refresh,
         and workspace/diagnostic/refresh.
+
+        **Subclass extension contract:** subclasses that need additional
+        reverse-request handlers SHOULD override this method and call
+        ``super()._install_default_request_handlers()`` FIRST so the base
+        registrations land before any subclass-specific ones. Per the
+        underlying ``LanguageServerProcess.on_request`` semantics
+        (single-handler-per-method dict), the LAST registration wins for
+        a given method — a subclass can therefore override a default by
+        registering its own handler after super.
         """
         self.server.on_request("workspace/applyEdit", self._handle_workspace_apply_edit)
 
