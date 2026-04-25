@@ -1,7 +1,11 @@
-"""S6 - auto_import resolve shape (edit: vs command:) on rust-analyzer (NON-BLOCKING).
+"""S6 - auto_import resolve shape (edit: vs command:) on rust-analyzer (post Stage 1A, NON-BLOCKING).
 
 A: every auto_import action carries `edit:` after resolve -> applier branches on edit only.
 B: some are command-only -> applier handles both shapes (+40 LoC two-shape branch).
+
+Phase 0 narrative: spike used raw `srv.server.send_request("textDocument/codeAction", ...)`
+and `"codeAction/resolve"` because no facade existed. Post Stage 1A T6/T7, the public
+`request_code_actions` / `resolve_code_action` facades replace the raw calls.
 """
 
 from __future__ import annotations
@@ -39,6 +43,8 @@ def test_s6_auto_import_shape(rust_lsp: SolidLanguageServer, seed_rust_root: Pat
     actions: list[dict[str, Any]] = []
     resolved: list[dict[str, Any]] = []
 
+    lib_path = str(seed_rust_root / "src" / "lib.rs")
+
     with srv.open_file("src/lib.rs") as fb:
         time.sleep(1.5)
         original_text = fb.contents
@@ -60,22 +66,18 @@ def test_s6_auto_import_shape(rust_lsp: SolidLanguageServer, seed_rust_root: Pat
         hm_offset = polluted.index("HashMap", len(original_text))
         hm_line = polluted.count("\n", 0, hm_offset)
         hm_char = hm_offset - (polluted.rfind("\n", 0, hm_offset) + 1)
-        rng = {
-            "start": {"line": hm_line, "character": hm_char},
-            "end": {"line": hm_line, "character": hm_char + len("HashMap")},
-        }
+        start = {"line": hm_line, "character": hm_char}
+        end = {"line": hm_line, "character": hm_char + len("HashMap")}
         # No `only` filter — auto-imports surface variously under quickfix / quickfix.import.*;
-        # post-filter on title/kind.
-        raw = srv.server.send_request(
-            "textDocument/codeAction",
-            {"textDocument": {"uri": fb.uri}, "range": rng, "context": {"diagnostics": []}},
-        ) or []
+        # post-filter on title/kind. T6 facade replaces raw send_request.
+        raw = srv.request_code_actions(lib_path, start=start, end=end, diagnostics=[])
         actions.extend(a for a in raw if isinstance(a, dict))
 
         # S3 finding: rust-analyzer returns deferred-resolution actions; resolve BEFORE classify.
+        # T7 facade replaces raw send_request("codeAction/resolve", ...).
         for a in actions:
             try:
-                r = srv.server.send_request("codeAction/resolve", a)
+                r = srv.resolve_code_action(a)
                 resolved.append(r if isinstance(r, dict) else a)
             except Exception:
                 resolved.append(a)
@@ -102,7 +104,7 @@ def test_s6_auto_import_shape(rust_lsp: SolidLanguageServer, seed_rust_root: Pat
         f"- `{a.get('title')}` (kind={a.get('kind')!r}, shape={_classify(a)})" for a in auto_imports[:10]
     ) or "_(none)_"
     body = (
-        f"# S6 - auto_import resolve shape (edit: vs command:)\n\n"
+        f"# S6 - auto_import resolve shape (edit: vs command:) (post Stage 1A)\n\n"
         f"**Outcome:** {outcome}\n\n**Evidence:**\n\n"
         f"- Code actions surfaced (HashMap range on polluted didChange buffer): {len(actions)}\n"
         f"- Resolved actions (after `codeAction/resolve`): {len(resolved)}\n"
@@ -111,12 +113,12 @@ def test_s6_auto_import_shape(rust_lsp: SolidLanguageServer, seed_rust_root: Pat
         f"both={counts['both']}, neither={counts['neither']}\n"
         f"- HashMap token range: line={hm_line}, char={hm_char}..{hm_char + len('HashMap')}\n\n"
         f"**Auto_import actions (up to 10):**\n\n{titles_blob}\n\n"
-        "**API audit (2026-04-24):**\n\n"
+        "**API audit (post Stage 1A T6/T7):**\n\n"
         "- Polluted buffer delivered via `textDocument/didChange` only (full-doc content change); "
         "no disk write, no didSave. fb.version bumped + fb.contents synced for client-side parity.\n"
         "- S3 finding applied: every action goes through `codeAction/resolve` BEFORE classification.\n"
-        "- Wrapper-gap (S3/S4/S5 confirmed): no `request_code_actions` / `resolve_code_action` facade "
-        "on `SolidLanguageServer`; test uses `srv.server.send_request(...)` directly.\n\n"
+        "- `SolidLanguageServer.request_code_actions` / `.resolve_code_action` (T6/T7) replace the "
+        "raw `srv.server.send_request(...)` calls used in Phase 0.\n\n"
         "**Decision:**\n\n"
         "- A -> applier branches on `edit:` only (+0 LoC vs. optimistic).\n"
         "- B -> applier handles both shapes (+40 LoC: edit -> WorkspaceEditApplier; "
