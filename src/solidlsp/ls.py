@@ -760,6 +760,27 @@ class SolidLanguageServer(ABC):
         response = self.server.send_request("textDocument/codeAction", params)
         return response if isinstance(response, list) else []
 
+    def resolve_code_action(self, action: dict[str, Any]) -> dict[str, Any]:
+        """Send `codeAction/resolve`. Returns the resolved action.
+
+        Phase 0 S6: rust-analyzer is deferred-resolution — the top-level
+        ``request_code_actions`` response carries ``{title, kind, data,
+        group?}`` only; ``edit``/``command`` populate after this call.
+        pylsp-rope returns command-typed actions directly (no resolve
+        needed) but the call is harmless against it.
+
+        If the server returns None or a non-dict response (e.g.,
+        unsupported), return the input action unchanged so callers can
+        use the response uniformly.
+
+        Per-call timeout is governed by the instance-level
+        ``set_request_timeout()``.
+        """
+        response = self.server.send_request("codeAction/resolve", action)
+        if not isinstance(response, dict):
+            return action
+        return response
+
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         """
         Creates the dependency provider for this language server.
