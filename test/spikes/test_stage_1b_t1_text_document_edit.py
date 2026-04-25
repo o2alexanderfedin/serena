@@ -20,17 +20,43 @@ from solidlsp.ls_utils import TextUtils
 
 
 class _FakeFileBuffer:
-    """Minimal LSPFileBuffer stand-in: reads/writes a string buffer from disk."""
+    """Minimal LSPFileBuffer stand-in: reads/writes a string buffer from disk.
+
+    Mirrors production ``LSPFileBuffer.contents`` (solidlsp/ls.py): the getter
+    checks the file's mtime against the last read and invalidates the cached
+    contents if the file changed on disk. This matters for the T10 inverse
+    sequence (DeleteFile + CreateFile(overwrite=True) + insert at (0,0)),
+    where the file is recreated empty between the cached buffer's read and
+    the next access. Without invalidation the buffer would keep stale
+    pre-delete content.
+    """
 
     def __init__(self, abs_path: str, encoding: str) -> None:
         self._abs_path = abs_path
         self._encoding = encoding
-        with open(abs_path, encoding=encoding) as f:
-            self._contents = f.read()
+        self._contents: str | None = None
+        self._read_mtime: float | None = None
+        # Eagerly populate so existing tests that only read .contents see content.
+        self._refresh_if_stale()
+
+    def _refresh_if_stale(self) -> None:
+        """Re-read from disk if the file's mtime advanced since last read."""
+        try:
+            current_mtime = os.path.getmtime(self._abs_path)
+        except FileNotFoundError:
+            # File was deleted; drop cached contents so next set/get is fresh.
+            self._contents = None
+            self._read_mtime = None
+            return
+        if self._read_mtime is None or current_mtime > self._read_mtime:
+            with open(self._abs_path, encoding=self._encoding) as f:
+                self._contents = f.read()
+            self._read_mtime = current_mtime
 
     @property
     def contents(self) -> str:
-        return self._contents
+        self._refresh_if_stale()
+        return self._contents if self._contents is not None else ""
 
     @contents.setter
     def contents(self, new_contents: str) -> None:

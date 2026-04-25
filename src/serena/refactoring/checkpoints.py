@@ -27,12 +27,17 @@ def inverse_workspace_edit(
     """Compute the inverse of a successfully-applied WorkspaceEdit.
 
     Rules:
-    - TextDocumentEdit → TextDocumentEdit that re-installs ``snapshot[uri]`` via
-      a single full-file replacement (range (0,0)..(MAX,MAX)).
+    - TextDocumentEdit → DeleteFile(ignoreIfNotExists=True) +
+      CreateFile(overwrite=True) + TextDocumentEdit inserting the snapshot
+      content at (0,0). Geometry-independent: by deleting and recreating
+      the file empty, the subsequent insert at (0,0) writes the entire
+      original content regardless of how the applied edits reshaped the
+      mutated buffer.
     - CreateFile → DeleteFile (always with no flags; Stage 1B applier deletes
       the file the create just made).
-    - DeleteFile → CreateFile(overwrite=True) + TextDocumentEdit re-installing
-      the snapshot content.
+    - DeleteFile → CreateFile(overwrite=True) + TextDocumentEdit inserting
+      the snapshot content at (0,0). The freshly-created file is empty so
+      inserting at (0,0) writes the full original content.
     - RenameFile → RenameFile with oldUri/newUri swapped.
     - Order is reversed so e.g. a Create→Rename→Delete sequence inverts
       to Create-of-deleted → Rename-back → Delete-of-created.
@@ -53,7 +58,12 @@ def inverse_workspace_edit(
                 # File didn't exist before; the inverse of writing into it is delete.
                 inv.append({"kind": "delete", "uri": uri})
             else:
-                inv.append(_full_file_overwrite(uri, original))
+                # TextDocumentEdit inverse: delete the (mutated) file, recreate
+                # empty, insert the original content at (0,0). Geometry-
+                # independent — no need to know the mutated file's actual EOF.
+                inv.append({"kind": "delete", "uri": uri, "options": {"ignoreIfNotExists": True}})
+                inv.append({"kind": "create", "uri": uri, "options": {"overwrite": True}})
+                inv.append(_insert_full_content(uri, original))
         elif kind == "create":
             inv.append({"kind": "delete", "uri": change["uri"]})
         elif kind == "delete":
@@ -65,7 +75,7 @@ def inverse_workspace_edit(
                 inv.append({"kind": "create", "uri": uri})
             else:
                 inv.append({"kind": "create", "uri": uri, "options": {"overwrite": True}})
-                inv.append(_full_file_overwrite(uri, original))
+                inv.append(_insert_full_content(uri, original))
         elif kind == "rename":
             inv.append({"kind": "rename", "oldUri": change["newUri"], "newUri": change["oldUri"]})
         else:
@@ -73,18 +83,21 @@ def inverse_workspace_edit(
     return {"documentChanges": inv}
 
 
-def _full_file_overwrite(uri: str, content: str) -> dict[str, Any]:
-    """Build a TextDocumentEdit that replaces the entire file with ``content``."""
-    # Use a max-int end position; LSP applier clamps to actual EOF.
-    end_line = max(content.count("\n"), 0)
-    end_char = len(content.split("\n")[-1]) if content else 0
+def _insert_full_content(uri: str, content: str) -> dict[str, Any]:
+    """Build a TextDocumentEdit that INSERTS ``content`` at (0, 0).
+
+    Geometry-independent: the range is start==end==(0,0), so the file's
+    current size doesn't matter. Use this AFTER a CreateFile(overwrite=True)
+    that produces an empty target — the insert then writes the entire
+    desired content.
+    """
     return {
         "textDocument": {"uri": uri, "version": None},
         "edits": [
             {
                 "range": {
                     "start": {"line": 0, "character": 0},
-                    "end": {"line": end_line, "character": end_char},
+                    "end": {"line": 0, "character": 0},
                 },
                 "newText": content,
             }
