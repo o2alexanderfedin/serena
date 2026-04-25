@@ -4,6 +4,7 @@ Boots real LSP processes (rust-analyzer, pylsp, basedpyright, ruff) using
 Serena's existing DependencyProvider so spikes hit production code paths,
 not mocks.
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -46,7 +47,9 @@ def write_spike_result(results_dir: Path, spike_id: str, body: str) -> Path:
 
 @pytest.fixture
 def rust_lsp(seed_rust_root: Path) -> Iterator[SolidLanguageServer]:
-    cfg = LanguageServerConfig(language=Language.RUST)
+    # LanguageServerConfig field is ``code_language`` (verified at
+    # src/solidlsp/ls_config.py:596), not ``language``.
+    cfg = LanguageServerConfig(code_language=Language.RUST)
     srv = SolidLanguageServer.create(cfg, str(seed_rust_root))
     with srv.start_server():
         yield srv
@@ -54,7 +57,7 @@ def rust_lsp(seed_rust_root: Path) -> Iterator[SolidLanguageServer]:
 
 @pytest.fixture
 def python_lsp_pylsp(seed_python_root: Path) -> Iterator[SolidLanguageServer]:
-    cfg = LanguageServerConfig(language=Language.PYTHON)
+    cfg = LanguageServerConfig(code_language=Language.PYTHON)
     srv = SolidLanguageServer.create(cfg, str(seed_python_root))
     with srv.start_server():
         yield srv
