@@ -13,8 +13,6 @@ just the command isn't available.
 
 from __future__ import annotations
 
-import pytest
-
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_exceptions import SolidLSPException
 
