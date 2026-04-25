@@ -88,8 +88,9 @@ def slim_sls() -> _ConcreteSLS:
 
 # --- Stage 1C fixtures ----------------------------------------------------
 
-import threading as _t1c_threading
 from collections.abc import Callable as _t1c_Callable
+from contextlib import AbstractContextManager as _t1c_AbstractContextManager
+from contextlib import contextmanager as _t1c_contextmanager
 from unittest.mock import MagicMock as _t1c_MagicMock
 
 import pytest as _t1c_pytest
@@ -113,9 +114,8 @@ def fake_sls_factory() -> _t1c_Callable[..., _t1c_MagicMock]:
         m._ping_count = 0
         m._crash_after = crash_after_n_pings
 
-        def _start_cm() -> _t1c_MagicMock:
-            from contextlib import contextmanager
-            @contextmanager
+        def _start_cm() -> _t1c_AbstractContextManager[_t1c_MagicMock]:
+            @_t1c_contextmanager
             def _cm():  # type: ignore[no-untyped-def]
                 m._is_running = True
                 yield m
@@ -124,11 +124,13 @@ def fake_sls_factory() -> _t1c_Callable[..., _t1c_MagicMock]:
         m.start_server.side_effect = _start_cm
         m.is_running.side_effect = lambda: bool(m._is_running)
 
-        def _stop(shutdown_timeout: float = 2.0) -> None:  # noqa: ARG001
+        def _stop(_shutdown_timeout: float = 2.0) -> None:
+            del _shutdown_timeout
             m._is_running = False
         m.stop.side_effect = _stop
 
-        def _ping(query: str) -> list[dict[str, object]]:  # noqa: ARG001
+        def _ping(_query: str) -> list[dict[str, object]]:
+            del _query
             m._ping_count += 1
             if m._crash_after is not None and m._ping_count > m._crash_after:
                 raise RuntimeError("fake LSP child crashed")

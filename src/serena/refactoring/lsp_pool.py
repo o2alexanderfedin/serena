@@ -139,11 +139,11 @@ class LspPool:
     def shutdown_all(self) -> None:
         """Stop every server and clear the pool. Idempotent."""
         with self._pool_lock:
-            entries = list(self._entries.items())
+            entries = list(self._entries.values())
             self._entries.clear()
         # Drop the lock before calling stop() — the lifecycle methods may
         # block on the LSP child process.
-        for _key, entry in entries:
+        for entry in entries:
             srv = entry.server
             if srv is not None:
                 try:
