@@ -46,10 +46,11 @@ def test_rollback_walks_members_in_reverse() -> None:
         cids.append(cid)
     invocation_order: list[str] = []
     def applier(edit: dict[str, Any]) -> int:
-        # Edit's first textDocument URI tells us which checkpoint fired.
+        # T10 inverse for a TextDocumentEdit is a 3-op sequence:
+        # [DeleteFile, CreateFile(overwrite=True), TextDocumentEdit insert].
+        # The first op carries the URI on its `uri` field (resource op shape).
         chs = edit["documentChanges"]
-        # The inverse for a TextDocumentEdit is also a TextDocumentEdit; pick its uri.
-        invocation_order.append(chs[0]["textDocument"]["uri"])
+        invocation_order.append(chs[0]["uri"])
         return 1
     n = tstore.rollback(tid, applier)
     assert n == 3
@@ -103,8 +104,10 @@ def test_rollback_short_circuit_on_failed_restore() -> None:
     tstore.add_checkpoint(tid, cid_a)
     tstore.add_checkpoint(tid, cid_b)
     # Applier reports zero for B's inverse (e.g. file disappeared).
+    # T10 inverse shape: [DeleteFile, CreateFile, TextDocumentEdit]; first
+    # op carries the URI on `uri` (resource-op shape).
     def applier(edit: dict[str, Any]) -> int:
-        uri = edit["documentChanges"][0]["textDocument"]["uri"]
+        uri = edit["documentChanges"][0]["uri"]
         return 0 if "B" in uri else 1
     n = tstore.rollback(tid, applier)
     # Only A counted as successful; B counted as failed.

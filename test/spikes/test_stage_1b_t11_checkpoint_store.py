@@ -69,7 +69,14 @@ def test_restore_invokes_applier_with_inverse() -> None:
     ok = s.restore(cid, applier)
     assert ok is True
     assert len(received) == 1
-    assert received[0]["documentChanges"][0]["edits"][0]["newText"] == "OLD"
+    # T10 inverse for a TextDocumentEdit is a 3-op sequence:
+    # [DeleteFile, CreateFile(overwrite=True), TextDocumentEdit insert].
+    # The TextDocumentEdit re-installing the original content sits at index 2.
+    chs = received[0]["documentChanges"]
+    assert len(chs) == 3
+    assert chs[0]["kind"] == "delete"
+    assert chs[1]["kind"] == "create"
+    assert chs[2]["edits"][0]["newText"] == "OLD"
 
 
 def test_restore_unknown_id_returns_false() -> None:

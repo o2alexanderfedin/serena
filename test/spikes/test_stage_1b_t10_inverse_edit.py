@@ -10,6 +10,13 @@ from serena.refactoring.checkpoints import inverse_workspace_edit
 
 
 def test_inverse_text_document_edit_replaces_full_file() -> None:
+    """TextDocumentEdit inverse is a 3-op sequence: delete + create + insert.
+
+    Geometry-independent: the file is deleted (eliminating its mutated
+    geometry), recreated empty, and the original content is inserted at
+    (0,0). The inserted range start==end==(0,0) so the file's actual
+    size at restore time doesn't matter.
+    """
     applied: dict[str, Any] = {
         "documentChanges": [
             {
@@ -26,12 +33,26 @@ def test_inverse_text_document_edit_replaces_full_file() -> None:
     snapshot = {"file:///tmp/a.txt": "hello"}
     inv = inverse_workspace_edit(applied, snapshot)
     changes = inv["documentChanges"]
-    assert len(changes) == 1
-    assert changes[0]["textDocument"]["uri"] == "file:///tmp/a.txt"
-    assert changes[0]["edits"][0]["newText"] == "hello"
-    # Inverse uses a full-file replacement; range starts at (0,0) and ends past EOF.
-    end = changes[0]["edits"][0]["range"]["end"]
-    assert end["line"] >= 0
+    assert len(changes) == 3
+    # 1. Delete the (mutated) file. ignoreIfNotExists tolerates a vanished target.
+    assert changes[0] == {
+        "kind": "delete",
+        "uri": "file:///tmp/a.txt",
+        "options": {"ignoreIfNotExists": True},
+    }
+    # 2. Recreate it empty (overwrite tolerates a still-present target).
+    assert changes[1] == {
+        "kind": "create",
+        "uri": "file:///tmp/a.txt",
+        "options": {"overwrite": True},
+    }
+    # 3. Insert the original content at (0,0). Range start==end==(0,0) =>
+    #    pure insert, geometry-independent.
+    assert changes[2]["textDocument"]["uri"] == "file:///tmp/a.txt"
+    assert changes[2]["edits"][0]["newText"] == "hello"
+    rng = changes[2]["edits"][0]["range"]
+    assert rng["start"] == {"line": 0, "character": 0}
+    assert rng["end"] == {"line": 0, "character": 0}
 
 
 def test_inverse_create_file_is_delete() -> None:
