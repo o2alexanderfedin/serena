@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from copy import copy
 from pathlib import Path, PurePath
 from time import perf_counter, sleep
-from typing import Self, Union, cast
+from typing import Any, Self, Union, cast
 
 import pathspec
 from sensai.util.pickle import getstate, load_pickle
@@ -551,6 +551,16 @@ class SolidLanguageServer(ABC):
             start_independent_lsp_process=config.start_independent_lsp_process,
         )
 
+        # Stage 1A T2: workspace/applyEdit capture buffer (Phase 0 P1 finding —
+        # pylsp-rope ships its inline/refactor result via this reverse-request,
+        # not via the executeCommand response).
+        self._pending_apply_edits: list[dict[str, Any]] = []
+        self._apply_edits_lock = threading.Lock()
+
+        # Stage 1A T2: register reverse-request handlers BEFORE start_server()
+        # so no LSP traffic can race the registration.
+        self._install_default_request_handlers()
+
         # Set up the pathspec matcher for the ignored paths
         # for all absolute paths in ignored_paths, convert them to relative paths
         processed_patterns = []
@@ -566,6 +576,42 @@ class SolidLanguageServer(ABC):
         self._request_timeout: float | None = None
 
         self._has_waited_for_cross_file_references = False
+
+    # ------------------------------------------------------------------
+    # Stage 1A T2: workspace/applyEdit reverse-request handler + install point
+    # ------------------------------------------------------------------
+
+    def _handle_workspace_apply_edit(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle workspace/applyEdit reverse-request: capture and ACK.
+
+        Per Phase 0 P1, pylsp-rope ships its WorkspaceEdit via this channel
+        (not via the executeCommand response), so we MUST capture the payload.
+        Per S3, a minimal ``{applied: true}`` ACK suffices for rust-analyzer.
+
+        :param params: the LSP ApplyWorkspaceEditParams (`{"edit": ..., "label"?: ...}`)
+        :return: an ApplyWorkspaceEditResult with ``applied: true`` and no failureReason.
+        """
+        with self._apply_edits_lock:
+            self._pending_apply_edits.append(params)
+        return {"applied": True, "failureReason": None}
+
+    def pop_pending_apply_edits(self) -> list[dict[str, Any]]:
+        """Drain captured workspace/applyEdit payloads in arrival order."""
+        with self._apply_edits_lock:
+            out = list(self._pending_apply_edits)
+            self._pending_apply_edits.clear()
+            return out
+
+    def _install_default_request_handlers(self) -> None:
+        """Register Stage 1A reverse-request handlers on self.server.
+
+        T2 installs the workspace/applyEdit capturing handler. T3-T5 extend
+        this method to add workspace/configuration, client/registerCapability,
+        client/unregisterCapability, window/showMessageRequest,
+        window/workDoneProgress/create, workspace/semanticTokens/refresh,
+        and workspace/diagnostic/refresh.
+        """
+        self.server.on_request("workspace/applyEdit", self._handle_workspace_apply_edit)
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         """
