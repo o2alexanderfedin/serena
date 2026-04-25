@@ -139,7 +139,12 @@ class LanguageServerInterface(ABC):
         """
         maps method names to callback functions that handle notifications from the server
         """
+        # upstream: any-notification observers (fire on every notification)
         self._notification_observers: list[Callable[[str, Any], None]] = []
+        # Scalpel T1: per-method additive listeners with handles (coexist with the primary handler)
+        self.on_notification_listeners: dict[str, dict[int, Callable[[Any], None]]] = {}
+        self._listener_seq: int = 0
+        self._listener_lock = threading.Lock()
         self._trace_log_fn = logger
         self.task_counter = 0
         self._is_stopping = False
@@ -346,6 +351,58 @@ class LanguageServerInterface(ABC):
         """
         self._notification_observers.append(cb)
 
+    def add_notification_listener(self, method: str, cb: Callable[[Any], None]) -> int:
+        """Register an additive listener for the given notification method.
+
+        Multiple listeners may coexist with the legacy primary handler set via
+        on_notification(). Returns an opaque handle that can be passed to
+        remove_notification_listener() to detach.
+        """
+        with self._listener_lock:
+            self._listener_seq += 1
+            handle = self._listener_seq
+            self.on_notification_listeners.setdefault(method, {})[handle] = cb
+            return handle
+
+    def remove_notification_listener(self, handle: int) -> None:
+        """Detach a previously registered additive listener by its handle."""
+        with self._listener_lock:
+            for method, listeners in list(self.on_notification_listeners.items()):
+                if handle in listeners:
+                    del listeners[handle]
+                    if not listeners:
+                        del self.on_notification_listeners[method]
+                    return
+
+    def _dispatch_notification(self, method: str, params: Any) -> None:
+        """Dispatch to the legacy primary handler (if any) and every additive listener.
+
+        Listener exceptions are caught and logged so a misbehaving listener cannot
+        break the dispatch pipeline. Emits the upstream "Unhandled method" warning
+        only when neither a primary handler nor any additive listener is registered.
+        """
+        primary = self.on_notification_handlers.get(method)
+        listeners = list((self.on_notification_listeners.get(method) or {}).values())
+        if primary is None and not listeners:
+            log.warning("Unhandled method '%s'", method)
+            return
+        if primary is not None:
+            try:
+                primary(params)
+            except asyncio.CancelledError:
+                return
+            except Exception as ex:
+                if not self._is_stopping:
+                    log.error("Error handling notification for method '%s': %s", method, ex, exc_info=ex)
+        for cb in listeners:
+            try:
+                cb(params)
+            except asyncio.CancelledError:
+                return
+            except Exception as ex:
+                if not self._is_stopping:
+                    log.error("Error handling notification listener for method '%s': %s", method, ex, exc_info=ex)
+
     def _response_handler(self, response: StringDict) -> None:
         """
         Handle the response received from the server for a request, using the id to determine the request
@@ -393,11 +450,13 @@ class LanguageServerInterface(ABC):
 
     def _notification_handler(self, response: StringDict) -> None:
         """
-        Handle the notification received from the server: call the appropriate callback function
+        Handle the notification received from the server: dispatch to the primary
+        handler (if any) and every additive listener registered for the method.
         """
         method = response.get("method", "")
         params = response.get("params")
 
+        # upstream: fire any-notification observers first
         for observer in self._notification_observers:
             try:
                 observer(method, params)
@@ -407,17 +466,9 @@ class LanguageServerInterface(ABC):
                 if not self._is_stopping:
                     log.error("Error handling notification observer for method '%s': %s", method, ex, exc_info=ex)
 
-        handler = self.on_notification_handlers.get(method)
-        if not handler:
-            log.warning("Unhandled method '%s'", method)
-            return
-        try:
-            handler(params)
-        except asyncio.CancelledError:
-            return
-        except Exception as ex:
-            if not self._is_stopping:
-                log.error("Error handling notification for method '%s': %s", method, ex, exc_info=ex)
+        # Scalpel T1: primary handler + per-method additive listeners (also emits the
+        # "Unhandled method" warning when neither is registered)
+        self._dispatch_notification(method, params)
 
 
 class StdioLanguageServer(LanguageServerInterface):
