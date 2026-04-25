@@ -592,11 +592,13 @@ class SolidLanguageServer(ABC):
         # which subclass issues it. T13 will use this for RustAnalyzerLanguageServer
         # to set experimental.snippetTextEdit=False (Phase 0 S2 fix replacing the
         # previous hard-code at rust_analyzer.py:458).
+        from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
+
         _original_initialize = self.server.send.initialize
 
-        def _initialize_with_override(params: dict[str, Any]) -> Any:
-            params = self.override_initialize_params(params)
-            return _original_initialize(params)
+        def _initialize_with_override(params: InitializeParams) -> Any:
+            mutated = self.override_initialize_params(cast(dict[str, Any], params))
+            return _original_initialize(cast(InitializeParams, mutated))
 
         self.server.send.initialize = _initialize_with_override  # type: ignore[method-assign]
 
