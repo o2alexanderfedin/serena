@@ -781,6 +781,34 @@ class SolidLanguageServer(ABC):
             return action
         return response
 
+    def execute_command(
+        self,
+        command: str,
+        arguments: list[Any] | None = None,
+    ) -> tuple[Any, list[dict[str, Any]]]:
+        """Send `workspace/executeCommand` and drain captured applyEdit payloads.
+
+        Returns ``(response, drained_apply_edits)``.
+
+        Phase 0 P1 finding: pylsp-rope ships its refactor result via
+        ``workspace/applyEdit`` reverse-request DURING execution (not via
+        the executeCommand response), so callers MUST consume the drained
+        list rather than rely on the response payload alone. T2's
+        ``_handle_workspace_apply_edit`` captures into a thread-safe
+        buffer; this facade drains it via ``pop_pending_apply_edits()``.
+
+        :param command: the LSP command id (e.g.,
+            ``"pylsp_rope.refactor.inline"``, ``"rust-analyzer/analyzerStatus"``).
+        :param arguments: command-specific arguments; defaults to ``[]``.
+
+        Per-call timeout is governed by the instance-level
+        ``set_request_timeout()``.
+        """
+        params = {"command": command, "arguments": arguments or []}
+        response = self.server.send_request("workspace/executeCommand", params)
+        drained = self.pop_pending_apply_edits()
+        return response, drained
+
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         """
         Creates the dependency provider for this language server.
