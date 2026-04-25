@@ -34,3 +34,27 @@ mod tests {
         assert_eq!(add(2, 3), 5);
     }
 }
+
+#[cfg(feature = "_spike_proc_macro")]
+mod proc_macro_target {
+    use std::fmt;
+
+    macro_rules! decl_macro {
+        ($name:ident) => {
+            pub fn $name() -> i64 { 0 }
+        };
+    }
+
+    decl_macro!(zero);
+
+    #[derive(Debug, Clone)]
+    pub struct Sample {
+        pub label: String,
+    }
+
+    impl fmt::Display for Sample {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", self.label)
+        }
+    }
+}
