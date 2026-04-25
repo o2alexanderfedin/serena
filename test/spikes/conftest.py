@@ -6,11 +6,10 @@ not mocks.
 """
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
-from typing import AsyncIterator
 
 import pytest
-import pytest_asyncio
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
@@ -45,17 +44,17 @@ def write_spike_result(results_dir: Path, spike_id: str, body: str) -> Path:
     return out
 
 
-@pytest_asyncio.fixture
-async def rust_lsp(seed_rust_root: Path) -> AsyncIterator[SolidLanguageServer]:
+@pytest.fixture
+def rust_lsp(seed_rust_root: Path) -> Iterator[SolidLanguageServer]:
     cfg = LanguageServerConfig(language=Language.RUST)
     srv = SolidLanguageServer.create(cfg, str(seed_rust_root))
-    async with srv.start_session():
+    with srv.start_server():
         yield srv
 
 
-@pytest_asyncio.fixture
-async def python_lsp_pylsp(seed_python_root: Path) -> AsyncIterator[SolidLanguageServer]:
+@pytest.fixture
+def python_lsp_pylsp(seed_python_root: Path) -> Iterator[SolidLanguageServer]:
     cfg = LanguageServerConfig(language=Language.PYTHON)
     srv = SolidLanguageServer.create(cfg, str(seed_python_root))
-    async with srv.start_session():
+    with srv.start_server():
         yield srv
