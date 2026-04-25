@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Reversible
 from contextlib import contextmanager
@@ -16,6 +17,10 @@ from .project import Project
 
 log = logging.getLogger(__name__)
 TSymbol = TypeVar("TSymbol", bound=Symbol)
+
+_SNIPPET_DOLLAR_N = re.compile(r"(?<!\\)\$\d+")
+_SNIPPET_DOLLAR_BRACE_N = re.compile(r"(?<!\\)\$\{(\d+)(?::([^}]*))?\}")
+_SNIPPET_ESCAPED_DOLLAR = re.compile(r"\\\$")
 
 
 class WorkspaceBoundaryError(ValueError):
@@ -402,9 +407,40 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
             edited_file.apply_text_edits(cast(list[ls_types.TextEdit], text_edits))
         applied.append({"kind": "textDocumentEdit", "uri": uri, "edits": text_edits})
 
+    @staticmethod
+    def _strip_snippet_markers(text: str) -> str:
+        """Strip LSP snippet markers from text.
+
+        Grammar (LSP §3.16 SnippetTextEdit):
+        - ``$N`` (N a digit) → placeholder, drop entirely.
+        - ``${N}`` → placeholder, drop entirely.
+        - ``${N:default}`` → keep ``default``, drop the wrapper. Recursive
+          (default itself may contain markers).
+        - ``\\$`` → escape; emit literal ``$``.
+
+        Applied defensively even when ``snippetTextEdit:false`` is advertised,
+        per §4.1 row 6 + S2 spike finding.
+        """
+        # First, repeatedly strip ${N:default} from inside out (handles nesting).
+        prev = None
+        while prev != text:
+            prev = text
+            text = _SNIPPET_DOLLAR_BRACE_N.sub(lambda m: m.group(2) or "", text)
+        # Then strip bare $N.
+        text = _SNIPPET_DOLLAR_N.sub("", text)
+        # Finally unescape \$ → $.
+        text = _SNIPPET_ESCAPED_DOLLAR.sub("$", text)
+        return text
+
     def _defang_text_edit(self, text_edit: dict[str, Any]) -> dict[str, Any]:
-        """Hook for T5 snippet stripping. T1 ships identity passthrough."""
-        return text_edit
+        """Strip snippet markers from a TextEdit's newText (T5).
+
+        Returns a new dict; original is not mutated. Range is copied unchanged.
+        """
+        return {
+            "range": text_edit["range"],
+            "newText": self._strip_snippet_markers(text_edit["newText"]),
+        }
 
     def _apply_create_file(
         self,
