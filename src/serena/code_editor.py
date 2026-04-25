@@ -307,6 +307,34 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
     def _relative_path_from_uri(self, uri: str) -> str:
         return os.path.relpath(PathUtils.uri_to_path(uri), self.project_root)
 
+    def _workspace_extra_paths(self) -> list[str]:
+        """Parse the O2_SCALPEL_WORKSPACE_EXTRA_PATHS env var.
+
+        Split on os.pathsep (':' POSIX, ';' Windows). Empty string → empty list.
+        """
+        raw = os.environ.get("O2_SCALPEL_WORKSPACE_EXTRA_PATHS", "")
+        return [p for p in raw.split(os.pathsep) if p]
+
+    def _check_workspace_boundary(self, uri: str) -> None:
+        """Raise WorkspaceBoundaryError if uri is outside project + extra_paths.
+
+        Wraps SolidLanguageServer.is_in_workspace (Stage 1A T11 staticmethod).
+        Per Q4 §7.1: this is the actual enforcement; changeAnnotations are
+        only advisory.
+        """
+        target_path = PathUtils.uri_to_path(uri)
+        extra_paths = self._workspace_extra_paths()
+        if not SolidLanguageServer.is_in_workspace(
+            target_path,
+            roots=[self.project_root],
+            extra_paths=extra_paths,
+        ):
+            raise WorkspaceBoundaryError(
+                f"Operation target is outside the workspace: {uri} "
+                f"(project_root={self.project_root}, "
+                f"extra_paths={extra_paths})"
+            )
+
     class EditOperation(ABC):
         @abstractmethod
         def apply(self) -> None:
@@ -375,6 +403,7 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
         """
         text_doc: dict[str, Any] = change["textDocument"]
         uri: str = text_doc["uri"]
+        self._check_workspace_boundary(uri)
         requested_version = text_doc.get("version")
         relative_path = self._relative_path_from_uri(uri)
         if requested_version is not None:
@@ -458,6 +487,7 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
         - overwrite wins over ignoreIfExists when both are set.
         """
         uri: str = change["uri"]
+        self._check_workspace_boundary(uri)
         options: dict[str, Any] = change.get("options", {})
         overwrite: bool = bool(options.get("overwrite"))
         ignore_if_exists: bool = bool(options.get("ignoreIfExists"))
@@ -500,6 +530,7 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
         import shutil
 
         uri: str = change["uri"]
+        self._check_workspace_boundary(uri)
         options: dict[str, Any] = change.get("options", {})
         recursive: bool = bool(options.get("recursive"))
         ignore_if_not_exists: bool = bool(options.get("ignoreIfNotExists"))
@@ -544,6 +575,8 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
         """
         old_uri: str = change["oldUri"]
         new_uri: str = change["newUri"]
+        self._check_workspace_boundary(old_uri)
+        self._check_workspace_boundary(new_uri)
         options: dict[str, Any] = change.get("options", {})
         overwrite: bool = bool(options.get("overwrite"))
         ignore_if_exists: bool = bool(options.get("ignoreIfExists"))
