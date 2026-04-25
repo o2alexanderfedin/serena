@@ -377,9 +377,15 @@ class LanguageServerInterface(ABC):
     def _dispatch_notification(self, method: str, params: Any) -> None:
         """Dispatch to the legacy primary handler (if any) and every additive listener.
 
-        Listener exceptions are caught and logged so a misbehaving listener cannot
-        break the dispatch pipeline. Emits the upstream "Unhandled method" warning
-        only when neither a primary handler nor any additive listener is registered.
+        Preserves three pre-T1 dispatch behaviors:
+        - asyncio.CancelledError is swallowed silently (cooperative cancellation).
+        - Other exceptions log via log.error only when not shutting down (suppress
+          shutdown-time spam).
+        - When no handler AND no listeners are registered, log.warning surfaces the
+          unhandled method so server-side surprises are not silently dropped.
+
+        Snapshotting `on_notification_listeners.get(method).values()` via list() is
+        GIL-atomic; we never mutate the inner dict in place during iteration.
         """
         primary = self.on_notification_handlers.get(method)
         listeners = list((self.on_notification_listeners.get(method) or {}).values())
@@ -401,7 +407,7 @@ class LanguageServerInterface(ABC):
                 return
             except Exception as ex:
                 if not self._is_stopping:
-                    log.error("Error handling notification listener for method '%s': %s", method, ex, exc_info=ex)
+                    log.error("Error in notification listener for method '%s': %s", method, ex, exc_info=ex)
 
     def _response_handler(self, response: StringDict) -> None:
         """
