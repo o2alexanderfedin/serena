@@ -9,5 +9,6 @@ Three sibling concerns:
 """
 
 from .checkpoints import CheckpointStore, inverse_workspace_edit
+from .transactions import TransactionStore
 
-__all__ = ["CheckpointStore", "inverse_workspace_edit"]
+__all__ = ["CheckpointStore", "TransactionStore", "inverse_workspace_edit"]
