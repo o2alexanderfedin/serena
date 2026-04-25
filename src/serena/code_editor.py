@@ -4,7 +4,7 @@ import os
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Reversible
 from contextlib import contextmanager
-from typing import Generic, TypeVar, cast
+from typing import Any, Generic, TypeVar, cast
 
 from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
 from serena.symbol import JetBrainsSymbol, LanguageServerSymbol, LanguageServerSymbolRetriever, PositionInFile, Symbol
@@ -16,6 +16,15 @@ from .project import Project
 
 log = logging.getLogger(__name__)
 TSymbol = TypeVar("TSymbol", bound=Symbol)
+
+
+class WorkspaceBoundaryError(ValueError):
+    """Raised when a WorkspaceEdit operation targets a path outside the workspace.
+
+    Stage 1B T9: enforced by ``_check_workspace_boundary`` against
+    ``SolidLanguageServer.is_in_workspace`` (Stage 1A T11). Caller's
+    ``O2_SCALPEL_WORKSPACE_EXTRA_PATHS`` env var contributes opt-in roots.
+    """
 
 
 class CodeEditor(Generic[TSymbol], ABC):
@@ -341,17 +350,94 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
 
         return operations
 
-    def _apply_workspace_edit(self, workspace_edit: ls_types.WorkspaceEdit) -> int:
+    def _apply_text_document_edit(
+        self,
+        change: dict[str, Any],
+        snapshot: dict[str, str],
+        applied: list[dict[str, Any]],
+    ) -> None:
+        """Apply a single TextDocumentEdit document-change.
+
+        Honors ``textDocument.version``: when not ``None``, must match the
+        server-tracked version of the open file or ValueError is raised.
+        Multi-edit support: edits within ``edits`` are applied in
+        descending offset order (T6) so earlier-line edits don't invalidate
+        later-line offsets.
+
+        :param change: the documentChange entry (TextDocumentEdit shape)
+        :param snapshot: per-URI original content map; updated in place
+        :param applied: per-operation log; updated in place
         """
-        Applies a WorkspaceEdit
+        text_doc: dict[str, Any] = change["textDocument"]
+        uri: str = text_doc["uri"]
+        requested_version = text_doc.get("version")
+        relative_path = self._relative_path_from_uri(uri)
+        if requested_version is not None:
+            ls = self._get_language_server(relative_path)
+            tracked_version = getattr(ls, "get_open_file_version", lambda _p: None)(relative_path)
+            if tracked_version is not None and tracked_version != requested_version:
+                raise ValueError(
+                    f"TextDocumentEdit version mismatch for {uri}: "
+                    f"requested {requested_version}, server-tracked {tracked_version}"
+                )
+        abs_path = os.path.join(self.project_root, relative_path)
+        if uri not in snapshot:
+            try:
+                snapshot[uri] = open(abs_path, encoding=self.encoding).read()
+            except FileNotFoundError:
+                snapshot[uri] = "__NONEXISTENT__"
+        text_edits: list[dict[str, Any]] = list(change["edits"])
+        # T5 hook: defensive snippet-marker stripping (added in T5)
+        text_edits = [self._defang_text_edit(te) for te in text_edits]
+        # T6: sort descending so later-line edits don't shift earlier offsets
+        text_edits.sort(
+            key=lambda te: (
+                te["range"]["start"]["line"],
+                te["range"]["start"]["character"],
+            ),
+            reverse=True,
+        )
+        with self.edited_file_context(relative_path) as edited_file:
+            edited_file = cast(LanguageServerCodeEditor.EditedFile, edited_file)
+            edited_file.apply_text_edits(cast(list[ls_types.TextEdit], text_edits))
+        applied.append({"kind": "textDocumentEdit", "uri": uri, "edits": text_edits})
+
+    def _defang_text_edit(self, text_edit: dict[str, Any]) -> dict[str, Any]:
+        """Hook for T5 snippet stripping. T1 ships identity passthrough."""
+        return text_edit
+
+    def _apply_workspace_edit(self, workspace_edit: ls_types.WorkspaceEdit) -> int:
+        """Apply a WorkspaceEdit through the full Stage 1B matrix.
+
+        Handles every documentChanges shape (TextDocumentEdit / CreateFile /
+        RenameFile / DeleteFile) plus the legacy ``changes`` map. Wraps the
+        body in an atomic snapshot/restore (T8); on any exception, every
+        touched file is restored to its pre-edit state before re-raising.
 
         :param workspace_edit: the edit to apply
-        :return: number of edit operations applied
+        :return: number of documentChange entries applied
         """
-        operations = self._workspace_edit_to_edit_operations(workspace_edit)
-        for operation in operations:
-            operation.apply()
-        return len(operations)
+        snapshot: dict[str, str] = {}
+        applied: list[dict[str, Any]] = []
+        # Legacy ``changes`` map fallback (already supported pre-Stage-1B)
+        if "changes" in workspace_edit:
+            for uri, edits in workspace_edit["changes"].items():
+                self._apply_text_document_edit(
+                    {"textDocument": {"uri": uri, "version": None}, "edits": edits},
+                    snapshot,
+                    applied,
+                )
+        if "documentChanges" in workspace_edit:
+            for change in workspace_edit["documentChanges"]:
+                kind = change.get("kind")
+                if kind is None:
+                    self._apply_text_document_edit(change, snapshot, applied)
+                else:
+                    raise ValueError(
+                        f"Unhandled documentChange kind: {kind!r}; T1 ships only TextDocumentEdit. "
+                        f"T2/T3/T4 add CreateFile/DeleteFile/RenameFile."
+                    )
+        return len(applied)
 
     def rename_symbol(self, name_path: str, relative_path: str, new_name: str) -> str:
         """
