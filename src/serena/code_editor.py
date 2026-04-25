@@ -572,20 +572,25 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
         os.replace(old_abs, new_abs)  # os.replace overwrites on POSIX & Windows atomically
         applied.append({"kind": "renameFile", "oldUri": old_uri, "newUri": new_uri, "skipped": False})
 
-    def _apply_workspace_edit(self, workspace_edit: ls_types.WorkspaceEdit) -> int:
-        """Apply a WorkspaceEdit through the full Stage 1B matrix.
+    @staticmethod
+    def _collect_change_annotations(workspace_edit: dict[str, Any]) -> dict[str, dict[str, Any]]:
+        """Return the WorkspaceEdit's changeAnnotations map (or {} if absent).
 
-        Handles every documentChanges shape (TextDocumentEdit / CreateFile /
-        RenameFile / DeleteFile) plus the legacy ``changes`` map. Wraps the
-        body in an atomic snapshot/restore (T8); on any exception, every
-        touched file is restored to its pre-edit state before re-raising.
-
-        :param workspace_edit: the edit to apply
-        :return: number of documentChange entries applied
+        Keyed by ``ChangeAnnotationIdentifier`` (str); values are
+        ``ChangeAnnotation`` TypedDicts ({label, needsConfirmation?,
+        description?}). Per §4.1 row 5 + Q4 §7.1 this is ADVISORY: the
+        applier never blocks on ``needsConfirmation=True`` -- caller (MCP
+        tool layer) decides whether to surface a confirmation prompt.
         """
-        snapshot: dict[str, str] = {}
-        applied: list[dict[str, Any]] = []
-        # Legacy ``changes`` map fallback (already supported pre-Stage-1B)
+        return dict(workspace_edit.get("changeAnnotations", {}))
+
+    def _drive_workspace_edit(
+        self,
+        workspace_edit: ls_types.WorkspaceEdit,
+        snapshot: dict[str, str],
+        applied: list[dict[str, Any]],
+    ) -> None:
+        """Internal core of _apply_workspace_edit; mutates snapshot + applied."""
         if "changes" in workspace_edit:
             for uri, edits in workspace_edit["changes"].items():
                 self._apply_text_document_edit(
@@ -606,7 +611,46 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
                     self._apply_rename_file(change, snapshot, applied)
                 else:
                     raise ValueError(f"Unhandled documentChange kind: {kind!r}")
+
+    def _apply_workspace_edit(self, workspace_edit: ls_types.WorkspaceEdit) -> int:
+        """Apply a WorkspaceEdit through the full Stage 1B matrix.
+
+        Handles every documentChanges shape (TextDocumentEdit / CreateFile /
+        RenameFile / DeleteFile) plus the legacy ``changes`` map. Wraps the
+        body in an atomic snapshot/restore (T8); on any exception, every
+        touched file is restored to its pre-edit state before re-raising.
+
+        :param workspace_edit: the edit to apply
+        :return: number of documentChange entries applied
+        """
+        snapshot: dict[str, str] = {}
+        applied: list[dict[str, Any]] = []
+        self._drive_workspace_edit(workspace_edit, snapshot, applied)
         return len(applied)
+
+    def _apply_workspace_edit_with_report(
+        self, workspace_edit: ls_types.WorkspaceEdit
+    ) -> dict[str, Any]:
+        """Like _apply_workspace_edit but returns a structured report.
+
+        Report shape:
+            {
+                "count": int,                        # operations applied
+                "annotations": dict[str, dict],      # changeAnnotations map
+                "snapshot": dict[str, str],          # per-URI prior content
+                "applied": list[dict[str, Any]],     # per-op log for T10 inverse
+            }
+        """
+        annotations = self._collect_change_annotations(cast(dict[str, Any], workspace_edit))
+        snapshot: dict[str, str] = {}
+        applied: list[dict[str, Any]] = []
+        self._drive_workspace_edit(workspace_edit, snapshot, applied)
+        return {
+            "count": len(applied),
+            "annotations": annotations,
+            "snapshot": snapshot,
+            "applied": applied,
+        }
 
     def rename_symbol(self, name_path: str, relative_path: str, new_name: str) -> str:
         """
