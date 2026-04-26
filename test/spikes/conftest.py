@@ -152,3 +152,116 @@ def slim_pool(fake_sls_factory):  # type: ignore[no-untyped-def]
     )
     yield pool
     pool.shutdown_all()
+
+
+# ---------------------------------------------------------------------------
+# Stage 1D — Multi-server merge: _FakeServer test double + fake_pool fixture.
+# ---------------------------------------------------------------------------
+#
+# Stage 1D is written against the Stage 1A facade contract on
+# ``SolidLanguageServer`` but cannot use real Python LSPs because the
+# ``PylspServer`` / ``BasedpyrightServer`` / ``RuffServer`` adapters do
+# not yet exist (Stage 1E delivers them; SUMMARY §5). This fake mirrors
+# the four facade method signatures exactly so Stage 1E adapters drop in
+# unchanged when ``MultiServerCoordinator`` consumes them.
+
+from typing import Any as _AnyT
+
+
+class _FakeServer:
+    """Minimal stand-in for a SolidLanguageServer subclass.
+
+    Method shapes match Stage 1A facades verbatim:
+      - request_code_actions(file, start, end, only=None, trigger_kind=2,
+        diagnostics=None) -> list[dict[str, Any]]
+      - resolve_code_action(action) -> dict[str, Any]
+      - execute_command(name, args) -> Any
+      - request_rename_symbol_edit(relative_file_path, line, column,
+        new_name) -> dict[str, Any] | None
+
+    Behavior is driven by attributes set per-test:
+      - code_actions: list[dict] returned by request_code_actions
+      - resolve_map: dict[id_or_title, resolved_action]
+      - command_results: dict[command_name, Any]
+      - rename_edit: dict | None returned by request_rename_symbol_edit
+      - sleep_ms: optional async sleep before returning (drives timeout tests)
+      - raises: optional Exception class to raise (drives error tests)
+    """
+
+    def __init__(self, server_id: str) -> None:
+        self.server_id = server_id
+        self.code_actions: list[dict[str, _AnyT]] = []
+        self.resolve_map: dict[str, dict[str, _AnyT]] = {}
+        self.command_results: dict[str, _AnyT] = {}
+        self.rename_edit: dict[str, _AnyT] | None = None
+        self.sleep_ms: int = 0
+        self.raises: type[BaseException] | None = None
+        self.calls: list[tuple[str, tuple[_AnyT, ...]]] = []
+
+    async def _maybe_delay_or_raise(self) -> None:
+        import asyncio as _asyncio
+        if self.sleep_ms > 0:
+            await _asyncio.sleep(self.sleep_ms / 1000.0)
+        if self.raises is not None:
+            raise self.raises(f"fake-server[{self.server_id}] raised")
+
+    async def request_code_actions(
+        self,
+        file: str,
+        start: dict[str, int],
+        end: dict[str, int],
+        only: list[str] | None = None,
+        trigger_kind: int = 2,
+        diagnostics: list[dict[str, _AnyT]] | None = None,
+    ) -> list[dict[str, _AnyT]]:
+        self.calls.append(("request_code_actions", (file, start, end, tuple(only or []))))
+        await self._maybe_delay_or_raise()
+        if only is None:
+            return list(self.code_actions)
+        # LSP §3.18.1 prefix rule: a server-side kind matches the filter
+        # iff it equals the filter or starts with ``filter + "."``.
+        out: list[dict[str, _AnyT]] = []
+        for ca in self.code_actions:
+            k = ca.get("kind", "")
+            if any(k == f or k.startswith(f + ".") for f in only):
+                out.append(ca)
+        return out
+
+    async def resolve_code_action(self, action: dict[str, _AnyT]) -> dict[str, _AnyT]:
+        self.calls.append(("resolve_code_action", (action.get("title", ""),)))
+        await self._maybe_delay_or_raise()
+        key = action.get("data", {}).get("id") if isinstance(action.get("data"), dict) else None
+        key = key or action.get("title", "")
+        return self.resolve_map.get(key, action)
+
+    async def execute_command(self, name: str, args: list[_AnyT] | None = None) -> _AnyT:
+        self.calls.append(("execute_command", (name, tuple(args or []))))
+        await self._maybe_delay_or_raise()
+        return self.command_results.get(name)
+
+    async def request_rename_symbol_edit(
+        self,
+        relative_file_path: str,
+        line: int,
+        column: int,
+        new_name: str,
+    ) -> dict[str, _AnyT] | None:
+        self.calls.append(("request_rename_symbol_edit", (relative_file_path, line, column, new_name)))
+        await self._maybe_delay_or_raise()
+        return self.rename_edit
+
+
+@pytest.fixture
+def fake_pool() -> dict[str, _FakeServer]:
+    """Standard 3-server Python pool used by Stage 1D tests.
+
+    Order matters in iteration: pylsp first, basedpyright second, ruff
+    third. Priority-table assertions don't rely on iteration order — they
+    rely on _apply_priority() — but a stable dict order keeps test
+    transcripts diff-friendly.
+    """
+    return {
+        "pylsp-rope": _FakeServer("pylsp-rope"),
+        "basedpyright": _FakeServer("basedpyright"),
+        "ruff": _FakeServer("ruff"),
+    }
