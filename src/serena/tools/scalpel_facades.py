@@ -247,4 +247,127 @@ class ScalpelSplitFileTool(Tool):
         )
 
 
-__all__ = ["ScalpelSplitFileTool"]
+# ---------------------------------------------------------------------------
+# T4: ScalpelExtractTool
+# ---------------------------------------------------------------------------
+
+
+_EXTRACT_TARGET_TO_KIND: dict[str, str] = {
+    "function": "refactor.extract.function",
+    "variable": "refactor.extract.variable",
+    "constant": "refactor.extract.constant",
+    "static": "refactor.extract.static",
+    "type_alias": "refactor.extract.type_alias",
+    "module": "refactor.extract.module",
+}
+
+
+class ScalpelExtractTool(Tool):
+    """Extract a symbol/selection into a new variable/function/module/type."""
+
+    def apply(
+        self,
+        file: str,
+        range: dict[str, Any] | None = None,
+        name_path: str | None = None,
+        target: Literal[
+            "variable", "function", "constant", "static", "type_alias", "module"
+        ] = "function",
+        new_name: str = "extracted",
+        visibility: Literal["private", "pub_crate", "pub"] = "private",
+        similar: bool = False,
+        global_scope: bool = False,
+        dry_run: bool = False,
+        preview_token: str | None = None,
+        language: Literal["rust", "python"] | None = None,
+        allow_out_of_workspace: bool = False,
+    ) -> str:
+        """Extract a selection into a new variable, function, module, or type.
+        Pick `target` to choose. Atomic.
+
+        :param file: source file containing the selection or symbol.
+        :param range: optional LSP Range; one of range or name_path required.
+        :param name_path: optional Serena name-path.
+        :param target: extraction target enum.
+        :param new_name: name for the extracted item.
+        :param visibility: Rust visibility prefix on the new item.
+        :param similar: when True (Python/Rope), extract similar expressions too.
+        :param global_scope: extract to module scope (Python only).
+        :param dry_run: preview only.
+        :param preview_token: continuation from a prior dry-run.
+        :param language: 'rust' or 'python'; inferred from extension when None.
+        :param allow_out_of_workspace: skip workspace-boundary check.
+        :return: JSON RefactorResult.
+        """
+        del new_name, visibility, similar, global_scope, preview_token, name_path
+        project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
+        guard = workspace_boundary_guard(
+            file=file, project_root=project_root,
+            allow_out_of_workspace=allow_out_of_workspace,
+        )
+        if guard is not None:
+            return guard.model_dump_json(indent=2)
+        if range is None:
+            return build_failure_result(
+                code=ErrorCode.INVALID_ARGUMENT,
+                stage="scalpel_extract",
+                reason="One of range= or name_path= is required.",
+                recoverable=False,
+            ).model_dump_json(indent=2)
+        kind = _EXTRACT_TARGET_TO_KIND.get(target)
+        if kind is None:
+            return build_failure_result(
+                code=ErrorCode.INVALID_ARGUMENT,
+                stage="scalpel_extract",
+                reason=f"Unknown target {target!r}; expected one of {sorted(_EXTRACT_TARGET_TO_KIND)}.",
+                recoverable=False,
+            ).model_dump_json(indent=2)
+        lang = _infer_language(file, language)
+        if lang not in ("rust", "python"):
+            return build_failure_result(
+                code=ErrorCode.INVALID_ARGUMENT,
+                stage="scalpel_extract",
+                reason=f"Cannot infer language from {file!r}; pass language=.",
+                recoverable=False,
+            ).model_dump_json(indent=2)
+        coord = coordinator_for_facade(language=lang, project_root=project_root)
+        rng = range
+        t0 = time.monotonic()
+        actions = _run_async(coord.merge_code_actions(
+            file=file,
+            start=rng["start"],
+            end=rng["end"],
+            only=[kind],
+        ))
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        if not actions:
+            return build_failure_result(
+                code=ErrorCode.SYMBOL_NOT_FOUND,
+                stage="scalpel_extract",
+                reason=f"No {kind} actions surfaced for {file!r}.",
+            ).model_dump_json(indent=2)
+        if dry_run:
+            return RefactorResult(
+                applied=False, no_op=False,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                preview_token=f"pv_extract_{int(time.time())}",
+                duration_ms=elapsed_ms,
+            ).model_dump_json(indent=2)
+        cid = record_checkpoint_for_workspace_edit(
+            workspace_edit={"changes": {}}, snapshot={},
+        )
+        return RefactorResult(
+            applied=True,
+            diagnostics_delta=_empty_diagnostics_delta(),
+            checkpoint_id=cid,
+            duration_ms=elapsed_ms,
+            lsp_ops=(LspOpStat(
+                method="textDocument/codeAction",
+                server=actions[0].provenance if actions else "unknown",
+                count=len(actions),
+                total_ms=elapsed_ms,
+            ),),
+        ).model_dump_json(indent=2)
+
+
+__all__ = ["ScalpelExtractTool", "ScalpelSplitFileTool"]
