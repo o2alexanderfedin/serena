@@ -1,0 +1,29 @@
+# o2-scalpel-python
+
+Scalpel refactor MCP server for Python via pylsp
+
+## Install
+
+```bash
+claude plugin install o2-scalpel-python --from o2-scalpel
+```
+
+## Requirements
+
+- Claude Code >= 1.0.0
+- LSP server: `pylsp` on `$PATH`
+- File extensions handled: .py
+
+## Facades
+
+| Facade | Summary |
+|---|---|
+| `scalpel_split_file` | Split a Python module |
+
+## Skills
+
+This plugin ships skills under `skills/` so Claude knows when to call each facade.
+
+## License
+
+MIT - AI Hive(R)
