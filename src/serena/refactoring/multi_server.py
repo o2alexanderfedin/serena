@@ -113,6 +113,68 @@ def _default_broadcast_timeout_ms() -> int:
         return 2000
 
 
+# ---------------------------------------------------------------------------
+# §11.1 + Phase 0 P2 — sub-kind normalization for priority-table lookup.
+# ---------------------------------------------------------------------------
+
+# Server-suffix tokens recognized by the merger. Stage 1E adapters
+# may extend this set; per Phase 0 P2 only "ruff" appears in the wild
+# at MVP, but defensive entries cover future expansions and the
+# hierarchical-collision case noted in §11.2.
+_KNOWN_SERVER_SUFFIXES: frozenset[str] = frozenset({
+    "ruff",
+    "pylsp-rope",
+    "pylsp-base",
+    "pylsp-mypy",
+    "basedpyright",
+    "rust-analyzer",
+})
+
+# Base families against which the §11.1 priority table is keyed.
+# A hierarchical kind ``<family>.<server-suffix>`` collapses to
+# ``<family>`` for priority-table lookup. Other hierarchies (e.g.
+# ``refactor.extract.function``) are NOT collapsed — they're semantic
+# sub-actions, not server tags.
+_PRIORITY_BASE_FAMILIES: frozenset[str] = frozenset({
+    "source.organizeImports",
+    "source.fixAll",
+    "quickfix",
+    "refactor.extract",
+    "refactor.inline",
+    "refactor.rewrite",
+    "refactor",
+    "source",
+})
+
+
+def _normalize_kind(kind: str) -> str:
+    """Collapse hierarchical server-suffix kinds onto their priority family.
+
+    Per LSP §3.18.1, CodeActionKind values are dot-separated hierarchies
+    (e.g. ``source.organizeImports.ruff``). Phase 0 P2 confirmed ruff
+    publishes under such suffixes while pylsp-rope publishes the bare
+    family. The §11.1 priority table is keyed by family, so the merger
+    rewrites suffixed kinds before lookup.
+
+    Rule: if ``kind`` decomposes into ``<family>.<server>`` where
+    ``<family>`` is in ``_PRIORITY_BASE_FAMILIES`` and ``<server>`` is in
+    ``_KNOWN_SERVER_SUFFIXES``, return ``<family>``. Otherwise return
+    ``kind`` unchanged.
+
+    Examples:
+      ``source.organizeImports.ruff`` → ``source.organizeImports``
+      ``source.fixAll.ruff`` → ``source.fixAll``
+      ``refactor.extract.function`` → ``refactor.extract.function`` (kept)
+      ``quickfix`` → ``quickfix`` (already a family)
+    """
+    if not kind or "." not in kind:
+        return kind
+    head, _, tail = kind.rpartition(".")
+    if head in _PRIORITY_BASE_FAMILIES and tail in _KNOWN_SERVER_SUFFIXES:
+        return head
+    return kind
+
+
 class MultiServerCoordinator:
     """Coordinator for the §11 multi-LSP merge.
 
