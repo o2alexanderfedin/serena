@@ -44,6 +44,16 @@ def _load_template(name: str) -> Template:
 
 _SKILL_TMPL = _load_template("skill.md.tmpl")
 _README_TMPL = _load_template("readme.md.tmpl")
+_HOOK_TMPL = _load_template("verify_hook.sh.tmpl")
+
+# Per-language install hints surfaced when the SessionStart hook fails.
+# Languages without an entry get the generic "see plugin README" pointer.
+_INSTALL_HINTS: dict[str, str] = {
+    "rust": "rustup component add rust-analyzer",
+    "python": "pipx install python-lsp-server",
+    "typescript": "npm i -g typescript-language-server typescript",
+    "go": "go install golang.org/x/tools/gopls@latest",
+}
 
 # Identity constants for every emitted plugin. Kept module-private so they
 # travel with the generator and are easy to lift to env in Stage 1K if we
@@ -198,11 +208,23 @@ def _render_readme(strategy: _StrategyWithFacades) -> str:
     )
 
 
+def _render_session_start_hook(strategy: _StrategyLike) -> str:
+    """Render the POSIX-sh ``hooks/verify-scalpel-<lang>.sh`` probe."""
+
+    return _HOOK_TMPL.substitute(
+        plugin_name=_plugin_name(strategy),
+        lsp_cmd=strategy.lsp_server_cmd[0],
+        install_hint=_INSTALL_HINTS.get(strategy.language, "see plugin README"),
+        language=strategy.language,
+    )
+
+
 __all__ = [
     "PluginManifest",  # re-export for callers
     "_render_marketplace_json",
     "_render_mcp_json",
     "_render_plugin_json",
     "_render_readme",
+    "_render_session_start_hook",
     "_render_skill_for_facade",
 ]
