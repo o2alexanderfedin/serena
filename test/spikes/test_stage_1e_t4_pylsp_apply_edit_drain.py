@@ -72,7 +72,7 @@ def test_pylsp_inline_drains_apply_edit_payload(tmp_path: Path) -> None:
             # (response, drained_apply_edits) tuple per ls.py:794-820.
             result = srv.execute_command(cmd["command"], cmd.get("arguments", []))
             assert isinstance(result, tuple) and len(result) == 2, result
-            _response, drained = result
+            _, drained = result
 
             assert drained, "pylsp-rope inline must produce at least one applyEdit"
             edit0 = drained[0].get("edit") or {}
