@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "basedpyright_version": "1.39.3",
+  "action_kinds": {
+    "source.organizeImports": {
+      "title": "Organize Imports",
+      "description": "Sort imports and remove unused entries"
+    },
+    "quickfix.basedpyright.autoimport": {
+      "title": "Add import",
+      "description": "Synthesize import for an unresolved symbol"
+    },
+    "quickfix.basedpyright.pyrightignore": {
+      "title": "Add pyright ignore",
+      "description": "Insert `# pyright: ignore[<rule>]` comment"
+    },
+    "source.organizeImports.basedpyright": {
+      "title": "Organize Imports (basedpyright)",
+      "description": "basedpyright-specific organize-imports flavor"
+    }
+  }
+}

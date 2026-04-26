@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "basedpyright_version": "1.39.3",
+  "fixture": "calcpy_e2e",
+  "max_diagnostics": 0,
+  "expected_rules": [],
+  "explanation": "calcpy_e2e baseline must be diagnostic-clean on basedpyright 1.39.3; any diagnostic = basedpyright bump introduced new check or fixture regressed."
+}
