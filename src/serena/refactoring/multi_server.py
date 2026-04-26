@@ -623,6 +623,101 @@ def _check_workspace_boundary(
     return True, None
 
 
+# ---------------------------------------------------------------------------
+# §11.3 + Phase 0 P6 — rename merger with whole-file ↔ surgical reconciliation.
+# ---------------------------------------------------------------------------
+
+import difflib
+
+# Per-language primary server for textDocument/rename per §11.3.
+_RENAME_PRIMARY_BY_LANGUAGE: dict[str, str] = {
+    "python": "pylsp-rope",
+    "rust": "rust-analyzer",
+}
+
+
+def _reconcile_rename_edits(
+    edit: dict[str, Any],
+    source_reader,
+) -> list[tuple[str, dict[str, Any]]]:
+    """Normalize a rename WorkspaceEdit to a list of surgical hunks.
+
+    Detects the pylsp pattern (single edit per file whose range spans
+    a multi-line block) and converts to per-line hunks via
+    ``difflib.unified_diff``. Already-surgical edits (e.g.
+    basedpyright's token-range edits) pass through unchanged.
+
+    ``source_reader`` is called as ``source_reader(uri) -> str`` and
+    returns the current file contents.
+
+    Returns ``list[(uri, text_edit_dict)]`` flattened across files.
+    """
+    out: list[tuple[str, dict[str, Any]]] = []
+    for change in edit.get("documentChanges", []) or []:
+        if "textDocument" not in change or "edits" not in change:
+            continue
+        uri = change["textDocument"]["uri"]
+        for te in change["edits"]:
+            rng = te["range"]
+            line_span = rng["end"]["line"] - rng["start"]["line"]
+            if line_span <= 1:
+                # Surgical: keep as-is.
+                out.append((uri, te))
+                continue
+            # Whole-file shape: derive surgical hunks.
+            try:
+                src = source_reader(uri)
+            except Exception:  # noqa: BLE001
+                # Fall back to surfacing the whole-file edit verbatim.
+                out.append((uri, te))
+                continue
+            old_lines = src.splitlines(keepends=True)
+            new_lines = te["newText"].splitlines(keepends=True)
+            for hunk in _line_hunks(old_lines, new_lines):
+                out.append((uri, hunk))
+    return out
+
+
+def _line_hunks(old_lines: list[str], new_lines: list[str]) -> list[dict[str, Any]]:
+    """Produce minimal-range TextEdits via difflib.SequenceMatcher.
+    Each opcode that isn't 'equal' becomes one TextEdit covering the
+    affected old-line range, with the new-line text as newText."""
+    sm = difflib.SequenceMatcher(a=old_lines, b=new_lines, autojunk=False)
+    out: list[dict[str, Any]] = []
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag == "equal":
+            continue
+        out.append({
+            "range": {
+                "start": {"line": i1, "character": 0},
+                "end": {"line": i2, "character": 0},
+            },
+            "newText": "".join(new_lines[j1:j2]),
+        })
+    return out
+
+
+def _rename_symdiff(winner: dict[str, Any], loser: dict[str, Any], source_reader) -> dict[str, int]:
+    """Symmetric-difference summary of two rename WorkspaceEdits.
+    Both are reconciled to surgical form first; the result counts
+    the per-(uri, range, newText) tuples unique to each side."""
+    w_set = {
+        (uri, te["range"]["start"]["line"], te["range"]["start"]["character"],
+         te["range"]["end"]["line"], te["range"]["end"]["character"], te["newText"])
+        for uri, te in _reconcile_rename_edits(winner, source_reader)
+    }
+    l_set = {
+        (uri, te["range"]["start"]["line"], te["range"]["start"]["character"],
+         te["range"]["end"]["line"], te["range"]["end"]["character"], te["newText"])
+        for uri, te in _reconcile_rename_edits(loser, source_reader)
+    }
+    return {
+        "only_in_winner": len(w_set - l_set),
+        "only_in_loser": len(l_set - w_set),
+        "shared": len(w_set & l_set),
+    }
+
+
 class MultiServerCoordinator:
     """Coordinator for the §11 multi-LSP merge.
 
@@ -1015,6 +1110,81 @@ class MultiServerCoordinator:
                     surfaced.append(_to_merged(fail_sid, fail_action, fail_reason))
 
         return auto_apply, surfaced
+
+    async def merge_rename(
+        self,
+        relative_file_path: str,
+        line: int,
+        column: int,
+        new_name: str,
+        language: str = "python",
+    ) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+        """Per §11.3, rename is single-primary per language.
+
+        Python primary is pylsp-rope. When ``O2_SCALPEL_DEBUG_MERGE=1``,
+        also call basedpyright and emit a ``provenance.disagreement``
+        warning carrying the P6-shape symdiff summary; whole-file vs
+        surgical edits are reconciled to a common surgical form via
+        ``difflib`` line-mapping before the diff.
+
+        Returns ``(workspace_edit_or_none, warnings)``.
+        """
+        primary_id = _RENAME_PRIMARY_BY_LANGUAGE.get(language)
+        if primary_id is None or primary_id not in self._servers:
+            return None, []
+        primary = self._servers[primary_id]
+        primary_edit = await primary.request_rename_symbol_edit(
+            relative_file_path=relative_file_path,
+            line=line,
+            column=column,
+            new_name=new_name,
+        )
+        if primary_edit is None:
+            return None, []
+
+        warnings: list[dict[str, Any]] = []
+        if os.environ.get("O2_SCALPEL_DEBUG_MERGE") == "1":
+            secondary_id = "basedpyright" if primary_id == "pylsp-rope" else None
+            if secondary_id and secondary_id in self._servers:
+                secondary = self._servers[secondary_id]
+                try:
+                    secondary_edit = await secondary.request_rename_symbol_edit(
+                        relative_file_path=relative_file_path,
+                        line=line,
+                        column=column,
+                        new_name=new_name,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    warnings.append({
+                        "kind": "provenance.disagreement",
+                        "winner": primary_id,
+                        "loser": secondary_id,
+                        "loser_error": f"{type(exc).__name__}: {exc}",
+                        "loser_returned_none": False,
+                    })
+                    return primary_edit, warnings
+                if secondary_edit is None:
+                    warnings.append({
+                        "kind": "provenance.disagreement",
+                        "winner": primary_id,
+                        "loser": secondary_id,
+                        "loser_returned_none": True,
+                    })
+                else:
+                    def _read_unified(uri: str) -> str:
+                        try:
+                            return _uri_to_path(uri).read_text(encoding="utf-8")
+                        except (FileNotFoundError, OSError):
+                            return ""
+                    symdiff = _rename_symdiff(primary_edit, secondary_edit, _read_unified)
+                    warnings.append({
+                        "kind": "provenance.disagreement",
+                        "winner": primary_id,
+                        "loser": secondary_id,
+                        "loser_returned_none": False,
+                        "symdiff": symdiff,
+                    })
+        return primary_edit, warnings
 
 
 __all__ = [
