@@ -74,20 +74,18 @@ def test_factory_empty_registry_returns_empty_catalog() -> None:
     assert len(cat.records) == 0
 
 
-def test_factory_python_source_server_is_pylsp_rope_default() -> None:
-    """T2 contract: strategy-only walk attributes Python kinds to pylsp-rope.
-
-    T3 will add per-adapter attribution (basedpyright kinds → basedpyright,
-    ruff kinds → ruff). T2's job is the strategy-only baseline so the
-    delta T3 introduces is reviewable as an isolated commit.
-    """
+def test_factory_python_source_server_is_one_of_python_servers() -> None:
+    """T3 enriches T2's defaults: each Python record's source_server is
+    one of the Python adapter set ('pylsp-rope', 'basedpyright', 'ruff').
+    The exact attribution per kind is asserted in T3's tests."""
     from serena.refactoring import STRATEGY_REGISTRY
     from serena.refactoring.capabilities import build_capability_catalog
 
+    legal_python_servers = {"pylsp-rope", "basedpyright", "ruff"}
     cat = build_capability_catalog(STRATEGY_REGISTRY)
     for rec in cat.records:
         if rec.language == "python":
-            assert rec.source_server == "pylsp-rope"
+            assert rec.source_server in legal_python_servers
         elif rec.language == "rust":
             assert rec.source_server == "rust-analyzer"
         else:

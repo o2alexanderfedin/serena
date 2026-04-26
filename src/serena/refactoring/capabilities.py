@@ -21,6 +21,7 @@ Source-of-truth: ``docs/design/mvp/2026-04-24-mvp-scope-report.md`` §12.
 
 from __future__ import annotations
 
+import inspect
 import json
 from typing import Any, Mapping, get_args
 
@@ -35,6 +36,17 @@ _DEFAULT_SOURCE_SERVER_BY_LANGUAGE: dict[str, ProvenanceLiteral] = {
     "python": "pylsp-rope",
     "rust": "rust-analyzer",
 }
+
+
+class CatalogIntrospectionError(RuntimeError):
+    """Raised when an adapter cannot be introspected for codeAction kinds.
+
+    Stage 1F's contract is *static* introspection: the adapter's
+    ``_get_initialize_params`` MUST be a ``@staticmethod`` so it can be
+    invoked on the class without booting a server. If this invariant
+    breaks, the error message points at the offending adapter and tells
+    the maintainer how to fix it.
+    """
 
 
 class CapabilityRecord(BaseModel):
@@ -127,23 +139,88 @@ class CapabilityCatalog(BaseModel):
         return cls(records=records)
 
 
+# Per-server adapter classes. Stage 1F walks these to extract each adapter's
+# advertised codeActionKind.valueSet. Adding a new server requires:
+#   1. Add an entry here mapping the ProvenanceLiteral to the adapter class.
+#   2. Re-run pytest --update-catalog-baseline to refresh the golden file.
+#   3. Commit the regenerated baseline alongside the adapter change.
+def _adapter_map() -> dict[ProvenanceLiteral, type]:
+    """Lazy import to avoid forcing solidlsp adapter modules at import time."""
+    from solidlsp.language_servers.basedpyright_server import BasedpyrightServer
+    from solidlsp.language_servers.pylsp_server import PylspServer
+    from solidlsp.language_servers.ruff_server import RuffServer
+    from solidlsp.language_servers.rust_analyzer import RustAnalyzer
+    return {
+        "pylsp-rope": PylspServer,
+        "basedpyright": BasedpyrightServer,
+        "ruff": RuffServer,
+        "rust-analyzer": RustAnalyzer,
+    }
+
+
+# Per-language ordered preference for adapter attribution. When multiple
+# adapters advertise the same kind, the first one in this tuple wins —
+# this matches the Stage 1D _apply_priority() merge order so the catalog
+# and the live merger never disagree on attribution.
+_ADAPTER_ATTRIBUTION_ORDER: dict[str, tuple[ProvenanceLiteral, ...]] = {
+    "python": ("ruff", "pylsp-rope", "basedpyright"),
+    "rust": ("rust-analyzer",),
+}
+
+
+def _introspect_adapter_kinds(
+    adapter_cls: type, *, repository_absolute_path: str
+) -> frozenset[str]:
+    """Extract ``codeActionLiteralSupport.codeActionKind.valueSet`` from an adapter.
+
+    The adapter's ``_get_initialize_params`` MUST be a ``@staticmethod``
+    so we can invoke it on the class object without spawning the LSP
+    process. If it is not, ``CatalogIntrospectionError`` is raised with
+    a fix-it message.
+
+    The empty string ``""`` (a valid LSP codeActionKind sentinel meaning
+    "any kind") is filtered out — the catalog records concrete kinds only.
+
+    :param adapter_cls: e.g. ``PylspServer`` (the *class*, not an instance).
+    :param repository_absolute_path: any path; the helper passes it through
+        to the adapter's static method but the result is independent of the
+        path for every Stage 1E adapter.
+    :return: frozenset of advertised concrete codeActionKind strings.
+    """
+    static = inspect.getattr_static(adapter_cls, "_get_initialize_params")
+    if not isinstance(static, staticmethod):
+        raise CatalogIntrospectionError(
+            f"{adapter_cls.__name__}._get_initialize_params is not a "
+            f"staticmethod; Stage 1F catalog introspection requires it to "
+            f"be one (so the adapter can be queried without booting the "
+            f"LSP). Refactor the adapter to use @staticmethod."
+        )
+    params = adapter_cls._get_initialize_params(repository_absolute_path)
+    text_doc = params.get("capabilities", {}).get("textDocument", {})
+    code_action = text_doc.get("codeAction", {})
+    literal = code_action.get("codeActionLiteralSupport", {})
+    kind = literal.get("codeActionKind", {})
+    value_set = kind.get("valueSet", [])
+    return frozenset(k for k in value_set if k != "")
+
+
 def build_capability_catalog(
     strategy_registry: Mapping[Any, type] | None = None,
     *,
     project_root: Any = None,
 ) -> CapabilityCatalog:
-    """Walk ``STRATEGY_REGISTRY`` and emit one ``CapabilityRecord`` per
-    ``(strategy.language_id, kind)`` pair.
+    """Walk strategies + adapters to build the catalog.
 
-    T2 contract — strategy-only:
-      - source_server is taken from ``_DEFAULT_SOURCE_SERVER_BY_LANGUAGE``
-        keyed by ``strategy.language_id``.
-      - extension_allow_list is taken from ``strategy.extension_allow_list``.
-      - kind is each entry of ``strategy.code_action_allow_list``.
-      - id is ``f"{language}.{kind}"``.
+    For each (strategy, kind) pair:
+      1. Compute attribution by walking ``_ADAPTER_ATTRIBUTION_ORDER`` for
+         the strategy's language and picking the first adapter whose
+         introspected kind set contains ``kind``.
+      2. Fall back to ``_DEFAULT_SOURCE_SERVER_BY_LANGUAGE`` if no adapter
+         advertises ``kind`` (e.g. ``refactor`` is in
+         ``PythonStrategy.code_action_allow_list`` as a parent kind but
+         no adapter advertises the bare ``refactor`` literal).
 
-    T3 will overlay adapter-advertised kinds and re-attribute the
-    source_server when an adapter specifically advertises a kind.
+    See module-level docstring for the rationale on static introspection.
 
     :param strategy_registry: ``{Language: StrategyClass}`` from Stage 1E.
         ``None`` is treated as an empty mapping (catalog has zero records).
@@ -155,23 +232,41 @@ def build_capability_catalog(
         return CapabilityCatalog(records=())
 
     legal_servers = set(get_args(ProvenanceLiteral))
+    adapter_map = _adapter_map()
+
+    # Cache one introspection per adapter class — calling
+    # _get_initialize_params for every (strategy, kind) pair is wasteful.
+    introspected: dict[ProvenanceLiteral, frozenset[str]] = {}
+    for server_id, adapter_cls in adapter_map.items():
+        introspected[server_id] = _introspect_adapter_kinds(
+            adapter_cls, repository_absolute_path="/tmp/_stage_1f_introspect"
+        )
+
     records: list[CapabilityRecord] = []
     for _language_enum, strategy_cls in strategy_registry.items():
         language_id = strategy_cls.language_id
-        source_server = _DEFAULT_SOURCE_SERVER_BY_LANGUAGE.get(language_id)
-        if source_server is None or source_server not in legal_servers:
+        default_server = _DEFAULT_SOURCE_SERVER_BY_LANGUAGE.get(language_id)
+        if default_server is None or default_server not in legal_servers:
             raise ValueError(
                 f"capability catalog: no default source_server registered "
                 f"for language_id={language_id!r}; add it to "
                 f"_DEFAULT_SOURCE_SERVER_BY_LANGUAGE"
             )
+        attribution_order = _ADAPTER_ATTRIBUTION_ORDER.get(
+            language_id, (default_server,)
+        )
         for kind in strategy_cls.code_action_allow_list:
+            attributed: ProvenanceLiteral = default_server
+            for server_id in attribution_order:
+                if kind in introspected.get(server_id, frozenset()):
+                    attributed = server_id
+                    break
             records.append(
                 CapabilityRecord(
                     id=f"{language_id}.{kind}",
                     language=language_id,
                     kind=kind,
-                    source_server=source_server,
+                    source_server=attributed,
                     params_schema={},
                     preferred_facade=None,
                     extension_allow_list=strategy_cls.extension_allow_list,
