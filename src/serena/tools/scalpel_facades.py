@@ -778,10 +778,143 @@ class ScalpelImportsOrganizeTool(Tool):
         ).model_dump_json(indent=2)
 
 
+# ---------------------------------------------------------------------------
+# T8: ScalpelTransactionCommitTool — 13th always-on tool
+# ---------------------------------------------------------------------------
+
+
+def _strip_txn_prefix(txn_id: str) -> str:
+    return txn_id[len("txn_"):] if txn_id.startswith("txn_") else txn_id
+
+
+def _build_failure_step(
+    *, code: ErrorCode, stage: str, reason: str,
+) -> RefactorResult:
+    failure = build_failure_result(code=code, stage=stage, reason=reason).failure
+    return RefactorResult(
+        applied=False, no_op=False,
+        diagnostics_delta=_empty_diagnostics_delta(),
+        failure=failure,
+    )
+
+
+# Dispatch table for commit-time replay. Entries are bound at module load
+# from the facade Tool subclasses; tests patch this dict to inject mocks.
+_FACADE_DISPATCH: dict[str, Any] = {}
+
+
+def _bind_facade_dispatch_table() -> None:
+    """Populate _FACADE_DISPATCH with bound `apply` methods of the 5 facades."""
+    _FACADE_DISPATCH["scalpel_split_file"] = lambda **kw: ScalpelSplitFileTool().apply(**kw)
+    _FACADE_DISPATCH["scalpel_extract"] = lambda **kw: ScalpelExtractTool().apply(**kw)
+    _FACADE_DISPATCH["scalpel_inline"] = lambda **kw: ScalpelInlineTool().apply(**kw)
+    _FACADE_DISPATCH["scalpel_rename"] = lambda **kw: ScalpelRenameTool().apply(**kw)
+    _FACADE_DISPATCH["scalpel_imports_organize"] = lambda **kw: ScalpelImportsOrganizeTool().apply(**kw)
+
+
+class ScalpelTransactionCommitTool(Tool):
+    """Commit a previewed transaction from dry_run_compose."""
+
+    def apply(self, transaction_id: str) -> str:
+        """Commit a previewed transaction from dry_run_compose. Applies all
+        steps atomically, captures one checkpoint per step. Idempotent.
+
+        :param transaction_id: id returned by scalpel_dry_run_compose
+            (e.g. 'txn_…').
+        :return: JSON TransactionResult.
+        """
+        from serena.tools.scalpel_schemas import TransactionResult
+        runtime = ScalpelRuntime.instance()
+        txn_store = runtime.transaction_store()
+        raw_id = _strip_txn_prefix(transaction_id)
+        steps = txn_store.steps(raw_id)
+        if not steps:
+            failed = _build_failure_step(
+                code=ErrorCode.INVALID_ARGUMENT,
+                stage="scalpel_transaction_commit",
+                reason=(
+                    f"Unknown or empty transaction_id: {transaction_id!r}; "
+                    f"call scalpel_dry_run_compose first."
+                ),
+            )
+            return TransactionResult(
+                transaction_id=transaction_id,
+                per_step=(failed,),
+                aggregated_diagnostics_delta=_empty_diagnostics_delta(),
+                rolled_back=False,
+            ).model_dump_json(indent=2)
+        expiry = txn_store.expires_at(raw_id)
+        if expiry > 0.0 and expiry < time.time():
+            failed = _build_failure_step(
+                code=ErrorCode.PREVIEW_EXPIRED,
+                stage="scalpel_transaction_commit",
+                reason=f"Transaction {transaction_id!r} preview expired at {expiry}.",
+            )
+            return TransactionResult(
+                transaction_id=transaction_id,
+                per_step=(failed,),
+                aggregated_diagnostics_delta=_empty_diagnostics_delta(),
+                rolled_back=False,
+            ).model_dump_json(indent=2)
+        per_step: list[RefactorResult] = []
+        t0 = time.monotonic()
+        for idx, step in enumerate(steps):
+            tool_name = step.get("tool", "")
+            dispatcher = _FACADE_DISPATCH.get(tool_name)
+            if dispatcher is None:
+                per_step.append(_build_failure_step(
+                    code=ErrorCode.CAPABILITY_NOT_AVAILABLE,
+                    stage="scalpel_transaction_commit",
+                    reason=f"Unknown tool {tool_name!r} in step {idx}.",
+                ))
+                break
+            args = dict(step.get("args", {}))
+            args.setdefault("dry_run", False)
+            try:
+                payload = dispatcher(**args)
+            except Exception as exc:  # noqa: BLE001 — surface as failure
+                per_step.append(_build_failure_step(
+                    code=ErrorCode.INTERNAL_ERROR,
+                    stage="scalpel_transaction_commit",
+                    reason=f"step {idx} ({tool_name!r}) raised: {exc!r}",
+                ))
+                break
+            try:
+                rec = RefactorResult.model_validate_json(payload)
+            except Exception as exc:  # noqa: BLE001
+                per_step.append(_build_failure_step(
+                    code=ErrorCode.INTERNAL_ERROR,
+                    stage="scalpel_transaction_commit",
+                    reason=f"step {idx} ({tool_name!r}) returned invalid JSON: {exc!r}",
+                ))
+                break
+            per_step.append(rec)
+            if rec.checkpoint_id is not None:
+                try:
+                    txn_store.add_checkpoint(raw_id, rec.checkpoint_id)
+                except KeyError:
+                    pass
+            if not rec.applied:
+                # First failing step ends commit (per §5.5 fail-fast contract).
+                break
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        return TransactionResult(
+            transaction_id=transaction_id,
+            per_step=tuple(per_step),
+            aggregated_diagnostics_delta=_empty_diagnostics_delta(),
+            duration_ms=elapsed_ms,
+            rolled_back=False,
+        ).model_dump_json(indent=2)
+
+
+_bind_facade_dispatch_table()
+
+
 __all__ = [
     "ScalpelExtractTool",
     "ScalpelImportsOrganizeTool",
     "ScalpelInlineTool",
     "ScalpelRenameTool",
     "ScalpelSplitFileTool",
+    "ScalpelTransactionCommitTool",
 ]

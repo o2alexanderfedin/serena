@@ -22,13 +22,15 @@ from .checkpoints import CheckpointStore
 
 
 class Transaction:
-    """One transaction = ordered list of checkpoint ids."""
+    """One transaction = ordered list of checkpoint ids + replayable steps."""
 
-    __slots__ = ("id", "checkpoint_ids")
+    __slots__ = ("id", "checkpoint_ids", "steps", "expires_at")
 
     def __init__(self) -> None:
         self.id: str = uuid.uuid4().hex
         self.checkpoint_ids: list[str] = []
+        self.steps: list[dict[str, Any]] = []
+        self.expires_at: float = 0.0  # 0 = never expires; set by dry_run_compose
 
 
 class TransactionStore:
@@ -83,6 +85,41 @@ class TransactionStore:
             if txn is None:
                 return []
             return list(txn.checkpoint_ids)
+
+    # --- Stage 2A additions: replayable steps + preview expiry ---
+
+    def add_step(self, transaction_id: str, step: dict[str, Any]) -> None:
+        """Append a {tool, args} step (Stage 2A — replayable from commit)."""
+        with self._lock:
+            txn = self._store.get(transaction_id)
+            if txn is None:
+                raise KeyError(f"Unknown transaction id: {transaction_id}")
+            txn.steps.append(dict(step))
+            self._store.move_to_end(transaction_id)
+
+    def steps(self, transaction_id: str) -> list[dict[str, Any]]:
+        """Snapshot of {tool, args} steps in insertion order."""
+        with self._lock:
+            txn = self._store.get(transaction_id)
+            if txn is None:
+                return []
+            return [dict(s) for s in txn.steps]
+
+    def set_expires_at(self, transaction_id: str, expires_at: float) -> None:
+        """Set the absolute-epoch expiry timestamp (Stage 2A — commit checks)."""
+        with self._lock:
+            txn = self._store.get(transaction_id)
+            if txn is None:
+                raise KeyError(f"Unknown transaction id: {transaction_id}")
+            txn.expires_at = float(expires_at)
+
+    def expires_at(self, transaction_id: str) -> float:
+        """Return the absolute-epoch expiry timestamp (0.0 means never)."""
+        with self._lock:
+            txn = self._store.get(transaction_id)
+            if txn is None:
+                return 0.0
+            return float(txn.expires_at)
 
     def rollback(
         self,

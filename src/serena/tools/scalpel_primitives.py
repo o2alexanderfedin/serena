@@ -356,8 +356,15 @@ class ScalpelDryRunComposeTool(Tool):
                 expires_at=time.time() + self.PREVIEW_TTL_SECONDS,
                 warnings=tuple(warnings),
             ).model_dump_json(indent=2)
-        raw_id = ScalpelRuntime.instance().transaction_store().begin()
+        runtime = ScalpelRuntime.instance()
+        txn_store = runtime.transaction_store()
+        raw_id = txn_store.begin()
         txn_id = f"txn_{raw_id}"
+        # Stage 2A: persist the validated steps + preview expiry so
+        # scalpel_transaction_commit can replay them.
+        for step in validated:
+            txn_store.add_step(raw_id, {"tool": step.tool, "args": dict(step.args)})
+        txn_store.set_expires_at(raw_id, time.time() + self.PREVIEW_TTL_SECONDS)
         previews: list[StepPreview] = []
         for idx, step in enumerate(validated):
             preview = _dry_run_one_step(
