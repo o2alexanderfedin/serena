@@ -10,7 +10,7 @@ Three sibling concerns:
 
 from .checkpoints import CheckpointStore, inverse_workspace_edit
 from .discovery import PluginRecord, default_cache_root, discover_sibling_plugins, enabled_languages
-from .lsp_pool import LspPool, LspPoolKey, PoolStats, WaitingForLspBudget
+from .lsp_pool import LspPool, LspPoolKey, PoolEvent, PoolStats, WaitingForLspBudget
 from .transactions import TransactionStore
 
-__all__ = ["CheckpointStore", "LspPool", "LspPoolKey", "PluginRecord", "PoolStats", "TransactionStore", "WaitingForLspBudget", "default_cache_root", "discover_sibling_plugins", "enabled_languages", "inverse_workspace_edit"]
+__all__ = ["CheckpointStore", "LspPool", "LspPoolKey", "PluginRecord", "PoolEvent", "PoolStats", "TransactionStore", "WaitingForLspBudget", "default_cache_root", "discover_sibling_plugins", "enabled_languages", "inverse_workspace_edit"]
