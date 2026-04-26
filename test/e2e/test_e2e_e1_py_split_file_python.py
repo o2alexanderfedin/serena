@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -29,7 +30,9 @@ def _run_pytest_q(project_root: Path, python_bin: str) -> tuple[int, str]:
     keep: list[str] = []
     for line in proc.stdout.splitlines():
         if "passed" in line or "failed" in line or "error" in line:
-            keep.append(line)
+            # v0.2.0-H: strip wall-clock timing ("in 0.05s") so byte-identity
+            # checks don't flake on full-suite re-runs where the host is busier.
+            keep.append(re.sub(r"\s+in\s+\d+(?:\.\d+)?s\b", "", line))
     return proc.returncode, "\n".join(keep)
 
 
