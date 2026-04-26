@@ -119,6 +119,7 @@ def _spawn_rust_analyzer(key: LspPoolKey) -> Any:
         repository_root_path=key.project_root,
         solidlsp_settings=_build_solidlsp_settings(),
     )
+    server.start()
     return _AsyncAdapter(server)
 
 
@@ -129,6 +130,7 @@ def _spawn_pylsp(key: LspPoolKey) -> Any:
         repository_root_path=key.project_root,
         solidlsp_settings=_build_solidlsp_settings(),
     )
+    server.start()
     return _AsyncAdapter(server)
 
 
@@ -139,6 +141,7 @@ def _spawn_basedpyright(key: LspPoolKey) -> Any:
         repository_root_path=key.project_root,
         solidlsp_settings=_build_solidlsp_settings(),
     )
+    server.start()
     return _AsyncAdapter(server)
 
 
@@ -149,6 +152,7 @@ def _spawn_ruff(key: LspPoolKey) -> Any:
         repository_root_path=key.project_root,
         solidlsp_settings=_build_solidlsp_settings(),
     )
+    server.start()
     return _AsyncAdapter(server)
 
 

@@ -7,7 +7,7 @@ four Stage 1E adapter classes.
 from __future__ import annotations
 
 import os
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -41,58 +41,85 @@ def test_unknown_tag_raises_with_structured_message(tmp_path):
 
 def test_rust_tag_dispatches_to_rust_analyzer(tmp_path):
     key = LspPoolKey(language="rust", project_root=str(tmp_path))
+    fake_server = MagicMock(name="rust-analyzer-instance")
     with patch(
         "solidlsp.language_servers.rust_analyzer.RustAnalyzer"
     ) as mock_cls:
-        mock_cls.return_value = "synthetic-server"
+        mock_cls.return_value = fake_server
         result = _default_spawn_fn(key)
     assert isinstance(result, _AsyncAdapter)
-    assert result._inner == "synthetic-server"
+    assert result._inner is fake_server
     assert mock_cls.called
     call_kwargs = mock_cls.call_args.kwargs or {}
     call_args = mock_cls.call_args.args
     config = call_kwargs.get("config") if "config" in call_kwargs else call_args[0]
+    assert config is not None
     assert config.code_language.value == "rust"
+    fake_server.start.assert_called_once()
 
 
 def test_python_pylsp_rope_tag_dispatches_to_pylsp_server(tmp_path):
     key = LspPoolKey(
         language="python:pylsp-rope", project_root=str(tmp_path),
     )
+    fake_server = MagicMock(name="pylsp-instance")
     with patch(
         "solidlsp.language_servers.pylsp_server.PylspServer"
     ) as mock_cls:
-        mock_cls.return_value = "fake-pylsp"
+        mock_cls.return_value = fake_server
         result = _default_spawn_fn(key)
     assert isinstance(result, _AsyncAdapter)
-    assert result._inner == "fake-pylsp"
+    assert result._inner is fake_server
     assert mock_cls.called
+    fake_server.start.assert_called_once()
 
 
 def test_python_basedpyright_tag_dispatches_to_basedpyright_server(tmp_path):
     key = LspPoolKey(
         language="python:basedpyright", project_root=str(tmp_path),
     )
+    fake_server = MagicMock(name="basedpyright-instance")
     with patch(
         "solidlsp.language_servers.basedpyright_server.BasedpyrightServer"
     ) as mock_cls:
-        mock_cls.return_value = "fake-bp"
+        mock_cls.return_value = fake_server
         result = _default_spawn_fn(key)
     assert isinstance(result, _AsyncAdapter)
-    assert result._inner == "fake-bp"
+    assert result._inner is fake_server
+    fake_server.start.assert_called_once()
 
 
 def test_python_ruff_tag_dispatches_to_ruff_server(tmp_path):
     key = LspPoolKey(
         language="python:ruff", project_root=str(tmp_path),
     )
+    fake_server = MagicMock(name="ruff-instance")
     with patch(
         "solidlsp.language_servers.ruff_server.RuffServer"
     ) as mock_cls:
-        mock_cls.return_value = "fake-ruff"
+        mock_cls.return_value = fake_server
         result = _default_spawn_fn(key)
     assert isinstance(result, _AsyncAdapter)
-    assert result._inner == "fake-ruff"
+    assert result._inner is fake_server
+    fake_server.start.assert_called_once()
+
+
+def test_spawn_propagates_start_failure_without_caching(tmp_path):
+    """Backlog #2: if .start() raises, spawn must surface the error.
+
+    Otherwise downstream callers receive an _AsyncAdapter wrapping a never-
+    initialised server and fail at the first LSP request with an opaque
+    AttributeError instead of a clear startup failure.
+    """
+    key = LspPoolKey(language="rust", project_root=str(tmp_path))
+    fake_server = MagicMock(name="rust-analyzer-instance")
+    fake_server.start.side_effect = RuntimeError("rust-analyzer launch failed")
+    with patch(
+        "solidlsp.language_servers.rust_analyzer.RustAnalyzer"
+    ) as mock_cls:
+        mock_cls.return_value = fake_server
+        with pytest.raises(RuntimeError, match="rust-analyzer launch failed"):
+            _default_spawn_fn(key)
 
 
 def test_async_adapter_wraps_sync_facade_methods_into_coroutines():
@@ -106,7 +133,8 @@ def test_async_adapter_wraps_sync_facade_methods_into_coroutines():
     import asyncio
 
     class _SyncStub:
-        def request_code_actions(self, **kwargs):
+        def request_code_actions(self, **_kwargs):
+            del _kwargs
             return ["sync-result"]
 
         def some_other_method(self):
