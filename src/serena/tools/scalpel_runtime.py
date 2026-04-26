@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from solidlsp.ls_config import Language
 
 
-def _default_spawn_fn(_key: LspPoolKey) -> Any:
+def _default_spawn_fn(key: LspPoolKey) -> Any:
     """Stage 1G placeholder spawn callback.
 
     The Stage 2A ergonomic facades replace this with a real
@@ -48,8 +48,9 @@ def _default_spawn_fn(_key: LspPoolKey) -> Any:
     raising preserves a clear contract.
     """
     raise NotImplementedError(
-        "ScalpelRuntime spawn_fn is a placeholder; Stage 2A wires the real "
-        "solidlsp factory. Tests should not acquire from this pool."
+        f"ScalpelRuntime spawn_fn is a placeholder for {key!r}; Stage 2A "
+        f"wires the real solidlsp factory. Tests should not acquire from "
+        f"this pool."
     )
 
 

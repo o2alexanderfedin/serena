@@ -9,7 +9,7 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def _reset_runtime() -> Iterator[None]:
+def reset_runtime() -> Iterator[None]:
     from serena.tools.scalpel_runtime import ScalpelRuntime
 
     ScalpelRuntime.reset_for_testing()
