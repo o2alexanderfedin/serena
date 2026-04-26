@@ -39,7 +39,6 @@ Critical implementation notes
 
 from __future__ import annotations
 
-import contextlib
 import os
 import shutil
 import sys
@@ -199,7 +198,7 @@ def whole_file_range() -> tuple[dict[str, int], dict[str, int]]:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _harness_provenance() -> Iterator[None]:
+def harness_provenance() -> Iterator[None]:
     """Print one line of provenance once per session for triage."""
     sys.stderr.write(
         "\n[stage-1h harness] python="

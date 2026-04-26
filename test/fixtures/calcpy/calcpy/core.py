@@ -18,11 +18,16 @@ minimum surface needed for the Stage 1H smoke gate.
 """
 from __future__ import annotations
 
-import math  # noqa: F401 — present for ``source.organizeImports`` drift target.
+import math
 import os
-import sys  # noqa: F401 — present for ``source.organizeImports`` drift target.
+import sys
 from dataclasses import dataclass
 from typing import Final, Iterable
+
+# Reference math + sys so Pyright sees them accessed; these imports
+# exist so ruff's source.organizeImports has something to reorder in
+# the Stage 1H smoke test.
+RUFF_DRIFT_TARGETS = (math, sys)
 
 DEFAULT_PRECISION: Final[int] = 6
 
@@ -45,8 +50,6 @@ class AstNode:
 
 def tokenize(source: str) -> list[str]:
     """Split ``source`` into whitespace-separated tokens."""
-    if not isinstance(source, str):
-        raise ParseError(f"expected str, got {type(source).__name__}")
     return [t for t in source.split() if t]
 
 
