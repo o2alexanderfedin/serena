@@ -16,6 +16,7 @@ from .lsp_pool import LspPool, LspPoolKey, PoolEvent, PoolStats, WaitingForLspBu
 from .multi_server import (
     MergedCodeAction,
     MultiServerBroadcastResult,
+    MultiServerCoordinator,
     ProvenanceLiteral,
     ServerTimeoutWarning,
     SuppressedAlternative,
@@ -28,6 +29,7 @@ __all__ = [
     "LspPoolKey",
     "MergedCodeAction",
     "MultiServerBroadcastResult",
+    "MultiServerCoordinator",
     "PluginRecord",
     "PoolEvent",
     "PoolStats",
