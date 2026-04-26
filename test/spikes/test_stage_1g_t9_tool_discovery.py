@@ -6,7 +6,8 @@ import re
 from unittest.mock import MagicMock
 
 
-EXPECTED_NAMES: frozenset[str] = frozenset({
+# Stage 1G — 8 always-on primitive tools.
+_STAGE_1G_NAMES: frozenset[str] = frozenset({
     "scalpel_capabilities_list",
     "scalpel_capability_describe",
     "scalpel_apply_capability",
@@ -16,6 +17,18 @@ EXPECTED_NAMES: frozenset[str] = frozenset({
     "scalpel_workspace_health",
     "scalpel_execute_command",
 })
+
+# Stage 2A — 5 ergonomic facades + 13th always-on transaction commit.
+_STAGE_2A_NAMES: frozenset[str] = frozenset({
+    "scalpel_split_file",
+    "scalpel_extract",
+    "scalpel_inline",
+    "scalpel_rename",
+    "scalpel_imports_organize",
+    "scalpel_transaction_commit",
+})
+
+EXPECTED_NAMES: frozenset[str] = _STAGE_1G_NAMES | _STAGE_2A_NAMES
 
 
 def test_all_eight_tools_appear_in_iter_subclasses() -> None:
