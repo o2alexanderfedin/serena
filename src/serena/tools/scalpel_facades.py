@@ -576,6 +576,16 @@ class ScalpelRenameTool(Tool):
         ))
         elapsed_ms = int((time.monotonic() - t0) * 1000)
         workspace_edit, _ = merge_out
+        # v0.2.0-E: when renaming a Python symbol, augment the WorkspaceEdit
+        # with __all__ updates so ``from module import *`` continues to expose
+        # the symbol under its new name. No-op when __all__ is absent or does
+        # not contain the old name.
+        if lang == "python" and workspace_edit is not None:
+            old_segment = name_path.split("::")[-1].split(".")[-1]
+            workspace_edit = _augment_workspace_edit_with_all_update(
+                workspace_edit=workspace_edit,
+                file=file, old_name=old_segment, new_name=new_name,
+            )
         merged_dict = {
             "workspace_edit": workspace_edit or {},
             "primary_server": "pylsp-rope" if lang == "python" else "rust-analyzer",
@@ -654,6 +664,66 @@ class ScalpelRenameTool(Tool):
                 count=1, total_ms=0,
             ),),
         )
+
+
+def _augment_workspace_edit_with_all_update(
+    workspace_edit: dict[str, Any],
+    file: str,
+    old_name: str,
+    new_name: str,
+) -> dict[str, Any]:
+    """Append __all__ updates to a Python rename WorkspaceEdit.
+
+    Backlog #6 (v0.2.0). When ``old_name`` appears as a string literal in the
+    file's top-level ``__all__`` list/tuple, append a TextEdit replacing it
+    with ``new_name`` so ``from module import *`` continues to expose the
+    renamed symbol. No-op when:
+      - the file has no top-level ``__all__`` assignment, OR
+      - ``__all__`` does not contain ``old_name``, OR
+      - the file cannot be read or parsed as Python.
+
+    Mutates and returns ``workspace_edit`` for chaining; only the
+    ``changes`` shape is touched today (pylsp-rope's primary form).
+    """
+    import ast as _ast
+    try:
+        source = Path(file).read_text(encoding="utf-8")
+    except OSError:
+        return workspace_edit
+    try:
+        tree = _ast.parse(source)
+    except SyntaxError:
+        return workspace_edit
+    file_uri = Path(file).as_uri()
+    for node in tree.body:
+        if not isinstance(node, _ast.Assign):
+            continue
+        if not any(
+            isinstance(t, _ast.Name) and t.id == "__all__"
+            for t in node.targets
+        ):
+            continue
+        if not isinstance(node.value, (_ast.List, _ast.Tuple)):
+            continue
+        for elt in node.value.elts:
+            if not (isinstance(elt, _ast.Constant) and elt.value == old_name):
+                continue
+            line = elt.lineno - 1  # AST is 1-indexed; LSP is 0-indexed.
+            col_off = elt.col_offset
+            end_col = elt.end_col_offset
+            if end_col is None:
+                continue
+            text_edit = {
+                "range": {
+                    "start": {"line": line, "character": col_off + 1},
+                    "end": {"line": line, "character": end_col - 1},
+                },
+                "newText": new_name,
+            }
+            changes = workspace_edit.setdefault("changes", {})
+            file_edits = changes.setdefault(file_uri, [])
+            file_edits.append(text_edit)
+    return workspace_edit
 
 
 # ---------------------------------------------------------------------------
