@@ -82,9 +82,115 @@ class MultiServerBroadcastResult(BaseModel):
     errors: dict[str, str] = Field(default_factory=dict)
 
 
+# ---------------------------------------------------------------------------
+# Imports needed for runtime behaviors below.
+# ---------------------------------------------------------------------------
+
+import asyncio
+import os
+import time
+
+# Methods broadcast() can dispatch. Each entry maps an LSP wire method
+# name to the SolidLanguageServer facade name that implements it.
+# ``textDocument/rename`` is intentionally NOT broadcast — it goes
+# through ``merge_rename()`` (T8) which is single-primary per §11.3.
+_BROADCAST_DISPATCH: dict[str, str] = {
+    "textDocument/codeAction": "request_code_actions",
+    "codeAction/resolve": "resolve_code_action",
+    "workspace/executeCommand": "execute_command",
+}
+
+
+def _default_broadcast_timeout_ms() -> int:
+    """Per-call default; ``O2_SCALPEL_BROADCAST_TIMEOUT_MS`` overrides."""
+    raw = os.environ.get("O2_SCALPEL_BROADCAST_TIMEOUT_MS")
+    if raw is None:
+        return 2000
+    try:
+        v = int(raw)
+        return v if v > 0 else 2000
+    except ValueError:
+        return 2000
+
+
+class MultiServerCoordinator:
+    """Coordinator for the §11 multi-LSP merge.
+
+    Holds a ``dict[server_id, server]`` pool. Servers are duck-typed:
+    in production they are ``SolidLanguageServer`` subclasses (Stage 1E
+    adapters). In Stage 1D unit tests they are ``_FakeServer`` doubles
+    from ``test/spikes/conftest.py``. Method shapes are identical.
+    """
+
+    def __init__(self, servers: dict[str, Any]) -> None:
+        self._servers = dict(servers)
+
+    @property
+    def servers(self) -> dict[str, Any]:
+        return dict(self._servers)
+
+    async def broadcast(
+        self,
+        method: str,
+        kwargs: dict[str, Any],
+        timeout_ms: int | None = None,
+    ) -> MultiServerBroadcastResult:
+        """Fan ``method`` with ``kwargs`` to every server in the pool.
+
+        Returns a ``MultiServerBroadcastResult`` collecting:
+          - ``responses``: ``{server_id: response}`` for servers that
+            answered within ``timeout_ms``.
+          - ``timeouts``: ``ServerTimeoutWarning`` per server that
+            exceeded the deadline.
+          - ``errors``: ``{server_id: stringified-exception}`` per
+            server that raised.
+
+        ``timeout_ms`` defaults to ``$O2_SCALPEL_BROADCAST_TIMEOUT_MS``
+        or 2000ms per §11.2 row "Server times out (>2 s for codeAction)".
+        """
+        facade_name = _BROADCAST_DISPATCH.get(method)
+        if facade_name is None:
+            raise ValueError(f"unsupported broadcast method: {method!r}")
+        deadline_ms = timeout_ms if timeout_ms is not None else _default_broadcast_timeout_ms()
+        timeout_s = deadline_ms / 1000.0
+
+        async def _one(server_id: str, server: Any) -> tuple[str, Any | BaseException, float]:
+            facade = getattr(server, facade_name)
+            t0 = time.monotonic()
+            try:
+                resp = await asyncio.wait_for(facade(**kwargs), timeout=timeout_s)
+                return server_id, resp, (time.monotonic() - t0) * 1000.0
+            except asyncio.TimeoutError as exc:
+                return server_id, exc, (time.monotonic() - t0) * 1000.0
+            except BaseException as exc:  # noqa: BLE001
+                return server_id, exc, (time.monotonic() - t0) * 1000.0
+
+        gathered = await asyncio.gather(
+            *[_one(sid, srv) for sid, srv in self._servers.items()],
+            return_exceptions=False,
+        )
+        out = MultiServerBroadcastResult()
+        for sid, resp_or_exc, after_ms in gathered:
+            if isinstance(resp_or_exc, asyncio.TimeoutError):
+                out.timeouts.append(
+                    ServerTimeoutWarning(
+                        server=sid,
+                        method=method,
+                        timeout_ms=deadline_ms,
+                        after_ms=int(after_ms),
+                    )
+                )
+            elif isinstance(resp_or_exc, BaseException):
+                out.errors[sid] = f"{type(resp_or_exc).__name__}: {resp_or_exc}"
+            else:
+                out.responses[sid] = resp_or_exc
+        return out
+
+
 __all__ = [
     "MergedCodeAction",
     "MultiServerBroadcastResult",
+    "MultiServerCoordinator",
     "ProvenanceLiteral",
     "ServerTimeoutWarning",
     "SuppressedAlternative",
