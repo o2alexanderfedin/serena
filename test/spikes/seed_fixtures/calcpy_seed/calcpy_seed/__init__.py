@@ -18,4 +18,3 @@ def _private_helper(x: int) -> int:
 
 __all__ = ["VERSION", "add", "mul"]
 BAD_VAR_3: int = None
-BAD_VAR_8: list[str] = [1, 2]
