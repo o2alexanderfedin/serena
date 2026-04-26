@@ -22,16 +22,6 @@ from serena.refactoring.multi_server import (
 )
 
 
-def _action(title: str, kind: str, edit: dict[str, Any] | None = None,
-            disabled: dict[str, str] | None = None) -> dict[str, Any]:
-    out: dict[str, Any] = {"title": title, "kind": kind}
-    if edit is not None:
-        out["edit"] = edit
-    if disabled is not None:
-        out["disabled"] = disabled
-    return out
-
-
 def _edit(uri: str, sl: int, sc: int, el: int, ec: int, txt: str) -> dict[str, Any]:
     return {
         "documentChanges": [

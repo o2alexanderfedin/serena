@@ -536,7 +536,7 @@ def _classify_overlap(higher: dict[str, Any], lower: dict[str, Any]) -> str:
 
     covered = 0
     uncovered = 0
-    for uri, l_sl, l_sc, l_el, l_ec, _newtext in lower_tuples:
+    for uri, l_sl, l_sc, l_el, l_ec, _ in lower_tuples:
         candidates = higher_by_uri.get(uri, [])
         inner = (l_sl, l_sc, l_el, l_ec)
         if any(_range_contains(outer, inner) for outer in candidates):
