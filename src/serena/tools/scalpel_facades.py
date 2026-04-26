@@ -85,6 +85,94 @@ def _run_async(coro):
     return asyncio.new_event_loop().run_until_complete(coro)
 
 
+def _apply_workspace_edit_to_disk(workspace_edit: dict[str, Any]) -> int:
+    """Apply an LSP-spec WorkspaceEdit to the filesystem (v0.3.0).
+
+    Walks both the ``changes`` (dict shape) and ``documentChanges`` (array
+    shape) forms; routes every TextDocumentEdit's ``edits`` list through
+    ``_apply_text_edits_to_file`` which sorts by descending position so
+    earlier edits don't invalidate later positions.
+
+    Resource operations (CreateFile / RenameFile / DeleteFile) inside
+    ``documentChanges`` are recognised but skipped — they ship in v1.1
+    alongside resource-management auditing.
+
+    Returns the count of TextEdits actually applied (excluding skipped
+    non-file URIs and missing target files). Caller uses the return value
+    to distinguish ``applied=True`` (count > 0) from ``no_op`` (count == 0).
+    """
+    applied = 0
+    # changes shape: {uri: [TextEdit, ...]}
+    for uri, edits in (workspace_edit.get("changes") or {}).items():
+        applied += _apply_text_edits_to_file_uri(uri, edits or [])
+    # documentChanges shape: [TextDocumentEdit | CreateFile | RenameFile | DeleteFile, ...]
+    for dc in workspace_edit.get("documentChanges") or []:
+        if not isinstance(dc, dict):
+            continue
+        if "kind" in dc:
+            # Resource op — skip per v1.1 deferral.
+            continue
+        text_doc = dc.get("textDocument") or {}
+        uri = text_doc.get("uri")
+        if not isinstance(uri, str):
+            continue
+        applied += _apply_text_edits_to_file_uri(uri, dc.get("edits") or [])
+    return applied
+
+
+def _apply_text_edits_to_file_uri(uri: str, edits: list[dict[str, Any]]) -> int:
+    """Resolve ``uri`` to a local path and apply the edits in descending order.
+
+    Returns the count of edits applied (0 when the URI isn't a ``file://``
+    URI or the target file doesn't exist on disk).
+    """
+    if not uri.startswith("file://"):
+        return 0
+    if not edits:
+        return 0
+    from urllib.parse import urlparse, unquote
+    parsed = urlparse(uri)
+    target = Path(unquote(parsed.path))
+    if not target.exists():
+        return 0
+    source = target.read_text(encoding="utf-8")
+    sorted_edits = sorted(
+        edits,
+        key=lambda e: (
+            e["range"]["start"]["line"], e["range"]["start"]["character"],
+        ),
+        reverse=True,
+    )
+    for edit in sorted_edits:
+        source = _splice_text_edit(source, edit)
+    target.write_text(source, encoding="utf-8")
+    return len(sorted_edits)
+
+
+def _splice_text_edit(source: str, edit: dict[str, Any]) -> str:
+    """Replace ``source`` between LSP positions with ``edit['newText']``."""
+    start = edit["range"]["start"]
+    end = edit["range"]["end"]
+    new_text = edit["newText"]
+    lines = source.splitlines(keepends=True)
+    start_offset = _lsp_position_to_offset(lines, start["line"], start["character"])
+    end_offset = _lsp_position_to_offset(lines, end["line"], end["character"])
+    return source[:start_offset] + new_text + source[end_offset:]
+
+
+def _lsp_position_to_offset(lines: list[str], line: int, character: int) -> int:
+    """Convert an LSP (line, character) to a flat offset in the joined source."""
+    if line < 0:
+        return 0
+    if line >= len(lines):
+        return sum(len(lll) for lll in lines)
+    prefix = sum(len(lines[i]) for i in range(line))
+    target_line = lines[line]
+    # Strip trailing newline for the column clamp; columns are over visible chars.
+    visible = target_line.rstrip("\n").rstrip("\r")
+    return prefix + min(character, len(visible))
+
+
 # ---------------------------------------------------------------------------
 # T3: ScalpelSplitFileTool
 # ---------------------------------------------------------------------------
@@ -231,9 +319,13 @@ class ScalpelSplitFileTool(Tool):
                 preview_token=f"pv_split_{int(time.time())}",
                 duration_ms=elapsed_ms,
             )
-        cid = record_checkpoint_for_workspace_edit(
-            workspace_edit={"changes": {}}, snapshot={},
-        )
+        # v0.3.0 facade-application: apply the resolved WorkspaceEdit if available.
+        edit = _resolve_winner_edit(coord, actions[0])
+        if isinstance(edit, dict) and edit:
+            _apply_workspace_edit_to_disk(edit)
+        else:
+            edit = {"changes": {}}
+        cid = record_checkpoint_for_workspace_edit(workspace_edit=edit, snapshot={})
         return RefactorResult(
             applied=True,
             diagnostics_delta=_empty_diagnostics_delta(),
@@ -354,9 +446,13 @@ class ScalpelExtractTool(Tool):
                 preview_token=f"pv_extract_{int(time.time())}",
                 duration_ms=elapsed_ms,
             ).model_dump_json(indent=2)
-        cid = record_checkpoint_for_workspace_edit(
-            workspace_edit={"changes": {}}, snapshot={},
-        )
+        # v0.3.0 facade-application: apply the resolved WorkspaceEdit if available.
+        edit = _resolve_winner_edit(coord, actions[0])
+        if isinstance(edit, dict) and edit:
+            _apply_workspace_edit_to_disk(edit)
+        else:
+            edit = {"changes": {}}
+        cid = record_checkpoint_for_workspace_edit(workspace_edit=edit, snapshot={})
         return RefactorResult(
             applied=True,
             diagnostics_delta=_empty_diagnostics_delta(),
@@ -468,9 +564,13 @@ class ScalpelInlineTool(Tool):
                 preview_token=f"pv_inline_{int(time.time())}",
                 duration_ms=elapsed_ms,
             ).model_dump_json(indent=2)
-        cid = record_checkpoint_for_workspace_edit(
-            workspace_edit={"changes": {}}, snapshot={},
-        )
+        # v0.3.0 facade-application: apply the resolved WorkspaceEdit if available.
+        edit = _resolve_winner_edit(coord, actions[0])
+        if isinstance(edit, dict) and edit:
+            _apply_workspace_edit_to_disk(edit)
+        else:
+            edit = {"changes": {}}
+        cid = record_checkpoint_for_workspace_edit(workspace_edit=edit, snapshot={})
         return RefactorResult(
             applied=True,
             diagnostics_delta=_empty_diagnostics_delta(),
@@ -829,8 +929,19 @@ class ScalpelImportsOrganizeTool(Tool):
                 duration_ms=elapsed_ms,
                 warnings=tuple(warnings),
             ).model_dump_json(indent=2)
+        # v0.3.0 facade-application: apply every action's resolved edit
+        # (multi-file imports_organize touches every file passed in).
+        merged_changes: dict[str, list[dict[str, Any]]] = {}
+        for a in all_actions:
+            edit = _resolve_winner_edit(coord, a)
+            if not (isinstance(edit, dict) and edit):
+                continue
+            _apply_workspace_edit_to_disk(edit)
+            for uri, hunks in (edit.get("changes") or {}).items():
+                merged_changes.setdefault(uri, []).extend(hunks or [])
+        cid_edit = {"changes": merged_changes} if merged_changes else {"changes": {}}
         cid = record_checkpoint_for_workspace_edit(
-            workspace_edit={"changes": {}}, snapshot={},
+            workspace_edit=cid_edit, snapshot={},
         )
         return RefactorResult(
             applied=True,
@@ -920,8 +1031,17 @@ def _dispatch_single_kind_facade(
             preview_token=f"pv_{stage_name}_{int(time.time())}",
             duration_ms=elapsed_ms,
         ).model_dump_json(indent=2)
+    # v0.3.0 facade-application: pull the resolved WorkspaceEdit for the
+    # winner and write it to disk. ``get_action_edit`` returns ``None`` when
+    # the action wasn't tracked (synthetic ids in legacy tests, or when
+    # resolve failed); in that case fall back to the v0.2.0 empty checkpoint.
+    workspace_edit = _resolve_winner_edit(coord, actions[0])
+    if isinstance(workspace_edit, dict) and workspace_edit:
+        _apply_workspace_edit_to_disk(workspace_edit)
+    else:
+        workspace_edit = {"changes": {}}
     cid = record_checkpoint_for_workspace_edit(
-        workspace_edit={"changes": {}}, snapshot={},
+        workspace_edit=workspace_edit, snapshot={},
     )
     return RefactorResult(
         applied=True,
@@ -935,6 +1055,23 @@ def _dispatch_single_kind_facade(
             total_ms=elapsed_ms,
         ),),
     ).model_dump_json(indent=2)
+
+
+def _resolve_winner_edit(coord: Any, winner: Any) -> dict[str, Any] | None:
+    """Best-effort extract of the resolved WorkspaceEdit for ``winner``.
+
+    Looks up the action by id via ``coord.get_action_edit`` (added in
+    v0.3.0). Returns ``None`` when the coord doesn't expose the lookup
+    (legacy fakes) or the id isn't tracked.
+    """
+    aid = getattr(winner, "id", None) or getattr(winner, "action_id", None)
+    if not isinstance(aid, str):
+        return None
+    fn = getattr(coord, "get_action_edit", None)
+    if not callable(fn):
+        return None
+    edit = fn(aid)
+    return edit if isinstance(edit, dict) else None
 
 
 _MODULE_LAYOUT_TO_KIND: dict[str, str] = {
@@ -1106,8 +1243,18 @@ class ScalpelTidyStructureTool(Tool):
                 preview_token=f"pv_tidy_{int(time.time())}",
                 duration_ms=elapsed_ms,
             ).model_dump_json(indent=2)
+        # v0.3.0 facade-application: apply every action's resolved edit.
+        merged_changes: dict[str, list[dict[str, Any]]] = {}
+        for a in all_actions:
+            edit = _resolve_winner_edit(coord, a)
+            if not (isinstance(edit, dict) and edit):
+                continue
+            _apply_workspace_edit_to_disk(edit)
+            for uri, hunks in (edit.get("changes") or {}).items():
+                merged_changes.setdefault(uri, []).extend(hunks or [])
+        cid_edit = {"changes": merged_changes} if merged_changes else {"changes": {}}
         cid = record_checkpoint_for_workspace_edit(
-            workspace_edit={"changes": {}}, snapshot={},
+            workspace_edit=cid_edit, snapshot={},
         )
         return RefactorResult(
             applied=True,
@@ -1630,8 +1777,14 @@ def _python_dispatch_single_kind(
             preview_token=f"pv_{stage_name}_{int(time.time())}",
             duration_ms=elapsed_ms,
         ).model_dump_json(indent=2)
+    # v0.3.0 facade-application: same pattern as the Rust dispatcher.
+    workspace_edit = _resolve_winner_edit(coord, actions[0])
+    if isinstance(workspace_edit, dict) and workspace_edit:
+        _apply_workspace_edit_to_disk(workspace_edit)
+    else:
+        workspace_edit = {"changes": {}}
     cid = record_checkpoint_for_workspace_edit(
-        workspace_edit={"changes": {}}, snapshot={},
+        workspace_edit=workspace_edit, snapshot={},
     )
     return RefactorResult(
         applied=True,
@@ -1962,9 +2115,13 @@ class ScalpelFixLintsTool(Tool):
                 preview_token=f"pv_fix_lints_{int(time.time())}",
                 duration_ms=elapsed_ms,
             ).model_dump_json(indent=2)
-        cid = record_checkpoint_for_workspace_edit(
-            workspace_edit={"changes": {}}, snapshot={},
-        )
+        # v0.3.0 facade-application: apply the resolved edit (closes E13-py).
+        edit = _resolve_winner_edit(coord, actions[0])
+        if isinstance(edit, dict) and edit:
+            _apply_workspace_edit_to_disk(edit)
+        else:
+            edit = {"changes": {}}
+        cid = record_checkpoint_for_workspace_edit(workspace_edit=edit, snapshot={})
         return RefactorResult(
             applied=True,
             diagnostics_delta=_empty_diagnostics_delta(),

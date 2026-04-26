@@ -1339,6 +1339,16 @@ class MultiServerCoordinator:
                     }
         return None
 
+    def get_action_edit(self, action_id: str) -> dict[str, Any] | None:
+        """v0.3.0 — return the resolved WorkspaceEdit for ``action_id``.
+
+        ``merge_code_actions`` populates ``self._action_edits`` for every
+        action that survived the §11.1 two-stage merge. Returns ``None``
+        when the action wasn't seen (e.g., the facade-application path
+        passes a synthetic id) so callers can fall back to a no-op.
+        """
+        return self._action_edits.get(action_id)
+
     async def expand_macro(
         self,
         file: str,
