@@ -1290,6 +1290,106 @@ class MultiServerCoordinator:
                     })
         return primary_edit, warnings
 
+    async def find_symbol_position(
+        self,
+        file: str,
+        name_path: str,
+        project_root: str | None = None,
+    ) -> dict[str, int] | None:
+        """Resolve ``name_path`` to an LSP position via document symbols.
+
+        Backlog #3 (v0.2.0). Walks ``request_document_symbols`` hierarchically
+        by name_path segments — split on ``::`` (Rust) and ``.`` (Python).
+        Falls back to ``request_workspace_symbol`` with the last segment when
+        the document-level walk misses, filtering hits by ``file`` URI.
+
+        Returns ``{"line": int, "character": int}`` of the symbol's selection
+        range start, or ``None`` if no match is found across all servers.
+        """
+        if not self._servers:
+            return None
+        segments = _split_name_path(name_path)
+        if not segments:
+            return None
+        rel_path = _to_relative_path(file, project_root)
+        for server in self._servers.values():
+            doc_symbols = await asyncio.to_thread(
+                server.request_document_symbols, rel_path,
+            )
+            pos = _walk_document_symbols(doc_symbols, segments)
+            if pos is not None:
+                return pos
+        # Document-level walk missed — try workspace_symbol scoped to file.
+        target_uri = Path(file).as_uri()
+        for server in self._servers.values():
+            ws_results = await asyncio.to_thread(
+                server.request_workspace_symbol, segments[-1],
+            )
+            if not ws_results:
+                continue
+            for hit in ws_results:
+                loc = hit.get("location") or {}
+                if loc.get("uri") != target_uri:
+                    continue
+                start = (loc.get("range") or {}).get("start") or {}
+                if "line" in start and "character" in start:
+                    return {
+                        "line": int(start["line"]),
+                        "character": int(start["character"]),
+                    }
+        return None
+
+
+def _split_name_path(name_path: str) -> list[str]:
+    """Split ``name_path`` on ``::`` (Rust) and ``.`` (Python) separators."""
+    if not name_path:
+        return []
+    pieces: list[str] = []
+    for cc in name_path.split("::"):
+        for dotted in cc.split("."):
+            if dotted:
+                pieces.append(dotted)
+    return pieces
+
+
+def _to_relative_path(file: str, project_root: str | None) -> str:
+    """Return ``file`` made relative to ``project_root`` when possible."""
+    if project_root is None:
+        return file
+    try:
+        return str(Path(file).relative_to(project_root))
+    except ValueError:
+        return file
+
+
+def _walk_document_symbols(
+    nodes: Any, segments: list[str],
+) -> dict[str, int] | None:
+    """Walk the LSP document-symbol tree, matching ``segments`` head-first."""
+    if not segments:
+        return None
+    head, rest = segments[0], segments[1:]
+    iterable = nodes if isinstance(nodes, (list, tuple)) else [nodes]
+    for node in iterable:
+        if not isinstance(node, dict):
+            continue
+        if node.get("name") != head:
+            continue
+        if not rest:
+            sel = node.get("selectionRange") or node.get("range") or {}
+            start = sel.get("start") or {}
+            if "line" in start and "character" in start:
+                return {
+                    "line": int(start["line"]),
+                    "character": int(start["character"]),
+                }
+            return None
+        children = node.get("children") or []
+        deeper = _walk_document_symbols(children, rest)
+        if deeper is not None:
+            return deeper
+    return None
+
 
 class EditAttributionLog:
     """Append-only JSONL log of every applied WorkspaceEdit per §11.5.

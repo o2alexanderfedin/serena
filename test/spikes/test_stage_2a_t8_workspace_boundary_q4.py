@@ -38,9 +38,9 @@ def fake_coord_always_succeeds():
         return {"line": 0, "character": 0}
     fake.find_symbol_position = _find_pos
 
-    async def _merge_rename(**kwargs):  # noqa: ARG001
-        return {"primary_server": "rust-analyzer",
-                "workspace_edit": {"changes": {}}}
+    async def _merge_rename(relative_file_path, line, column, new_name, language="python"):
+        del relative_file_path, line, column, new_name, language
+        return ({"changes": {}}, [])
     fake.merge_rename = _merge_rename
     return fake
 

@@ -30,12 +30,10 @@ def test_rename_dispatches_merge_rename(tmp_path):
     tool = _make_tool(tmp_path)
     fake_coord = MagicMock()
 
-    async def _merge_rename(**kwargs):
-        assert kwargs["new_name"] == "Core"
-        return {
-            "primary_server": "rust-analyzer",
-            "workspace_edit": {"changes": {target.as_uri(): []}},
-        }
+    async def _merge_rename(relative_file_path, line, column, new_name, language="python"):
+        del relative_file_path, line, column, language
+        assert new_name == "Core"
+        return ({"changes": {target.as_uri(): []}}, [])
     fake_coord.merge_rename = _merge_rename
 
     async def _find_pos(**kwargs):  # noqa: ARG001
@@ -120,9 +118,9 @@ def test_rename_dry_run_no_checkpoint(tmp_path):
     tool = _make_tool(tmp_path)
     fake_coord = MagicMock()
 
-    async def _merge_rename(**kwargs):  # noqa: ARG001
-        return {"primary_server": "rust-analyzer",
-                "workspace_edit": {"changes": {}}}
+    async def _merge_rename(relative_file_path, line, column, new_name, language="python"):
+        del relative_file_path, line, column, new_name, language
+        return ({"changes": {}}, [])
     fake_coord.merge_rename = _merge_rename
 
     async def _find_pos(**kwargs):  # noqa: ARG001

@@ -17,3 +17,4 @@ def _private_helper(x: int) -> int:
 
 
 __all__ = ["VERSION", "add", "mul"]
+BAD_VAR_3: int = None
