@@ -24,7 +24,14 @@ from __future__ import annotations
 import json
 from typing import Protocol
 
-from serena.refactoring.plugin_schemas import AuthorInfo, PluginManifest
+from serena.refactoring.plugin_schemas import (
+    AuthorInfo,
+    MarketplaceManifest,
+    MarketplaceMetadata,
+    OwnerInfo,
+    PluginEntry,
+    PluginManifest,
+)
 
 # Identity constants for every emitted plugin. Kept module-private so they
 # travel with the generator and are easy to lift to env in Stage 1K if we
@@ -90,8 +97,35 @@ def _render_mcp_json(strategy: _StrategyLike) -> str:
     return json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
 
 
+def _render_marketplace_json(strategies: list[_StrategyLike]) -> str:
+    """Render the top-level ``marketplace.json`` aggregator.
+
+    Plugin entries are sorted by ``language`` so the output is byte-identical
+    regardless of input order — caller can pass strategies in any sequence.
+    """
+
+    sorted_strats = sorted(strategies, key=lambda s: s.language)
+    entries = [
+        PluginEntry(
+            name=_plugin_name(s),
+            source=f"./{_plugin_name(s)}",
+            description=_description(s),
+        )
+        for s in sorted_strats
+    ]
+    manifest = MarketplaceManifest(
+        name="o2-scalpel",
+        metadata=MarketplaceMetadata(),
+        owner=OwnerInfo(name=_AUTHOR),
+        plugins=entries,
+    )
+    payload = manifest.model_dump(mode="json", by_alias=True)
+    return json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+
+
 __all__ = [
     "PluginManifest",  # re-export for callers
+    "_render_marketplace_json",
     "_render_mcp_json",
     "_render_plugin_json",
 ]
