@@ -114,7 +114,7 @@ def test_dedup_title_match() -> None:
     priority = ("ruff", "basedpyright")
     out = _dedup(cands, priority)
     assert len(out) == 1
-    sid, action, dropped = out[0]
+    sid, _, dropped = out[0]
     assert sid == "ruff"
     assert len(dropped) == 1
     assert dropped[0][0] == "basedpyright"
