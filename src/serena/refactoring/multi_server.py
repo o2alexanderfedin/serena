@@ -303,6 +303,171 @@ def _apply_priority(
     return out
 
 
+
+# ---------------------------------------------------------------------------
+# §11.1 Stage-2 — dedup-by-equivalence (title equality + lazy WorkspaceEdit).
+# ---------------------------------------------------------------------------
+
+import re
+
+_TITLE_PREFIXES_TO_STRIP: tuple[str, ...] = (
+    "quick fix: ",
+    "quickfix: ",
+    "add: ",
+    "add ",
+    "fix: ",
+)
+_TITLE_WHITESPACE_RE = re.compile(r"\s+")
+
+
+def _normalize_title(title: str) -> str:
+    """Normalize a code-action title for Stage-2 equality comparison.
+
+    Lowercases, strips conventional leading prefixes (``"Add: "``,
+    ``"Quick fix: "``, etc.), collapses internal whitespace. Per §11.1
+    Stage-2 example: ``"Import 'numpy'"`` and ``"Add import: numpy"``
+    both normalize to a comparable form.
+    """
+    s = title.strip().lower()
+    # Strip prefixes repeatedly (longest-first so ``"add: "`` wins
+    # over ``"add "`` when both could match).
+    changed = True
+    while changed:
+        changed = False
+        for prefix in sorted(_TITLE_PREFIXES_TO_STRIP, key=len, reverse=True):
+            if s.startswith(prefix):
+                s = s[len(prefix):].strip()
+                changed = True
+                break
+    s = _TITLE_WHITESPACE_RE.sub(" ", s)
+    return s
+
+
+def _workspace_edit_to_canonical_set(edit: dict[str, Any]) -> frozenset[tuple[Any, ...]]:
+    """Reduce a ``WorkspaceEdit`` (or legacy ``changes`` map) to a set of
+    ``(uri, start_line, start_char, end_line, end_char, newText)`` tuples.
+
+    Set-shaped so two edits whose internal list ordering differs still
+    compare equal (some servers re-order, some don't). Stage-2 equality
+    is set-of-edits, not list-of-edits.
+    """
+    out: set[tuple[Any, ...]] = set()
+    if "documentChanges" in edit:
+        for change in edit["documentChanges"]:
+            kind = change.get("kind")
+            if kind in ("create", "rename", "delete"):
+                # File-level operations: keep them in the canonical form
+                # so structural equality includes them.
+                if kind == "create":
+                    out.add(("create", change["uri"]))
+                elif kind == "delete":
+                    out.add(("delete", change["uri"]))
+                else:  # rename
+                    out.add(("rename", change["oldUri"], change["newUri"]))
+                continue
+            uri = change["textDocument"]["uri"]
+            for te in change.get("edits", []):
+                rng = te["range"]
+                out.add((
+                    uri,
+                    rng["start"]["line"], rng["start"]["character"],
+                    rng["end"]["line"], rng["end"]["character"],
+                    te["newText"],
+                ))
+    if "changes" in edit:
+        for uri, edits in edit["changes"].items():
+            for te in edits:
+                rng = te["range"]
+                out.add((
+                    uri,
+                    rng["start"]["line"], rng["start"]["character"],
+                    rng["end"]["line"], rng["end"]["character"],
+                    te["newText"],
+                ))
+    return frozenset(out)
+
+
+def _workspace_edits_equal(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    """Set-equality on the canonical (uri, range, newText) tuples."""
+    return _workspace_edit_to_canonical_set(a) == _workspace_edit_to_canonical_set(b)
+
+
+def _dedup(
+    candidates: list[tuple[str, dict[str, Any]]],
+    priority: tuple[str, ...],
+) -> list[tuple[str, dict[str, Any], list[tuple[str, dict[str, Any], str]]]]:
+    """Stage-2 of the §11.1 merge: dedup by equivalence.
+
+    For every pair of survivors, compare normalized titles first
+    (cheap); if titles don't match, compare WorkspaceEdit structural
+    equality lazily. If either matches, keep the higher-priority
+    server's action; record the dropped one with its reason.
+
+    Returns ``(server_id, action, dropped_alternatives)`` per surviving
+    cluster. ``dropped_alternatives`` is a list of
+    ``(server_id, action, reason)`` triples where ``reason`` is one of
+    ``"duplicate_title"`` / ``"duplicate_edit"``. ``"lower_priority"``
+    is the responsibility of ``_apply_priority`` (Stage 1), not this
+    function.
+    """
+    if not candidates:
+        return []
+    if len(candidates) == 1:
+        sid, action = candidates[0]
+        return [(sid, action, [])]
+
+    def _rank(server_id: str) -> int:
+        try:
+            return priority.index(server_id)
+        except ValueError:
+            return len(priority)  # unknown servers sort last
+
+    # Sort candidates highest-priority-first so the first member of any
+    # cluster is automatically the winner.
+    ranked = sorted(candidates, key=lambda sa: _rank(sa[0]))
+
+    # Cluster IDs assigned greedily.
+    cluster_winner_idx_per_member: list[int] = [-1] * len(ranked)
+    titles = [_normalize_title(a.get("title", "")) for _, a in ranked]
+    for i in range(len(ranked)):
+        if cluster_winner_idx_per_member[i] != -1:
+            continue
+        cluster_winner_idx_per_member[i] = i
+        for j in range(i + 1, len(ranked)):
+            if cluster_winner_idx_per_member[j] != -1:
+                continue
+            same_title = titles[i] != "" and titles[i] == titles[j]
+            same_edit = False
+            if not same_title:
+                edit_i = ranked[i][1].get("edit")
+                edit_j = ranked[j][1].get("edit")
+                if isinstance(edit_i, dict) and isinstance(edit_j, dict):
+                    same_edit = _workspace_edits_equal(edit_i, edit_j)
+            if same_title or same_edit:
+                cluster_winner_idx_per_member[j] = i
+
+    # Build the output: one entry per winner, with dropped sibling info.
+    out: list[tuple[str, dict[str, Any], list[tuple[str, dict[str, Any], str]]]] = []
+    for winner_idx in range(len(ranked)):
+        if cluster_winner_idx_per_member[winner_idx] != winner_idx:
+            continue
+        winner_sid, winner_action = ranked[winner_idx]
+        dropped: list[tuple[str, dict[str, Any], str]] = []
+        winner_title = titles[winner_idx]
+        for other_idx in range(len(ranked)):
+            if other_idx == winner_idx or cluster_winner_idx_per_member[other_idx] != winner_idx:
+                continue
+            other_sid, other_action = ranked[other_idx]
+            other_title = titles[other_idx]
+            if winner_title != "" and winner_title == other_title:
+                reason = "duplicate_title"
+            else:
+                reason = "duplicate_edit"
+            dropped.append((other_sid, other_action, reason))
+        out.append((winner_sid, winner_action, dropped))
+    return out
+
+
 class MultiServerCoordinator:
     """Coordinator for the §11 multi-LSP merge.
 
