@@ -20,14 +20,38 @@ from typing import Any
 
 import pytest
 
-from serena.refactoring import STRATEGY_REGISTRY  # noqa: F401  (registry warm-up)
+from serena.refactoring import STRATEGY_REGISTRY as _STRATEGY_REGISTRY_WARMUP  # noqa: F401  (registry warm-up)
+del _STRATEGY_REGISTRY_WARMUP  # silence Pyright while preserving import side-effect
 from serena.tools.scalpel_facades import (
+    # Stage 2A MVP facades
     ScalpelExtractTool,
     ScalpelImportsOrganizeTool,
     ScalpelInlineTool,
     ScalpelRenameTool,
     ScalpelSplitFileTool,
     ScalpelTransactionCommitTool,
+    # Stage 3 Rust facades (waves A-C)
+    ScalpelChangeReturnTypeTool,
+    ScalpelChangeTypeShapeTool,
+    ScalpelChangeVisibilityTool,
+    ScalpelCompleteMatchArmsTool,
+    ScalpelConvertModuleLayoutTool,
+    ScalpelExpandGlobImportsTool,
+    ScalpelExpandMacroTool,
+    ScalpelExtractLifetimeTool,
+    ScalpelGenerateMemberTool,
+    ScalpelGenerateTraitImplScaffoldTool,
+    ScalpelTidyStructureTool,
+    ScalpelVerifyAfterRefactorTool,
+    # Stage 3 Python facades (waves A-B)
+    ScalpelAutoImportSpecializedTool,
+    ScalpelConvertToMethodObjectTool,
+    ScalpelFixLintsTool,
+    ScalpelGenerateFromUndefinedTool,
+    ScalpelIgnoreDiagnosticTool,
+    ScalpelIntroduceParameterTool,
+    ScalpelLocalToFieldTool,
+    ScalpelUseFunctionTool,
 )
 from serena.tools.scalpel_primitives import (
     ScalpelCapabilitiesListTool,
@@ -148,7 +172,7 @@ class _McpDriver:
         self._root = project_root
 
     def _bind(self, tool_cls: type) -> Any:
-        tool = tool_cls.__new__(tool_cls)
+        tool = tool_cls.__new__(tool_cls)  # pyright: ignore[reportCallIssue]
         tool.get_project_root = lambda: str(self._root)  # type: ignore[method-assign]
         return tool
 
@@ -188,6 +212,70 @@ class _McpDriver:
 
     def capabilities_list(self, language: str) -> str:
         return self._bind(ScalpelCapabilitiesListTool).apply(language=language)
+
+    # --- Stage 3 Rust facades (waves A-C) ---
+
+    def convert_module_layout(self, **kwargs: Any) -> str:
+        return self._bind(ScalpelConvertModuleLayoutTool).apply(**kwargs)
+
+    def change_visibility(self, **kwargs: Any) -> str:
+        return self._bind(ScalpelChangeVisibilityTool).apply(**kwargs)
+
+    def tidy_structure(self, **kwargs: Any) -> str:
+        return self._bind(ScalpelTidyStructureTool).apply(**kwargs)
+
+    def change_type_shape(self, **kwargs: Any) -> str:
+        return self._bind(ScalpelChangeTypeShapeTool).apply(**kwargs)
+
+    def change_return_type(self, **kwargs: Any) -> str:
+        return self._bind(ScalpelChangeReturnTypeTool).apply(**kwargs)
+
+    def complete_match_arms(self, **kwargs: Any) -> str:
+        return self._bind(ScalpelCompleteMatchArmsTool).apply(**kwargs)
+
+    def extract_lifetime(self, **kwargs: Any) -> str:
+        return self._bind(ScalpelExtractLifetimeTool).apply(**kwargs)
+
+    def expand_glob_imports(self, **kwargs: Any) -> str:
+        return self._bind(ScalpelExpandGlobImportsTool).apply(**kwargs)
+
+    def generate_trait_impl_scaffold(self, **kwargs: Any) -> str:
+        return self._bind(ScalpelGenerateTraitImplScaffoldTool).apply(**kwargs)
+
+    def generate_member(self, **kwargs: Any) -> str:
+        return self._bind(ScalpelGenerateMemberTool).apply(**kwargs)
+
+    def expand_macro(self, **kwargs: Any) -> str:
+        return self._bind(ScalpelExpandMacroTool).apply(**kwargs)
+
+    def verify_after_refactor(self, **kwargs: Any) -> str:
+        return self._bind(ScalpelVerifyAfterRefactorTool).apply(**kwargs)
+
+    # --- Stage 3 Python facades (waves A-B) ---
+
+    def convert_to_method_object(self, **kwargs: Any) -> str:
+        return self._bind(ScalpelConvertToMethodObjectTool).apply(**kwargs)
+
+    def local_to_field(self, **kwargs: Any) -> str:
+        return self._bind(ScalpelLocalToFieldTool).apply(**kwargs)
+
+    def use_function(self, **kwargs: Any) -> str:
+        return self._bind(ScalpelUseFunctionTool).apply(**kwargs)
+
+    def introduce_parameter(self, **kwargs: Any) -> str:
+        return self._bind(ScalpelIntroduceParameterTool).apply(**kwargs)
+
+    def generate_from_undefined(self, **kwargs: Any) -> str:
+        return self._bind(ScalpelGenerateFromUndefinedTool).apply(**kwargs)
+
+    def auto_import_specialized(self, **kwargs: Any) -> str:
+        return self._bind(ScalpelAutoImportSpecializedTool).apply(**kwargs)
+
+    def fix_lints(self, **kwargs: Any) -> str:
+        return self._bind(ScalpelFixLintsTool).apply(**kwargs)
+
+    def ignore_diagnostic(self, **kwargs: Any) -> str:
+        return self._bind(ScalpelIgnoreDiagnosticTool).apply(**kwargs)
 
 
 @pytest.fixture
