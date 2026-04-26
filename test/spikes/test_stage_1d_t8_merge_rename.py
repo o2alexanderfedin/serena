@@ -139,7 +139,7 @@ def test_reconcile_whole_file_to_surgical_via_difflib(tmp_path: Path) -> None:
             }
         ]
     }
-    surgical_tuples = _reconcile_rename_edits(pylsp_whole, source_reader=lambda uri: f.read_text(encoding="utf-8"))
+    surgical_tuples = _reconcile_rename_edits(pylsp_whole, source_reader=lambda _: f.read_text(encoding="utf-8"))
     # The reconciliation should isolate the changed line.
     uris = {t[0] for t in surgical_tuples}
     assert uris == {f.as_uri()}
@@ -161,7 +161,7 @@ def test_reconcile_passthrough_for_already_surgical(tmp_path: Path) -> None:
             }
         ]
     }
-    out = _reconcile_rename_edits(surgical, source_reader=lambda uri: f.read_text(encoding="utf-8"))
+    out = _reconcile_rename_edits(surgical, source_reader=lambda _: f.read_text(encoding="utf-8"))
     assert len(out) == 1
     uri, te = out[0]
     assert uri == f.as_uri()
