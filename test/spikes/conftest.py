@@ -214,6 +214,7 @@ class _FakeServer:
         trigger_kind: int = 2,
         diagnostics: list[dict[str, _AnyT]] | None = None,
     ) -> list[dict[str, _AnyT]]:
+        del trigger_kind, diagnostics  # signature-compat shim; unused by the fake.
         self.calls.append(("request_code_actions", (file, start, end, tuple(only or []))))
         await self._maybe_delay_or_raise()
         if only is None:
