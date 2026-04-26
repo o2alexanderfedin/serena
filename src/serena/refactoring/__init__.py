@@ -8,6 +8,12 @@ Stage 1E adds:
 - ``STRATEGY_REGISTRY`` for ``Language → strategy class`` lookup.
 """
 
+from .capabilities import (
+    CapabilityCatalog,
+    CapabilityRecord,
+    CatalogIntrospectionError,
+    build_capability_catalog,
+)
 from .checkpoints import CheckpointStore, inverse_workspace_edit
 from .discovery import PluginRecord, default_cache_root, discover_sibling_plugins, enabled_languages
 from .language_strategy import (
@@ -49,6 +55,9 @@ STRATEGY_REGISTRY = _build_strategy_registry()
 
 
 __all__ = [
+    "CapabilityCatalog",
+    "CapabilityRecord",
+    "CatalogIntrospectionError",
     "ChangeSignatureSpec",
     "CheckpointStore",
     "EditAttributionLog",
@@ -73,6 +82,7 @@ __all__ = [
     "SuppressedAlternative",
     "TransactionStore",
     "WaitingForLspBudget",
+    "build_capability_catalog",
     "default_cache_root",
     "discover_sibling_plugins",
     "enabled_languages",
