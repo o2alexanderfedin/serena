@@ -96,6 +96,7 @@ class CapabilityCatalog(BaseModel):
     records: tuple[CapabilityRecord, ...] = Field(default_factory=tuple)
 
     def model_post_init(self, __context: Any) -> None:
+        del __context
         # Re-sort on construction so every catalog (built by factory or
         # loaded from JSON) shares the same iteration order.
         sorted_records = tuple(
@@ -243,7 +244,7 @@ def build_capability_catalog(
         )
 
     records: list[CapabilityRecord] = []
-    for _language_enum, strategy_cls in strategy_registry.items():
+    for _, strategy_cls in strategy_registry.items():
         language_id = strategy_cls.language_id
         default_server = _DEFAULT_SOURCE_SERVER_BY_LANGUAGE.get(language_id)
         if default_server is None or default_server not in legal_servers:
