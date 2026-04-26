@@ -19,12 +19,15 @@ from serena.tools.scalpel_runtime import ScalpelRuntime
 from serena.tools.scalpel_schemas import (
     CapabilityDescriptor,
     CapabilityFullDescriptor,
+    ComposeResult,
+    ComposeStep,
     DiagnosticsDelta,
     DiagnosticSeverityBreakdown,
     ErrorCode,
     FailureInfo,
     LspOpStat,
     RefactorResult,
+    StepPreview,
 )
 from serena.tools.tools_base import Tool
 
@@ -284,8 +287,98 @@ class ScalpelApplyCapabilityTool(Tool):
         return result.model_dump_json(indent=2)
 
 
+# ---------------------------------------------------------------------------
+# T5: ScalpelDryRunComposeTool — multi-step preview composer
+# ---------------------------------------------------------------------------
+
+
+def _dry_run_one_step(
+    step: ComposeStep,
+    *,
+    project_root: Path,
+    step_index: int,
+) -> StepPreview:
+    """Virtually apply one step against the in-memory shadow workspace.
+
+    Stage 1G ships the compose *grammar* (transaction id allocation,
+    per-step preview rows, fail-fast walking, 5-min TTL). The actual
+    shadow-workspace mutation lives in Stage 2A — the ergonomic facades
+    are the only callers that mutate state.
+    """
+    del project_root  # Stage 2A wires shadow-workspace mutation
+    return StepPreview(
+        step_index=step_index,
+        tool=step.tool,
+        changes=(),
+        diagnostics_delta=_empty_diagnostics_delta(),
+        failure=None,
+    )
+
+
+class ScalpelDryRunComposeTool(Tool):
+    """Preview a chain of refactor steps without committing any."""
+
+    PREVIEW_TTL_SECONDS = 300  # 5-min, per §5.5
+
+    def apply(
+        self,
+        steps: list[dict[str, Any]],
+        fail_fast: bool = True,
+    ) -> str:
+        """Preview a chain of refactor steps without committing any.
+        Returns transaction_id; call scalpel_transaction_commit to apply.
+
+        :param steps: ordered list of {tool, args} dicts.
+        :param fail_fast: stop at the first failing step (default True).
+        :return: JSON ComposeResult.
+        """
+        project_root = Path(self.get_project_root())
+        warnings: list[str] = []
+        validated: list[ComposeStep] = []
+        for raw_step in steps:
+            try:
+                validated.append(ComposeStep(**raw_step))
+            except Exception as exc:  # noqa: BLE001 — surface as warning
+                warnings.append(
+                    f"INVALID_ARGUMENT: malformed step {raw_step!r}: {exc}",
+                )
+        if warnings and not validated:
+            raw_id = ScalpelRuntime.instance().transaction_store().begin()
+            return ComposeResult(
+                transaction_id=f"txn_{raw_id}",
+                per_step=(),
+                aggregated_changes=(),
+                aggregated_diagnostics_delta=_empty_diagnostics_delta(),
+                expires_at=time.time() + self.PREVIEW_TTL_SECONDS,
+                warnings=tuple(warnings),
+            ).model_dump_json(indent=2)
+        raw_id = ScalpelRuntime.instance().transaction_store().begin()
+        txn_id = f"txn_{raw_id}"
+        previews: list[StepPreview] = []
+        for idx, step in enumerate(validated):
+            preview = _dry_run_one_step(
+                step, project_root=project_root, step_index=idx,
+            )
+            previews.append(preview)
+            if preview.failure is not None and fail_fast:
+                warnings.append(
+                    f"TRANSACTION_ABORTED: step {idx} ({step.tool!r}) failed; "
+                    f"remaining {len(validated) - idx - 1} step(s) skipped.",
+                )
+                break
+        return ComposeResult(
+            transaction_id=txn_id,
+            per_step=tuple(previews),
+            aggregated_changes=(),
+            aggregated_diagnostics_delta=_empty_diagnostics_delta(),
+            expires_at=time.time() + self.PREVIEW_TTL_SECONDS,
+            warnings=tuple(warnings),
+        ).model_dump_json(indent=2)
+
+
 __all__ = [
     "ScalpelApplyCapabilityTool",
     "ScalpelCapabilitiesListTool",
     "ScalpelCapabilityDescribeTool",
+    "ScalpelDryRunComposeTool",
 ]
