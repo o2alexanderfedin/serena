@@ -45,7 +45,7 @@ def test_coordinator_factory_returns_multi_server_coordinator() -> None:
     from serena.refactoring.python_strategy import PythonStrategy
 
     pool = MagicMock()
-    pool.acquire.side_effect = lambda _key: MagicMock()
+    pool.acquire.side_effect = lambda key: MagicMock(name=f"server-{key.language}")
     s = PythonStrategy(pool=pool)
     coord = s.coordinator(Path("/tmp/proj"))
 
