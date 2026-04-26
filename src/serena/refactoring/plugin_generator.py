@@ -22,6 +22,9 @@ ends in a trailing newline (POSIX). All shell scripts are POSIX ``sh``.
 from __future__ import annotations
 
 import json
+import shutil
+import stat as _stat
+from dataclasses import dataclass
 from pathlib import Path
 from string import Template
 from typing import Protocol
@@ -219,7 +222,75 @@ def _render_session_start_hook(strategy: _StrategyLike) -> str:
     )
 
 
+@dataclass(frozen=True)
+class PluginGenerator:
+    """Composes the six render helpers into a deterministic tree write.
+
+    The class is a frozen dataclass so call-sites can ``PluginGenerator()``
+    today and add deterministic configuration knobs (template overrides,
+    custom owner, etc.) later without breaking the API.
+    """
+
+    def emit(
+        self,
+        strategy: _StrategyWithFacades,
+        out_parent: Path,
+        *,
+        force: bool = False,
+    ) -> Path:
+        """Write the full ``out_parent / o2-scalpel-<lang>/`` tree.
+
+        :param strategy: language strategy (must include ``facades``).
+        :param out_parent: directory under which the plugin tree is rooted.
+        :param force: when ``True``, replace any existing tree at the target
+            path; when ``False`` (default) raise :class:`FileExistsError`.
+        :return: the path to the newly-written plugin root.
+        """
+
+        root = Path(out_parent) / _plugin_name(strategy)
+        if root.exists():
+            if not force:
+                raise FileExistsError(
+                    f"Refusing to overwrite {root}; pass force=True"
+                )
+            shutil.rmtree(root)
+
+        (root / ".claude-plugin").mkdir(parents=True, exist_ok=False)
+        (root / "hooks").mkdir()
+        (root / "skills").mkdir()
+
+        (root / ".claude-plugin" / "plugin.json").write_text(
+            _render_plugin_json(strategy), encoding="utf-8"
+        )
+        (root / ".mcp.json").write_text(
+            _render_mcp_json(strategy), encoding="utf-8"
+        )
+        (root / "README.md").write_text(
+            _render_readme(strategy), encoding="utf-8"
+        )
+
+        hook_path = root / "hooks" / f"verify-scalpel-{strategy.language}.sh"
+        hook_path.write_text(
+            _render_session_start_hook(strategy), encoding="utf-8"
+        )
+        hook_path.chmod(
+            hook_path.stat().st_mode
+            | _stat.S_IXUSR
+            | _stat.S_IXGRP
+            | _stat.S_IXOTH
+        )
+
+        for facade in strategy.facades:
+            skill_path = root / "skills" / f"{_skill_name_for(strategy, facade)}.md"
+            skill_path.write_text(
+                _render_skill_for_facade(strategy, facade), encoding="utf-8"
+            )
+
+        return root
+
+
 __all__ = [
+    "PluginGenerator",
     "PluginManifest",  # re-export for callers
     "_render_marketplace_json",
     "_render_mcp_json",
