@@ -1339,6 +1339,54 @@ class MultiServerCoordinator:
                     }
         return None
 
+    async def expand_macro(
+        self,
+        file: str,
+        position: dict[str, int],
+    ) -> dict[str, Any] | None:
+        """Stage 3 — fan ``rust-analyzer/expandMacro`` to the rust-analyzer server.
+
+        Returns the first server's response (single-server method); ``None``
+        when the rust-analyzer server isn't in the pool or returned nothing.
+        """
+        server = self._servers.get("rust-analyzer")
+        if server is None:
+            return None
+        fn = getattr(server, "expand_macro", None)
+        if fn is None:
+            return None
+        result = await asyncio.to_thread(fn, file, position)
+        return result if isinstance(result, dict) else None
+
+    async def fetch_runnables(
+        self,
+        file: str,
+        position: dict[str, int] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Stage 3 — fan ``experimental/runnables`` to the rust-analyzer server."""
+        server = self._servers.get("rust-analyzer")
+        if server is None:
+            return []
+        fn = getattr(server, "fetch_runnables", None)
+        if fn is None:
+            return []
+        result = await asyncio.to_thread(fn, file, position)
+        return list(result) if isinstance(result, list) else []
+
+    async def run_flycheck(
+        self,
+        file: str,
+    ) -> dict[str, Any]:
+        """Stage 3 — fan ``rust-analyzer/runFlycheck`` to the rust-analyzer server."""
+        server = self._servers.get("rust-analyzer")
+        if server is None:
+            return {"diagnostics": []}
+        fn = getattr(server, "run_flycheck", None)
+        if fn is None:
+            return {"diagnostics": []}
+        result = await asyncio.to_thread(fn, file)
+        return result if isinstance(result, dict) else {"diagnostics": []}
+
 
 def _split_name_path(name_path: str) -> list[str]:
     """Split ``name_path`` on ``::`` (Rust) and ``.`` (Python) separators."""

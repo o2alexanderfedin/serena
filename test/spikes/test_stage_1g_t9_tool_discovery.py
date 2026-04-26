@@ -28,23 +28,33 @@ _STAGE_2A_NAMES: frozenset[str] = frozenset({
     "scalpel_transaction_commit",
 })
 
-# Stage 3 (v0.2.0) — 12 ergonomic facades across 3 waves.
+# Stage 3 (v0.2.0) — 12 Rust + 8 Python ergonomic facades.
 _STAGE_3_NAMES: frozenset[str] = frozenset({
-    # Wave A
+    # Rust Wave A
     "scalpel_convert_module_layout",
     "scalpel_change_visibility",
     "scalpel_tidy_structure",
     "scalpel_change_type_shape",
-    # Wave B
+    # Rust Wave B
     "scalpel_change_return_type",
     "scalpel_complete_match_arms",
     "scalpel_extract_lifetime",
     "scalpel_expand_glob_imports",
-    # Wave C
+    # Rust Wave C
     "scalpel_generate_trait_impl_scaffold",
     "scalpel_generate_member",
     "scalpel_expand_macro",
     "scalpel_verify_after_refactor",
+    # Python Wave A (pylsp-rope)
+    "scalpel_convert_to_method_object",
+    "scalpel_local_to_field",
+    "scalpel_use_function",
+    "scalpel_introduce_parameter",
+    # Python Wave B (multi-source)
+    "scalpel_generate_from_undefined",
+    "scalpel_auto_import_specialized",
+    "scalpel_fix_lints",
+    "scalpel_ignore_diagnostic",
 })
 
 EXPECTED_NAMES: frozenset[str] = _STAGE_1G_NAMES | _STAGE_2A_NAMES | _STAGE_3_NAMES

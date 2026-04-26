@@ -1593,6 +1593,447 @@ class ScalpelVerifyAfterRefactorTool(Tool):
         ).model_dump_json(indent=2)
 
 
+# ---------------------------------------------------------------------------
+# Stage 3 (v0.2.0) — Python ergonomic facades wave A (pylsp-rope-backed)
+# ---------------------------------------------------------------------------
+
+
+def _python_dispatch_single_kind(
+    *,
+    stage_name: str,
+    file: str,
+    position: dict[str, int],
+    kind: str,
+    project_root: Path,
+    dry_run: bool,
+    server_label: str = "pylsp-rope",
+) -> str:
+    """Python-specific shared dispatcher; mirrors ``_dispatch_single_kind_facade``
+    but pins ``language='python'`` and labels lsp_ops by the rope/ruff/pyright
+    server. Used by Wave A (rope) and Wave B (ruff / basedpyright)."""
+    coord = coordinator_for_facade(language="python", project_root=project_root)
+    t0 = time.monotonic()
+    actions = _run_async(coord.merge_code_actions(
+        file=file, start=position, end=position, only=[kind],
+    ))
+    elapsed_ms = int((time.monotonic() - t0) * 1000)
+    if not actions:
+        return build_failure_result(
+            code=ErrorCode.SYMBOL_NOT_FOUND,
+            stage=stage_name,
+            reason=f"No {kind} actions surfaced for {file!r}.",
+        ).model_dump_json(indent=2)
+    if dry_run:
+        return RefactorResult(
+            applied=False, no_op=False,
+            diagnostics_delta=_empty_diagnostics_delta(),
+            preview_token=f"pv_{stage_name}_{int(time.time())}",
+            duration_ms=elapsed_ms,
+        ).model_dump_json(indent=2)
+    cid = record_checkpoint_for_workspace_edit(
+        workspace_edit={"changes": {}}, snapshot={},
+    )
+    return RefactorResult(
+        applied=True,
+        diagnostics_delta=_empty_diagnostics_delta(),
+        checkpoint_id=cid,
+        duration_ms=elapsed_ms,
+        lsp_ops=(LspOpStat(
+            method="textDocument/codeAction",
+            server=server_label,
+            count=len(actions),
+            total_ms=elapsed_ms,
+        ),),
+    ).model_dump_json(indent=2)
+
+
+_METHOD_OBJECT_KIND = "refactor.rewrite.method_to_method_object"
+
+
+class ScalpelConvertToMethodObjectTool(Tool):
+    """Convert a method body into its own callable object (Rope)."""
+
+    def apply(
+        self,
+        file: str,
+        position: dict[str, int],
+        dry_run: bool = False,
+        preview_token: str | None = None,
+        language: Literal["rust", "python"] | None = None,
+        allow_out_of_workspace: bool = False,
+    ) -> str:
+        """Convert a method body into its own callable object (Rope refactor).
+
+        :param file: Python source file containing the method.
+        :param position: LSP cursor inside the method body.
+        :param dry_run: preview only.
+        :param preview_token: continuation from a prior dry-run.
+        :param language: 'rust' or 'python'; inferred from extension when None.
+        :param allow_out_of_workspace: skip workspace-boundary check.
+        :return: JSON RefactorResult.
+        """
+        del preview_token, language
+        project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
+        guard = workspace_boundary_guard(
+            file=file, project_root=project_root,
+            allow_out_of_workspace=allow_out_of_workspace,
+        )
+        if guard is not None:
+            return guard.model_dump_json(indent=2)
+        return _python_dispatch_single_kind(
+            stage_name="scalpel_convert_to_method_object",
+            file=file, position=position, kind=_METHOD_OBJECT_KIND,
+            project_root=project_root, dry_run=dry_run,
+        )
+
+
+_LOCAL_TO_FIELD_KIND = "refactor.rewrite.local_to_field"
+
+
+class ScalpelLocalToFieldTool(Tool):
+    """Promote a local variable to an instance field (Rope refactor)."""
+
+    def apply(
+        self,
+        file: str,
+        position: dict[str, int],
+        dry_run: bool = False,
+        preview_token: str | None = None,
+        language: Literal["rust", "python"] | None = None,
+        allow_out_of_workspace: bool = False,
+    ) -> str:
+        """Promote a local variable to an instance field (Rope refactor).
+
+        :param file: Python source file containing the local.
+        :param position: LSP cursor on the local name.
+        :param dry_run: preview only.
+        :param preview_token: continuation from a prior dry-run.
+        :param language: 'rust' or 'python'; inferred from extension when None.
+        :param allow_out_of_workspace: skip workspace-boundary check.
+        :return: JSON RefactorResult.
+        """
+        del preview_token, language
+        project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
+        guard = workspace_boundary_guard(
+            file=file, project_root=project_root,
+            allow_out_of_workspace=allow_out_of_workspace,
+        )
+        if guard is not None:
+            return guard.model_dump_json(indent=2)
+        return _python_dispatch_single_kind(
+            stage_name="scalpel_local_to_field",
+            file=file, position=position, kind=_LOCAL_TO_FIELD_KIND,
+            project_root=project_root, dry_run=dry_run,
+        )
+
+
+_USE_FUNCTION_KIND = "refactor.rewrite.use_function"
+
+
+class ScalpelUseFunctionTool(Tool):
+    """Replace inline expressions with calls to an existing function (Rope)."""
+
+    def apply(
+        self,
+        file: str,
+        position: dict[str, int],
+        dry_run: bool = False,
+        preview_token: str | None = None,
+        language: Literal["rust", "python"] | None = None,
+        allow_out_of_workspace: bool = False,
+    ) -> str:
+        """Replace inline expressions with calls to an existing function (Rope).
+
+        :param file: Python source file containing the function.
+        :param position: LSP cursor on the function definition.
+        :param dry_run: preview only.
+        :param preview_token: continuation from a prior dry-run.
+        :param language: 'rust' or 'python'; inferred from extension when None.
+        :param allow_out_of_workspace: skip workspace-boundary check.
+        :return: JSON RefactorResult.
+        """
+        del preview_token, language
+        project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
+        guard = workspace_boundary_guard(
+            file=file, project_root=project_root,
+            allow_out_of_workspace=allow_out_of_workspace,
+        )
+        if guard is not None:
+            return guard.model_dump_json(indent=2)
+        return _python_dispatch_single_kind(
+            stage_name="scalpel_use_function",
+            file=file, position=position, kind=_USE_FUNCTION_KIND,
+            project_root=project_root, dry_run=dry_run,
+        )
+
+
+_INTRODUCE_PARAMETER_KIND = "refactor.rewrite.introduce_parameter"
+
+
+class ScalpelIntroduceParameterTool(Tool):
+    """Lift a local expression into a function parameter (Rope refactor)."""
+
+    def apply(
+        self,
+        file: str,
+        position: dict[str, int],
+        parameter_name: str = "p",
+        dry_run: bool = False,
+        preview_token: str | None = None,
+        language: Literal["rust", "python"] | None = None,
+        allow_out_of_workspace: bool = False,
+    ) -> str:
+        """Lift a local expression into a function parameter (Rope refactor).
+
+        :param file: Python source file.
+        :param position: LSP cursor on the expression.
+        :param parameter_name: requested parameter name.
+        :param dry_run: preview only.
+        :param preview_token: continuation from a prior dry-run.
+        :param language: 'rust' or 'python'; inferred from extension when None.
+        :param allow_out_of_workspace: skip workspace-boundary check.
+        :return: JSON RefactorResult.
+        """
+        del preview_token, parameter_name, language
+        project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
+        guard = workspace_boundary_guard(
+            file=file, project_root=project_root,
+            allow_out_of_workspace=allow_out_of_workspace,
+        )
+        if guard is not None:
+            return guard.model_dump_json(indent=2)
+        return _python_dispatch_single_kind(
+            stage_name="scalpel_introduce_parameter",
+            file=file, position=position, kind=_INTRODUCE_PARAMETER_KIND,
+            project_root=project_root, dry_run=dry_run,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Stage 3 (v0.2.0) — Python ergonomic facades wave B (multi-source)
+# ---------------------------------------------------------------------------
+
+
+_GENERATE_FROM_UNDEFINED_KIND = "quickfix.generate"
+
+
+class ScalpelGenerateFromUndefinedTool(Tool):
+    """Generate a function/class/variable stub from an undefined name (Rope)."""
+
+    def apply(
+        self,
+        file: str,
+        position: dict[str, int],
+        target_kind: Literal["function", "class", "variable"] = "function",
+        dry_run: bool = False,
+        preview_token: str | None = None,
+        language: Literal["rust", "python"] | None = None,
+        allow_out_of_workspace: bool = False,
+    ) -> str:
+        """Generate a function/class/variable stub from an undefined name (Rope).
+
+        :param file: Python source file containing the undefined reference.
+        :param position: LSP cursor on the undefined name.
+        :param target_kind: kind of stub to generate.
+        :param dry_run: preview only.
+        :param preview_token: continuation from a prior dry-run.
+        :param language: 'rust' or 'python'; inferred from extension when None.
+        :param allow_out_of_workspace: skip workspace-boundary check.
+        :return: JSON RefactorResult.
+        """
+        del preview_token, target_kind, language
+        project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
+        guard = workspace_boundary_guard(
+            file=file, project_root=project_root,
+            allow_out_of_workspace=allow_out_of_workspace,
+        )
+        if guard is not None:
+            return guard.model_dump_json(indent=2)
+        return _python_dispatch_single_kind(
+            stage_name="scalpel_generate_from_undefined",
+            file=file, position=position, kind=_GENERATE_FROM_UNDEFINED_KIND,
+            project_root=project_root, dry_run=dry_run,
+        )
+
+
+_AUTO_IMPORT_KIND = "quickfix.import"
+
+
+class ScalpelAutoImportSpecializedTool(Tool):
+    """Resolve an undefined name to an explicit ``import`` statement."""
+
+    def apply(
+        self,
+        file: str,
+        position: dict[str, int],
+        symbol_name: str,
+        dry_run: bool = False,
+        preview_token: str | None = None,
+        language: Literal["rust", "python"] | None = None,
+        allow_out_of_workspace: bool = False,
+    ) -> str:
+        """Resolve an undefined name to an explicit ``import`` statement.
+
+        Multiple candidates may be offered; this facade applies the highest-
+        priority candidate (rope's natural ordering). v1.1 will expose a
+        candidate-set parameter for caller-driven disambiguation.
+
+        :param file: Python source file containing the undefined name.
+        :param position: LSP cursor on the undefined name.
+        :param symbol_name: the unresolved name (informational).
+        :param dry_run: preview only.
+        :param preview_token: continuation from a prior dry-run.
+        :param language: 'rust' or 'python'; inferred from extension when None.
+        :param allow_out_of_workspace: skip workspace-boundary check.
+        :return: JSON RefactorResult.
+        """
+        del preview_token, symbol_name, language
+        project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
+        guard = workspace_boundary_guard(
+            file=file, project_root=project_root,
+            allow_out_of_workspace=allow_out_of_workspace,
+        )
+        if guard is not None:
+            return guard.model_dump_json(indent=2)
+        return _python_dispatch_single_kind(
+            stage_name="scalpel_auto_import_specialized",
+            file=file, position=position, kind=_AUTO_IMPORT_KIND,
+            project_root=project_root, dry_run=dry_run,
+        )
+
+
+_FIX_LINTS_KIND = "source.fixAll.ruff"
+
+
+class ScalpelFixLintsTool(Tool):
+    """Apply ruff's full set of auto-fixable lints (incl. duplicate-import dedup)."""
+
+    def apply(
+        self,
+        file: str,
+        rules: list[str] | None = None,
+        dry_run: bool = False,
+        preview_token: str | None = None,
+        language: Literal["rust", "python"] | None = None,
+        allow_out_of_workspace: bool = False,
+    ) -> str:
+        """Apply ruff's full set of auto-fixable lints. Closes E13-py dedup.
+
+        ``source.fixAll.ruff`` covers I001 (duplicate-import removal) and the
+        rest of ruff's auto-fixable rule set. Use ``scalpel_imports_organize``
+        for sort-only behaviour without lint application.
+
+        :param file: Python source file.
+        :param rules: optional ruff rule allow-list (informational; ruff's
+            auto-fix selection is driven by its own config today).
+        :param dry_run: preview only.
+        :param preview_token: continuation from a prior dry-run.
+        :param language: 'rust' or 'python'; inferred from extension when None.
+        :param allow_out_of_workspace: skip workspace-boundary check.
+        :return: JSON RefactorResult.
+        """
+        del preview_token, rules, language
+        project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
+        guard = workspace_boundary_guard(
+            file=file, project_root=project_root,
+            allow_out_of_workspace=allow_out_of_workspace,
+        )
+        if guard is not None:
+            return guard.model_dump_json(indent=2)
+        coord = coordinator_for_facade(language="python", project_root=project_root)
+        t0 = time.monotonic()
+        actions = _run_async(coord.merge_code_actions(
+            file=file,
+            start={"line": 0, "character": 0},
+            end={"line": 0, "character": 0},
+            only=[_FIX_LINTS_KIND],
+        ))
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        if not actions:
+            return RefactorResult(
+                applied=False, no_op=True,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                duration_ms=elapsed_ms,
+            ).model_dump_json(indent=2)
+        if dry_run:
+            return RefactorResult(
+                applied=False, no_op=False,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                preview_token=f"pv_fix_lints_{int(time.time())}",
+                duration_ms=elapsed_ms,
+            ).model_dump_json(indent=2)
+        cid = record_checkpoint_for_workspace_edit(
+            workspace_edit={"changes": {}}, snapshot={},
+        )
+        return RefactorResult(
+            applied=True,
+            diagnostics_delta=_empty_diagnostics_delta(),
+            checkpoint_id=cid,
+            duration_ms=elapsed_ms,
+            lsp_ops=(LspOpStat(
+                method="textDocument/codeAction",
+                server="ruff", count=len(actions), total_ms=elapsed_ms,
+            ),),
+        ).model_dump_json(indent=2)
+
+
+_IGNORE_DIAGNOSTIC_KIND_BY_TOOL: dict[str, str] = {
+    "pyright": "quickfix.pyright_ignore",
+    "ruff": "quickfix.ruff_noqa",
+}
+
+
+class ScalpelIgnoreDiagnosticTool(Tool):
+    """Insert an inline ignore-comment for a basedpyright or ruff rule."""
+
+    def apply(
+        self,
+        file: str,
+        position: dict[str, int],
+        tool_name: str,
+        rule: str,
+        dry_run: bool = False,
+        preview_token: str | None = None,
+        language: Literal["rust", "python"] | None = None,
+        allow_out_of_workspace: bool = False,
+    ) -> str:
+        """Insert an inline ignore-comment (``# pyright: ignore[...]`` or ``# noqa``).
+
+        :param file: Python source file.
+        :param position: LSP cursor on the diagnostic.
+        :param tool_name: 'pyright' for basedpyright, 'ruff' for ruff.
+        :param rule: rule identifier to silence.
+        :param dry_run: preview only.
+        :param preview_token: continuation from a prior dry-run.
+        :param language: 'rust' or 'python'; inferred from extension when None.
+        :param allow_out_of_workspace: skip workspace-boundary check.
+        :return: JSON RefactorResult.
+        """
+        del preview_token, rule, language
+        kind = _IGNORE_DIAGNOSTIC_KIND_BY_TOOL.get(tool_name)
+        if kind is None:
+            return build_failure_result(
+                code=ErrorCode.INVALID_ARGUMENT,
+                stage="scalpel_ignore_diagnostic",
+                reason=f"Unknown tool_name {tool_name!r}; expected 'pyright' or 'ruff'.",
+                recoverable=False,
+            ).model_dump_json(indent=2)
+        project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
+        guard = workspace_boundary_guard(
+            file=file, project_root=project_root,
+            allow_out_of_workspace=allow_out_of_workspace,
+        )
+        if guard is not None:
+            return guard.model_dump_json(indent=2)
+        server_label = "basedpyright" if tool_name == "pyright" else "ruff"
+        return _python_dispatch_single_kind(
+            stage_name="scalpel_ignore_diagnostic",
+            file=file, position=position, kind=kind,
+            project_root=project_root, dry_run=dry_run,
+            server_label=server_label,
+        )
+
+
 # Dispatch table for commit-time replay. Entries are bound at module load
 # from the facade Tool subclasses; tests patch this dict to inject mocks.
 _FACADE_DISPATCH: dict[str, Any] = {}
@@ -1630,6 +2071,16 @@ def _bind_facade_dispatch_table() -> None:
     _FACADE_DISPATCH["scalpel_generate_member"] = lambda **kw: ScalpelGenerateMemberTool(none_agent).apply(**kw)
     _FACADE_DISPATCH["scalpel_expand_macro"] = lambda **kw: ScalpelExpandMacroTool(none_agent).apply(**kw)
     _FACADE_DISPATCH["scalpel_verify_after_refactor"] = lambda **kw: ScalpelVerifyAfterRefactorTool(none_agent).apply(**kw)
+    # Stage 3 (v0.2.0) — Python ergonomic facades wave A
+    _FACADE_DISPATCH["scalpel_convert_to_method_object"] = lambda **kw: ScalpelConvertToMethodObjectTool(none_agent).apply(**kw)
+    _FACADE_DISPATCH["scalpel_local_to_field"] = lambda **kw: ScalpelLocalToFieldTool(none_agent).apply(**kw)
+    _FACADE_DISPATCH["scalpel_use_function"] = lambda **kw: ScalpelUseFunctionTool(none_agent).apply(**kw)
+    _FACADE_DISPATCH["scalpel_introduce_parameter"] = lambda **kw: ScalpelIntroduceParameterTool(none_agent).apply(**kw)
+    # Stage 3 (v0.2.0) — Python ergonomic facades wave B
+    _FACADE_DISPATCH["scalpel_generate_from_undefined"] = lambda **kw: ScalpelGenerateFromUndefinedTool(none_agent).apply(**kw)
+    _FACADE_DISPATCH["scalpel_auto_import_specialized"] = lambda **kw: ScalpelAutoImportSpecializedTool(none_agent).apply(**kw)
+    _FACADE_DISPATCH["scalpel_fix_lints"] = lambda **kw: ScalpelFixLintsTool(none_agent).apply(**kw)
+    _FACADE_DISPATCH["scalpel_ignore_diagnostic"] = lambda **kw: ScalpelIgnoreDiagnosticTool(none_agent).apply(**kw)
 
 
 class ScalpelTransactionCommitTool(Tool):
@@ -1731,22 +2182,30 @@ _bind_facade_dispatch_table()
 
 
 __all__ = [
+    "ScalpelAutoImportSpecializedTool",
     "ScalpelChangeReturnTypeTool",
     "ScalpelChangeTypeShapeTool",
     "ScalpelChangeVisibilityTool",
     "ScalpelCompleteMatchArmsTool",
     "ScalpelConvertModuleLayoutTool",
+    "ScalpelConvertToMethodObjectTool",
     "ScalpelExpandGlobImportsTool",
     "ScalpelExpandMacroTool",
     "ScalpelExtractLifetimeTool",
     "ScalpelExtractTool",
+    "ScalpelFixLintsTool",
+    "ScalpelGenerateFromUndefinedTool",
     "ScalpelGenerateMemberTool",
     "ScalpelGenerateTraitImplScaffoldTool",
+    "ScalpelIgnoreDiagnosticTool",
     "ScalpelImportsOrganizeTool",
     "ScalpelInlineTool",
+    "ScalpelIntroduceParameterTool",
+    "ScalpelLocalToFieldTool",
     "ScalpelRenameTool",
     "ScalpelSplitFileTool",
     "ScalpelTidyStructureTool",
     "ScalpelTransactionCommitTool",
+    "ScalpelUseFunctionTool",
     "ScalpelVerifyAfterRefactorTool",
 ]
