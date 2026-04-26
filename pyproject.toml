@@ -64,6 +64,7 @@ publish-url = "https://test.pypi.org/legacy/"
 explicit = true
 
 [project.scripts]
+o2-scalpel-newplugin = "serena.refactoring.cli_newplugin:main"
 serena = "serena.cli:top_level"
 serena-hooks = "serena.hooks:hook_commands"
 
