@@ -28,6 +28,7 @@ from serena.tools.scalpel_schemas import (
     LspOpStat,
     RefactorResult,
     StepPreview,
+    TransactionResult,
 )
 from serena.tools.tools_base import Tool
 
@@ -376,9 +377,118 @@ class ScalpelDryRunComposeTool(Tool):
         ).model_dump_json(indent=2)
 
 
+# ---------------------------------------------------------------------------
+# T6: ScalpelRollbackTool + ScalpelTransactionRollbackTool
+# ---------------------------------------------------------------------------
+
+
+def _no_op_applier(_workspace_edit: dict[str, Any]) -> int:
+    """Stage 1G synthetic applier — exists so checkpoint_store.restore
+    can be invoked without spinning up a real LSP. Returns 0 so restore()
+    surfaces as ``no_op=True`` in RefactorResult.
+    """
+    return 0
+
+
+def _strip_txn_prefix(txn_id: str) -> str:
+    """Strip the 'txn_' presentation prefix added by dry_run_compose.
+
+    Tests pass raw store ids; production callers pass the prefixed form.
+    """
+    if txn_id.startswith("txn_"):
+        return txn_id[len("txn_"):]
+    return txn_id
+
+
+class ScalpelRollbackTool(Tool):
+    """Undo a refactor by checkpoint_id (idempotent)."""
+
+    def apply(self, checkpoint_id: str) -> str:
+        """Undo a refactor by checkpoint_id. Idempotent: second call is no-op.
+
+        :param checkpoint_id: id returned by a prior apply call.
+        :return: JSON RefactorResult with applied=True if any ops applied,
+            else no_op=True.
+        """
+        runtime = ScalpelRuntime.instance()
+        ckpt_store = runtime.checkpoint_store()
+        ckpt = ckpt_store.get(checkpoint_id)
+        if ckpt is None:
+            return RefactorResult(
+                applied=False,
+                no_op=True,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                checkpoint_id=checkpoint_id,
+            ).model_dump_json(indent=2)
+        restored = ckpt_store.restore(checkpoint_id, _no_op_applier)
+        return RefactorResult(
+            applied=bool(restored),
+            no_op=not restored,
+            diagnostics_delta=_empty_diagnostics_delta(),
+            checkpoint_id=checkpoint_id,
+        ).model_dump_json(indent=2)
+
+
+class ScalpelTransactionRollbackTool(Tool):
+    """Undo all checkpoints in a transaction in reverse order (idempotent)."""
+
+    def apply(self, transaction_id: str) -> str:
+        """Undo all checkpoints in a transaction (from dry_run_compose) in
+        reverse order. Idempotent.
+
+        :param transaction_id: id returned by dry_run_compose.
+        :return: JSON TransactionResult.
+        """
+        runtime = ScalpelRuntime.instance()
+        txn_store = runtime.transaction_store()
+        ckpt_store = runtime.checkpoint_store()
+        raw_id = _strip_txn_prefix(transaction_id)
+        try:
+            member_ids = list(txn_store.member_ids(raw_id))
+        except KeyError:
+            member_ids = []
+        per_step: list[RefactorResult] = []
+        if not member_ids:
+            return TransactionResult(
+                transaction_id=transaction_id,
+                per_step=(),
+                aggregated_diagnostics_delta=_empty_diagnostics_delta(),
+                rolled_back=False,
+            ).model_dump_json(indent=2)
+        success_count = 0
+        for cid in reversed(member_ids):
+            ok = ckpt_store.restore(cid, _no_op_applier)
+            if ok:
+                success_count += 1
+            per_step.append(RefactorResult(
+                applied=bool(ok),
+                no_op=not ok,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                checkpoint_id=cid,
+                transaction_id=transaction_id,
+            ))
+        remaining = (
+            tuple(
+                cid for cid, step in zip(reversed(member_ids), per_step)
+                if step.no_op
+            )
+            if 0 < success_count < len(member_ids)
+            else ()
+        )
+        return TransactionResult(
+            transaction_id=transaction_id,
+            per_step=tuple(per_step),
+            aggregated_diagnostics_delta=_empty_diagnostics_delta(),
+            rolled_back=True,
+            remaining_checkpoint_ids=remaining,
+        ).model_dump_json(indent=2)
+
+
 __all__ = [
     "ScalpelApplyCapabilityTool",
     "ScalpelCapabilitiesListTool",
     "ScalpelCapabilityDescribeTool",
     "ScalpelDryRunComposeTool",
+    "ScalpelRollbackTool",
+    "ScalpelTransactionRollbackTool",
 ]
