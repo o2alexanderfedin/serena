@@ -40,6 +40,16 @@ from .multi_server import MultiServerCoordinator
 
 log = logging.getLogger("serena.refactoring.python_strategy")
 
+__all__ = [
+    "PythonStrategy",
+    "PythonInterpreterNotFound",
+    "_PythonInterpreter",
+    "_ResolvedInterpreter",
+    "_RopeBridge",
+    "RopeBridgeError",
+    "ChangeSignatureSpec",
+]
+
 
 # Mapping from server-id (in SERVER_SET) to the synthetic language tag
 # the LspPool keys on. Distinct tags force the pool to spawn distinct
@@ -364,7 +374,7 @@ class _PythonInterpreter:
             p = Path(entry)
             if not p.is_dir():
                 continue
-            for _dist in p.glob("*.dist-info/METADATA"):
+            for _ in p.glob("*.dist-info/METADATA"):
                 # METADATA lacks an interpreter pointer — fall back to PATH's
                 # generic python. Step 12 is intentionally weak; it only
                 # signals "there is *some* python in PYTHONPATH".
