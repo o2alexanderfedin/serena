@@ -22,11 +22,19 @@ Source-of-truth: ``docs/design/mvp/2026-04-24-mvp-scope-report.md`` §12.
 from __future__ import annotations
 
 import json
-from typing import Any, Mapping
+from typing import Any, Mapping, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 from .multi_server import ProvenanceLiteral
+
+# Default per-language source_server attribution for the T2 strategy-only
+# walk. T3 enriches this by reading the adapter codeActionKind valueSet
+# to attribute kinds that ruff or basedpyright also advertise.
+_DEFAULT_SOURCE_SERVER_BY_LANGUAGE: dict[str, ProvenanceLiteral] = {
+    "python": "pylsp-rope",
+    "rust": "rust-analyzer",
+}
 
 
 class CapabilityRecord(BaseModel):
@@ -124,12 +132,49 @@ def build_capability_catalog(
     *,
     project_root: Any = None,
 ) -> CapabilityCatalog:
-    """Stage 1F factory — T2 fills in the strategy walk; T3 adds adapter introspection.
+    """Walk ``STRATEGY_REGISTRY`` and emit one ``CapabilityRecord`` per
+    ``(strategy.language_id, kind)`` pair.
 
-    Stage 1F T1 lands a stub that returns an empty catalog so the schema
-    tests can assert importability without forcing a strategy-walk. T2's
-    failing test is what drives the real implementation.
+    T2 contract — strategy-only:
+      - source_server is taken from ``_DEFAULT_SOURCE_SERVER_BY_LANGUAGE``
+        keyed by ``strategy.language_id``.
+      - extension_allow_list is taken from ``strategy.extension_allow_list``.
+      - kind is each entry of ``strategy.code_action_allow_list``.
+      - id is ``f"{language}.{kind}"``.
+
+    T3 will overlay adapter-advertised kinds and re-attribute the
+    source_server when an adapter specifically advertises a kind.
+
+    :param strategy_registry: ``{Language: StrategyClass}`` from Stage 1E.
+        ``None`` is treated as an empty mapping (catalog has zero records).
+    :param project_root: reserved for T8 of Stage 1G when per-project
+        capability gating lands; ignored at MVP.
     """
-    del strategy_registry
     del project_root
-    return CapabilityCatalog(records=())
+    if strategy_registry is None:
+        return CapabilityCatalog(records=())
+
+    legal_servers = set(get_args(ProvenanceLiteral))
+    records: list[CapabilityRecord] = []
+    for _language_enum, strategy_cls in strategy_registry.items():
+        language_id = strategy_cls.language_id
+        source_server = _DEFAULT_SOURCE_SERVER_BY_LANGUAGE.get(language_id)
+        if source_server is None or source_server not in legal_servers:
+            raise ValueError(
+                f"capability catalog: no default source_server registered "
+                f"for language_id={language_id!r}; add it to "
+                f"_DEFAULT_SOURCE_SERVER_BY_LANGUAGE"
+            )
+        for kind in strategy_cls.code_action_allow_list:
+            records.append(
+                CapabilityRecord(
+                    id=f"{language_id}.{kind}",
+                    language=language_id,
+                    kind=kind,
+                    source_server=source_server,
+                    params_schema={},
+                    preferred_facade=None,
+                    extension_allow_list=strategy_cls.extension_allow_list,
+                )
+            )
+    return CapabilityCatalog(records=tuple(records))
