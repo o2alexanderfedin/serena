@@ -365,6 +365,7 @@ markers = [
   "scss: language server running for SCSS / Sass / CSS (some-sass-language-server)",
   "angular: language server running for Angular (uses @angular/language-server + @angular/language-service tsserver plugin)",
   "ada: language server running for Ada / SPARK (uses AdaCore Ada Language Server)",
+  "e2e: end-to-end test against real LSP processes; opt-in via O2_SCALPEL_RUN_E2E=1 or pytest -m e2e",
 ]
 
 [tool.codespell]
