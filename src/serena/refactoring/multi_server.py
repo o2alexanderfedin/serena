@@ -14,7 +14,7 @@ Above: facades see merged ``MergedCodeAction`` lists with
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field
 
@@ -539,6 +539,158 @@ class MultiServerCoordinator:
                 out.errors[sid] = f"{type(resp_or_exc).__name__}: {resp_or_exc}"
             else:
                 out.responses[sid] = resp_or_exc
+        return out
+
+    async def _resolve_if_needed(self, server_id: str, action: dict[str, Any]) -> dict[str, Any]:
+        """Call codeAction/resolve when the action lacks both ``edit``
+        and ``command``. Per Phase 0 SUMMARY §6: rust-analyzer is
+        deferred-resolution; pylsp-rope is direct command-typed."""
+        has_edit = isinstance(action.get("edit"), dict) and bool(action["edit"])
+        has_command = isinstance(action.get("command"), dict) and bool(action["command"])
+        if has_edit or has_command:
+            return action
+        srv = self._servers[server_id]
+        try:
+            return await srv.resolve_code_action(action)
+        except Exception:  # noqa: BLE001
+            # Resolution failure leaves the candidate as-is; T7
+            # invariants will drop it (no edit, no command, won't apply).
+            return action
+
+    async def merge_code_actions(
+        self,
+        file: str,
+        start: dict[str, int],
+        end: dict[str, int],
+        only: list[str] | None = None,
+        diagnostics: list[dict[str, Any]] | None = None,
+        timeout_ms: int | None = None,
+    ) -> list[MergedCodeAction]:
+        """Public entry point for the §11.1 two-stage code-action merge.
+
+        1. Broadcast textDocument/codeAction across the pool (T2).
+        2. Resolve every deferred candidate (T6 — this method).
+        3. Group by normalized family (T3).
+        4. Apply Stage-1 priority filter per family (T4).
+        5. Apply Stage-2 dedup-by-equivalence per family (T5).
+        6. Wrap each survivor as a ``MergedCodeAction`` with provenance
+           and ``suppressed_alternatives`` (debug-only per §11.4).
+
+        Note: §11.7 invariants (apply-clean / ast.parse / disabled-filter
+        / workspace-boundary) are enforced in T7 by a wrapping method
+        ``merge_and_validate_code_actions``; this method delivers the
+        unvalidated merge.
+        """
+        cast_diagnostics = diagnostics or []
+        broadcast_kwargs: dict[str, Any] = {
+            "file": file,
+            "start": start,
+            "end": end,
+            "only": only,
+            "diagnostics": cast_diagnostics,
+        }
+        broadcast = await self.broadcast(
+            method="textDocument/codeAction",
+            kwargs=broadcast_kwargs,
+            timeout_ms=timeout_ms,
+        )
+
+        # Flatten responses + resolve deferred actions in parallel per server.
+        flat: list[tuple[str, dict[str, Any]]] = []
+        for sid, resp in broadcast.responses.items():
+            if not isinstance(resp, list):
+                continue
+            for raw in resp:
+                if not isinstance(raw, dict):
+                    continue
+                flat.append((sid, raw))
+
+        if flat:
+            resolve_tasks = [self._resolve_if_needed(sid, a) for sid, a in flat]
+            resolved_actions = await asyncio.gather(*resolve_tasks, return_exceptions=False)
+            flat = [(sid, resolved) for (sid, _), resolved in zip(flat, resolved_actions)]
+
+        # Bucket by normalized family.
+        primary_diagnostic = cast_diagnostics[0] if cast_diagnostics else None
+        quickfix_context = _classify_quickfix_context(primary_diagnostic) if primary_diagnostic else "other"
+        buckets: dict[tuple[str, str | None], list[tuple[str, dict[str, Any]]]] = {}
+        for sid, action in flat:
+            raw_kind = action.get("kind") or ""
+            family = _normalize_kind(raw_kind)
+            ctx = quickfix_context if family == "quickfix" else None
+            key = (family, ctx)
+            buckets.setdefault(key, []).append((sid, action))
+
+        # Two-stage merge per bucket.
+        out: list[MergedCodeAction] = []
+        debug = os.environ.get("O2_SCALPEL_DEBUG_MERGE") == "1"
+        action_seq = 0
+        for (family, ctx), bucket_candidates in buckets.items():
+            # Stage 1: priority filter.
+            stage1 = _apply_priority(bucket_candidates, family=family, quickfix_context=ctx)
+            # Lower-priority drops (everything in bucket but not in stage1, excluding disabled).
+            disabled_pairs = {id(a): (s, a) for s, a in bucket_candidates
+                              if isinstance(a.get("disabled"), dict) and a["disabled"].get("reason")}
+            kept_pairs = {id(a): (s, a) for s, a in stage1}
+            lower_priority_drops: list[tuple[str, dict[str, Any]]] = [
+                (s, a) for s, a in bucket_candidates
+                if id(a) not in kept_pairs and id(a) not in disabled_pairs
+            ]
+            # Stage 2: dedup over the active winners (excluding disabled).
+            active_winners = [(s, a) for s, a in stage1 if id(a) not in disabled_pairs]
+            priority_for_family = _PRIORITY_TABLE.get((family, ctx), ())
+            stage2 = _dedup(active_winners, priority=priority_for_family)
+            # Build MergedCodeAction per winner.
+            for sid, action, dropped in stage2:
+                action_seq += 1
+                action_id = action.get("data", {}).get("id") if isinstance(action.get("data"), dict) else None
+                action_id = str(action_id) if action_id is not None else f"merge-{action_seq}"
+                disabled_reason: str | None = None
+                if isinstance(action.get("disabled"), dict):
+                    disabled_reason = action["disabled"].get("reason")
+                suppressed: list[SuppressedAlternative] = []
+                if debug:
+                    for drop_sid, drop_action, reason in dropped:
+                        suppressed.append(SuppressedAlternative(
+                            title=drop_action.get("title", ""),
+                            provenance=drop_sid,
+                            reason=cast(Literal["lower_priority", "duplicate_title", "duplicate_edit"], reason),
+                        ))
+                    for drop_sid, drop_action in lower_priority_drops:
+                        suppressed.append(SuppressedAlternative(
+                            title=drop_action.get("title", ""),
+                            provenance=drop_sid,
+                            reason="lower_priority",
+                        ))
+                provenance = sid if sid in (
+                    "pylsp-rope", "pylsp-base", "basedpyright", "ruff", "pylsp-mypy", "rust-analyzer"
+                ) else "pylsp-base"
+                out.append(MergedCodeAction(
+                    id=action_id,
+                    title=action.get("title", ""),
+                    kind=action.get("kind", ""),
+                    disabled_reason=disabled_reason,
+                    is_preferred=bool(action.get("isPreferred", False)),
+                    provenance=provenance,  # type: ignore[arg-type]
+                    suppressed_alternatives=suppressed,
+                ))
+            # Disabled candidates are also surfaced.
+            for sid, action in disabled_pairs.values():
+                action_seq += 1
+                action_id = action.get("data", {}).get("id") if isinstance(action.get("data"), dict) else None
+                action_id = str(action_id) if action_id is not None else f"merge-{action_seq}"
+                provenance = sid if sid in (
+                    "pylsp-rope", "pylsp-base", "basedpyright", "ruff", "pylsp-mypy", "rust-analyzer"
+                ) else "pylsp-base"
+                out.append(MergedCodeAction(
+                    id=action_id,
+                    title=action.get("title", ""),
+                    kind=action.get("kind", ""),
+                    disabled_reason=action["disabled"].get("reason"),
+                    is_preferred=bool(action.get("isPreferred", False)),
+                    provenance=provenance,  # type: ignore[arg-type]
+                    suppressed_alternatives=[],
+                ))
         return out
 
 
