@@ -346,8 +346,6 @@ class LspPool:
         self_rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         kid_rss = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
         total = float(self_rss + kid_rss)
-        # ru_maxrss is bytes on macOS, kilobytes on Linux.
-        if sys.platform == "linux":
-            return total / 1024.0
-        # macOS / BSD: bytes.
-        return total / (1024.0 * 1024.0)
+        # ru_maxrss is kilobytes on Linux, bytes on macOS / BSD.
+        divisor = 1024.0 if sys.platform == "linux" else 1024.0 * 1024.0
+        return total / divisor
