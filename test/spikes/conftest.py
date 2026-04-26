@@ -266,3 +266,42 @@ def fake_pool() -> dict[str, _FakeServer]:
         "basedpyright": _FakeServer("basedpyright"),
         "ruff": _FakeServer("ruff"),
     }
+
+
+# ---------------------------------------------------------------------------
+# Stage 1F — capability catalog drift gate plumbing.
+# ---------------------------------------------------------------------------
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """Register --update-catalog-baseline CLI flag.
+
+    When passed, the Stage 1F drift gate (T5) regenerates the golden file
+    instead of asserting against it. CI MUST NOT pass this flag; humans
+    do, after a deliberate strategy / adapter change, then commit the
+    regenerated file alongside the change.
+    """
+    group = parser.getgroup("o2-scalpel")
+    group.addoption(
+        "--update-catalog-baseline",
+        action="store_true",
+        default=False,
+        dest="update_catalog_baseline",
+        help=(
+            "Regenerate vendor/serena/test/spikes/data/"
+            "capability_catalog_baseline.json from the live catalog. "
+            "Use after a deliberate strategy or adapter change; commit "
+            "the regenerated file alongside the change."
+        ),
+    )
+
+
+@pytest.fixture(scope="session")
+def capability_catalog_baseline_path() -> Path:
+    """Absolute path to the checked-in capability catalog baseline JSON."""
+    return SPIKE_DIR / "data" / "capability_catalog_baseline.json"
+
+
+@pytest.fixture(scope="session")
+def update_catalog_baseline_requested(request: pytest.FixtureRequest) -> bool:
+    return bool(request.config.getoption("update_catalog_baseline"))

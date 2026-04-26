@@ -1,0 +1,155 @@
+{
+  "records": [
+    {
+      "extension_allow_list": [
+        ".py",
+        ".pyi"
+      ],
+      "id": "python.refactor",
+      "kind": "refactor",
+      "language": "python",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "pylsp-rope"
+    },
+    {
+      "extension_allow_list": [
+        ".py",
+        ".pyi"
+      ],
+      "id": "python.refactor.extract",
+      "kind": "refactor.extract",
+      "language": "python",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "pylsp-rope"
+    },
+    {
+      "extension_allow_list": [
+        ".py",
+        ".pyi"
+      ],
+      "id": "python.refactor.inline",
+      "kind": "refactor.inline",
+      "language": "python",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "pylsp-rope"
+    },
+    {
+      "extension_allow_list": [
+        ".py",
+        ".pyi"
+      ],
+      "id": "python.refactor.rewrite",
+      "kind": "refactor.rewrite",
+      "language": "python",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "pylsp-rope"
+    },
+    {
+      "extension_allow_list": [
+        ".py",
+        ".pyi"
+      ],
+      "id": "python.quickfix",
+      "kind": "quickfix",
+      "language": "python",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "ruff"
+    },
+    {
+      "extension_allow_list": [
+        ".py",
+        ".pyi"
+      ],
+      "id": "python.source.fixAll",
+      "kind": "source.fixAll",
+      "language": "python",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "ruff"
+    },
+    {
+      "extension_allow_list": [
+        ".py",
+        ".pyi"
+      ],
+      "id": "python.source.organizeImports",
+      "kind": "source.organizeImports",
+      "language": "python",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "ruff"
+    },
+    {
+      "extension_allow_list": [
+        ".rs"
+      ],
+      "id": "rust.quickfix",
+      "kind": "quickfix",
+      "language": "rust",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "rust-analyzer"
+    },
+    {
+      "extension_allow_list": [
+        ".rs"
+      ],
+      "id": "rust.refactor.extract",
+      "kind": "refactor.extract",
+      "language": "rust",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "rust-analyzer"
+    },
+    {
+      "extension_allow_list": [
+        ".rs"
+      ],
+      "id": "rust.refactor.inline",
+      "kind": "refactor.inline",
+      "language": "rust",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "rust-analyzer"
+    },
+    {
+      "extension_allow_list": [
+        ".rs"
+      ],
+      "id": "rust.refactor.move",
+      "kind": "refactor.move",
+      "language": "rust",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "rust-analyzer"
+    },
+    {
+      "extension_allow_list": [
+        ".rs"
+      ],
+      "id": "rust.refactor.rewrite",
+      "kind": "refactor.rewrite",
+      "language": "rust",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "rust-analyzer"
+    },
+    {
+      "extension_allow_list": [
+        ".rs"
+      ],
+      "id": "rust.source.organizeImports",
+      "kind": "source.organizeImports",
+      "language": "rust",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "rust-analyzer"
+    }
+  ],
+  "schema_version": 1
+}
