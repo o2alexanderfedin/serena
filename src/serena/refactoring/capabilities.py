@@ -21,6 +21,7 @@ Source-of-truth: ``docs/design/mvp/2026-04-24-mvp-scope-report.md`` §12.
 
 from __future__ import annotations
 
+import hashlib
 import inspect
 import json
 from typing import Any, Mapping, get_args
@@ -116,6 +117,15 @@ class CapabilityCatalog(BaseModel):
             "records": [r.model_dump(mode="json") for r in self.records],
         }
         return json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=True) + "\n"
+
+    def hash(self) -> str:
+        """Return SHA-256 hex digest of canonical JSON (``to_json``).
+
+        Stable across construction orders because ``model_post_init``
+        canonicalises record order; consumers can compare hashes to detect
+        catalog drift without re-serialising the records themselves.
+        """
+        return hashlib.sha256(self.to_json().encode()).hexdigest()
 
     @classmethod
     def from_json(cls, blob: str) -> "CapabilityCatalog":

@@ -24,6 +24,7 @@ import asyncio
 import os
 import threading
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -310,5 +311,44 @@ class ScalpelRuntime:
             self._coordinators[key] = coord
             return coord
 
+    def editor_for_workspace(
+        self,
+        language: "Language",
+        project_root: Path,
+    ) -> "WorkspaceEditor":
+        """Return a typed ``WorkspaceEditor`` for the given workspace.
 
-__all__ = ["ScalpelRuntime"]
+        Backlog #7 (v0.2.0). Bundles the per-(language, project_root)
+        ``MultiServerCoordinator`` with the Q4 workspace-boundary helper so
+        callers can ask for an editor instead of threading the coordinator
+        and the boundary check through call sites.
+        """
+        canon_root = project_root.expanduser().resolve(strict=False)
+        coord = self.coordinator_for(language, canon_root)
+        return WorkspaceEditor(coordinator=coord, project_root=canon_root)
+
+
+@dataclass(frozen=True)
+class WorkspaceEditor:
+    """Workspace-scoped editor handle returned by ``editor_for_workspace``.
+
+    Wraps the ``MultiServerCoordinator`` plus the Q4 workspace-boundary
+    helper. ``project_root`` is the canonicalised root the editor is
+    bound to; ``is_in_workspace`` admits paths under it (plus any
+    ``O2_SCALPEL_WORKSPACE_EXTRA_PATHS`` opt-ins).
+    """
+
+    coordinator: MultiServerCoordinator
+    project_root: Path
+
+    def is_in_workspace(self, target: Path) -> bool:
+        """Boundary check matching ``SolidLanguageServer.is_in_workspace``."""
+        from solidlsp.ls import SolidLanguageServer
+        return SolidLanguageServer.is_in_workspace(
+            str(target),
+            [str(self.project_root)],
+            extra_paths=list(parse_workspace_extra_paths()),
+        )
+
+
+__all__ = ["ScalpelRuntime", "WorkspaceEditor"]
