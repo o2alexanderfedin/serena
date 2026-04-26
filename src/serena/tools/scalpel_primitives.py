@@ -25,10 +25,13 @@ from serena.tools.scalpel_schemas import (
     DiagnosticSeverityBreakdown,
     ErrorCode,
     FailureInfo,
+    LanguageHealth,
     LspOpStat,
     RefactorResult,
+    ServerHealth,
     StepPreview,
     TransactionResult,
+    WorkspaceHealth,
 )
 from serena.tools.tools_base import Tool
 
@@ -484,6 +487,85 @@ class ScalpelTransactionRollbackTool(Tool):
         ).model_dump_json(indent=2)
 
 
+# ---------------------------------------------------------------------------
+# T7: ScalpelWorkspaceHealthTool — per-language LSP probe
+# ---------------------------------------------------------------------------
+
+
+def _build_language_health(
+    language: Any,
+    project_root: Path,
+) -> LanguageHealth:
+    """Aggregate ServerHealth rows for one language from the pool stats."""
+    runtime = ScalpelRuntime.instance()
+    pool = runtime.pool_for(language, project_root)
+    stats = pool.stats()
+    catalog = runtime.catalog()
+    lang_records = [r for r in catalog.records if r.language == language.value]
+    server_ids = sorted({r.source_server for r in lang_records})
+    catalog_hash = catalog.hash() if hasattr(catalog, "hash") else ""
+    server_rows: list[ServerHealth] = []
+    for sid in server_ids:
+        # PoolStats v1 doesn't expose per-server pid/rss; surface placeholders
+        # that downstream observability (Stage 1H telemetry) can refine.
+        server_rows.append(ServerHealth(
+            server_id=sid,
+            version="unknown",
+            pid=None,
+            rss_mb=None,
+            capabilities_advertised=tuple(sorted({
+                r.kind for r in lang_records if r.source_server == sid
+            })),
+        ))
+    indexing_state = "not_started" if stats.active_servers == 0 else "ready"
+    return LanguageHealth(
+        language=language.value,
+        indexing_state=indexing_state,  # type: ignore[arg-type]
+        indexing_progress=None,
+        servers=tuple(server_rows),
+        capabilities_count=len(lang_records),
+        estimated_wait_ms=None,
+        capability_catalog_hash=catalog_hash,
+    )
+
+
+class ScalpelWorkspaceHealthTool(Tool):
+    """Probe LSP servers: indexing state, registered capabilities, version."""
+
+    def apply(self, project_root: str | None = None) -> str:
+        """Probe LSP servers: indexing state, registered capabilities, version.
+        Call before refactor sessions.
+
+        :param project_root: explicit workspace root; defaults to active project.
+        :return: JSON WorkspaceHealth.
+        """
+        from solidlsp.ls_config import Language
+
+        root = (
+            Path(project_root).expanduser().resolve(strict=False)
+            if project_root is not None
+            else Path(self.get_project_root()).expanduser().resolve(strict=False)
+        )
+        languages: dict[str, LanguageHealth] = {}
+        for lang in (Language.PYTHON, Language.RUST):
+            try:
+                languages[lang.value] = _build_language_health(lang, root)
+            except Exception as exc:  # noqa: BLE001 — surface as failed
+                languages[lang.value] = LanguageHealth(
+                    language=lang.value,
+                    indexing_state="failed",
+                    indexing_progress=str(exc),
+                    servers=(),
+                    capabilities_count=0,
+                    estimated_wait_ms=None,
+                    capability_catalog_hash="",
+                )
+        return WorkspaceHealth(
+            project_root=str(root),
+            languages=languages,
+        ).model_dump_json(indent=2)
+
+
 __all__ = [
     "ScalpelApplyCapabilityTool",
     "ScalpelCapabilitiesListTool",
@@ -491,4 +573,5 @@ __all__ = [
     "ScalpelDryRunComposeTool",
     "ScalpelRollbackTool",
     "ScalpelTransactionRollbackTool",
+    "ScalpelWorkspaceHealthTool",
 ]
