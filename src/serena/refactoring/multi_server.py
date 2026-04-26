@@ -468,6 +468,161 @@ def _dedup(
     return out
 
 
+# ---------------------------------------------------------------------------
+# §11.7 invariants — apply-clean / syntactic-validity / disabled / boundary.
+# ---------------------------------------------------------------------------
+
+import ast
+from pathlib import Path
+from urllib.parse import unquote, urlparse
+
+
+def _uri_to_path(uri: str) -> Path:
+    """LSP file:// URI → local Path. Handles percent-encoding."""
+    parsed = urlparse(uri)
+    return Path(unquote(parsed.path))
+
+
+def _iter_text_document_edits(edit: dict[str, Any]) -> list[dict[str, Any]]:
+    """Yield the TextDocumentEdit entries from a WorkspaceEdit (both
+    documentChanges and legacy changes-map shapes)."""
+    out: list[dict[str, Any]] = []
+    for change in edit.get("documentChanges", []) or []:
+        if "textDocument" in change and "edits" in change:
+            out.append(change)
+    if "changes" in edit:
+        for uri, edits in edit["changes"].items():
+            out.append({
+                "textDocument": {"uri": uri, "version": None},
+                "edits": list(edits),
+            })
+    return out
+
+
+def _check_apply_clean(
+    edit: dict[str, Any],
+    document_versions: dict[str, int],
+) -> tuple[bool, str | None]:
+    """Invariant 1: every TextDocumentEdit's textDocument.version must
+    match the server-tracked version (or be None for version-agnostic)."""
+    for tde in _iter_text_document_edits(edit):
+        td = tde["textDocument"]
+        uri = td["uri"]
+        edit_version = td.get("version")
+        if edit_version is None:
+            continue
+        tracked = document_versions.get(uri)
+        if tracked is None:
+            continue
+        if tracked != edit_version:
+            return False, f"STALE_VERSION: uri={uri} edit_version={edit_version} tracked={tracked}"
+    return True, None
+
+
+def _check_syntactic_validity(edit: dict[str, Any]) -> tuple[bool, str | None]:
+    """Invariant 2: post-apply ast.parse on every .py file the edit touches.
+
+    Apply each edit to a copy of the file in memory, then ast.parse.
+    """
+    for tde in _iter_text_document_edits(edit):
+        uri = tde["textDocument"]["uri"]
+        path = _uri_to_path(uri)
+        if path.suffix != ".py":
+            continue
+        try:
+            src = path.read_text(encoding="utf-8")
+        except OSError:
+            continue  # file may not yet exist (CreateFile then edit) — skip
+        sorted_edits = sorted(
+            tde["edits"],
+            key=lambda e: (e["range"]["start"]["line"], e["range"]["start"]["character"]),
+            reverse=True,
+        )
+        new_src = _apply_text_edits_in_memory(src, sorted_edits)
+        try:
+            ast.parse(new_src)
+        except SyntaxError as exc:
+            return False, f"SyntaxError@{path.name}: {exc.msg} (line {exc.lineno})"
+    return True, None
+
+
+def _apply_text_edits_in_memory(src: str, sorted_edits: list[dict[str, Any]]) -> str:
+    """Naive line-based edit application for invariant checking only.
+    Edits MUST be pre-sorted descending so earlier edits don't shift
+    later edits' offsets."""
+    lines = src.splitlines(keepends=True)
+    # Convert to a single string with character offsets for slicing.
+    line_offsets = [0]
+    for ln in lines:
+        line_offsets.append(line_offsets[-1] + len(ln))
+    text = src
+    for te in sorted_edits:
+        rng = te["range"]
+        s_line, s_char = rng["start"]["line"], rng["start"]["character"]
+        e_line, e_char = rng["end"]["line"], rng["end"]["character"]
+        if s_line >= len(line_offsets):
+            s_offset = len(text)
+        else:
+            s_offset = line_offsets[s_line] + s_char
+        if e_line >= len(line_offsets):
+            e_offset = len(text)
+        else:
+            e_offset = line_offsets[e_line] + e_char
+        s_offset = min(s_offset, len(text))
+        e_offset = min(e_offset, len(text))
+        text = text[:s_offset] + te["newText"] + text[e_offset:]
+        # Recompute line_offsets — naive but correct for invariant check.
+        new_lines = text.splitlines(keepends=True)
+        line_offsets = [0]
+        for ln in new_lines:
+            line_offsets.append(line_offsets[-1] + len(ln))
+    return text
+
+
+def _check_workspace_boundary(
+    edit: dict[str, Any],
+    workspace_folders: list[str],
+    extra_paths: tuple[str, ...] = (),
+) -> tuple[bool, str | None]:
+    """Invariant 4 (§11.8): every documentChanges entry's path must lie
+    under workspace_folders or extra_paths. Reject the WHOLE edit on
+    first failure (atomic — no partial application)."""
+    # Lazy import to avoid a hard solidlsp coupling in pure-unit usage.
+    from solidlsp.ls import SolidLanguageServer
+
+    rejected: list[str] = []
+    for change in edit.get("documentChanges", []) or []:
+        kind = change.get("kind")
+        uris: list[str] = []
+        if kind == "create" or kind == "delete":
+            uris.append(change["uri"])
+        elif kind == "rename":
+            uris.append(change["oldUri"])
+            uris.append(change["newUri"])
+        else:
+            uris.append(change["textDocument"]["uri"])
+        for uri in uris:
+            target = str(_uri_to_path(uri))
+            if not SolidLanguageServer.is_in_workspace(
+                target=target,
+                roots=list(workspace_folders),
+                extra_paths=extra_paths,
+            ):
+                rejected.append(target)
+    if "changes" in edit:
+        for uri in edit["changes"]:
+            target = str(_uri_to_path(uri))
+            if not SolidLanguageServer.is_in_workspace(
+                target=target,
+                roots=list(workspace_folders),
+                extra_paths=extra_paths,
+            ):
+                rejected.append(target)
+    if rejected:
+        return False, f"OUT_OF_WORKSPACE_EDIT_BLOCKED: rejected_paths={rejected}"
+    return True, None
+
+
 class MultiServerCoordinator:
     """Coordinator for the §11 multi-LSP merge.
 
@@ -479,6 +634,7 @@ class MultiServerCoordinator:
 
     def __init__(self, servers: dict[str, Any]) -> None:
         self._servers = dict(servers)
+        self._action_edits: dict[str, dict[str, Any]] = {}
 
     @property
     def servers(self) -> dict[str, Any]:
@@ -665,6 +821,8 @@ class MultiServerCoordinator:
                 provenance = sid if sid in (
                     "pylsp-rope", "pylsp-base", "basedpyright", "ruff", "pylsp-mypy", "rust-analyzer"
                 ) else "pylsp-base"
+                if isinstance(action.get("edit"), dict):
+                    self._action_edits[action_id] = action["edit"]
                 out.append(MergedCodeAction(
                     id=action_id,
                     title=action.get("title", ""),
@@ -682,6 +840,8 @@ class MultiServerCoordinator:
                 provenance = sid if sid in (
                     "pylsp-rope", "pylsp-base", "basedpyright", "ruff", "pylsp-mypy", "rust-analyzer"
                 ) else "pylsp-base"
+                if isinstance(action.get("edit"), dict):
+                    self._action_edits[action_id] = action["edit"]
                 out.append(MergedCodeAction(
                     id=action_id,
                     title=action.get("title", ""),
@@ -692,6 +852,169 @@ class MultiServerCoordinator:
                     suppressed_alternatives=[],
                 ))
         return out
+
+    async def merge_and_validate_code_actions(
+        self,
+        file: str,
+        start: dict[str, int],
+        end: dict[str, int],
+        only: list[str] | None = None,
+        diagnostics: list[dict[str, Any]] | None = None,
+        timeout_ms: int | None = None,
+        workspace_folders: list[str] | None = None,
+        extra_paths: tuple[str, ...] = (),
+        document_versions: dict[str, int] | None = None,
+    ) -> tuple[list[MergedCodeAction], list[MergedCodeAction]]:
+        """Merge + enforce §11.7 four invariants.
+
+        Returns ``(auto_apply, surfaced_only)``:
+          - ``auto_apply``: candidates that passed all four invariants and
+            are safe for facades to apply directly.
+          - ``surfaced_only``: candidates the LLM still sees but that did
+            NOT pass an invariant — disabled-reason carriers, syntax-
+            invalid candidates, out-of-workspace candidates, stale-
+            version candidates. Invariant-failure reason recorded in
+            the candidate's ``disabled_reason`` field.
+
+        Per §11.7: invariant 3 (disabled.reason) is implemented as
+        "preserved in surfaced; never auto-applied". Invariant 4 path
+        filter is implemented per §11.8 atomically (any rejected path
+        rejects the whole WorkspaceEdit).
+        """
+        ws_folders = workspace_folders or []
+        # Parse env-var allowlist per Stage 1B convention.
+        env_extra = os.environ.get("O2_SCALPEL_WORKSPACE_EXTRA_PATHS", "")
+        extra_combined: tuple[str, ...] = tuple(extra_paths) + tuple(
+            p for p in env_extra.split(":") if p
+        )
+        versions = document_versions or {}
+
+        # Broadcast + resolve so we have access to the raw per-server
+        # candidate set (priority fallback needs to peek beyond the
+        # Stage-1 winner — when the Stage-1 winner fails an invariant,
+        # the next-priority candidate gets a chance).
+        cast_diagnostics = diagnostics or []
+        broadcast_kwargs: dict[str, Any] = {
+            "file": file,
+            "start": start,
+            "end": end,
+            "only": only,
+            "diagnostics": cast_diagnostics,
+        }
+        broadcast = await self.broadcast(
+            method="textDocument/codeAction",
+            kwargs=broadcast_kwargs,
+            timeout_ms=timeout_ms,
+        )
+
+        flat: list[tuple[str, dict[str, Any]]] = []
+        for sid, resp in broadcast.responses.items():
+            if not isinstance(resp, list):
+                continue
+            for raw in resp:
+                if not isinstance(raw, dict):
+                    continue
+                flat.append((sid, raw))
+        if flat:
+            resolve_tasks = [self._resolve_if_needed(sid, a) for sid, a in flat]
+            resolved_actions = await asyncio.gather(*resolve_tasks, return_exceptions=False)
+            flat = [(sid, resolved) for (sid, _), resolved in zip(flat, resolved_actions)]
+
+        primary_diagnostic = cast_diagnostics[0] if cast_diagnostics else None
+        quickfix_context = _classify_quickfix_context(primary_diagnostic) if primary_diagnostic else "other"
+        buckets: dict[tuple[str, str | None], list[tuple[str, dict[str, Any]]]] = {}
+        for sid, action in flat:
+            raw_kind = action.get("kind") or ""
+            family = _normalize_kind(raw_kind)
+            ctx = quickfix_context if family == "quickfix" else None
+            buckets.setdefault((family, ctx), []).append((sid, action))
+
+        auto_apply: list[MergedCodeAction] = []
+        surfaced: list[MergedCodeAction] = []
+        action_seq = 0
+
+        def _to_merged(sid: str, action: dict[str, Any], reason: str | None) -> MergedCodeAction:
+            nonlocal action_seq
+            action_seq += 1
+            raw_id = action.get("data", {}).get("id") if isinstance(action.get("data"), dict) else None
+            aid = str(raw_id) if raw_id is not None else f"merge-{action_seq}"
+            provenance = sid if sid in (
+                "pylsp-rope", "pylsp-base", "basedpyright", "ruff", "pylsp-mypy", "rust-analyzer"
+            ) else "pylsp-base"
+            disabled_reason: str | None = reason
+            if disabled_reason is None and isinstance(action.get("disabled"), dict):
+                disabled_reason = action["disabled"].get("reason")
+            if isinstance(action.get("edit"), dict):
+                self._action_edits[aid] = action["edit"]
+            return MergedCodeAction(
+                id=aid,
+                title=action.get("title", ""),
+                kind=action.get("kind", ""),
+                disabled_reason=disabled_reason,
+                is_preferred=bool(action.get("isPreferred", False)),
+                provenance=provenance,  # type: ignore[arg-type]
+                suppressed_alternatives=[],
+            )
+
+        for (family, ctx), bucket_candidates in buckets.items():
+            # Partition disabled vs active.
+            disabled_pairs = [
+                (s, a) for s, a in bucket_candidates
+                if isinstance(a.get("disabled"), dict) and a["disabled"].get("reason")
+            ]
+            active = [
+                (s, a) for s, a in bucket_candidates
+                if not (isinstance(a.get("disabled"), dict) and a["disabled"].get("reason"))
+            ]
+            # Always surface disabled candidates.
+            for sid, action in disabled_pairs:
+                surfaced.append(_to_merged(sid, action, None))
+
+            if not active:
+                continue
+
+            priority = _PRIORITY_TABLE.get((family, ctx), ())
+            # Sort active by priority (winner-first).
+            def _rank(sid: str, _priority: tuple[str, ...] = priority) -> int:
+                try:
+                    return _priority.index(sid)
+                except ValueError:
+                    return len(_priority)
+            ordered = sorted(active, key=lambda sa: _rank(sa[0]))
+
+            # Walk priority list; first candidate that passes invariants
+            # becomes the auto-apply winner. All others (failed winners +
+            # lower-priority equivalents) go to surfaced.
+            chosen_idx: int | None = None
+            chosen_failures: list[tuple[int, str]] = []
+            for i, (sid, action) in enumerate(ordered):
+                edit = action.get("edit") if isinstance(action.get("edit"), dict) else None
+                if edit is None:
+                    chosen_failures.append((i, "NO_EDIT"))
+                    continue
+                ok1, r1 = _check_apply_clean(edit, versions)
+                ok2, r2 = _check_syntactic_validity(edit)
+                ok4, r4 = _check_workspace_boundary(edit, ws_folders, extra_combined)
+                if ok1 and ok2 and ok4:
+                    chosen_idx = i
+                    break
+                chosen_failures.append((i, r1 or r2 or r4 or "INVARIANT_FAIL"))
+
+            if chosen_idx is not None:
+                # Auto-apply the winner; surface the failed earlier-priority
+                # candidates with their failure reason.
+                winner_sid, winner_action = ordered[chosen_idx]
+                for fail_idx, fail_reason in chosen_failures:
+                    fail_sid, fail_action = ordered[fail_idx]
+                    surfaced.append(_to_merged(fail_sid, fail_action, fail_reason))
+                auto_apply.append(_to_merged(winner_sid, winner_action, None))
+            else:
+                # All failed → surface them all.
+                for fail_idx, fail_reason in chosen_failures:
+                    fail_sid, fail_action = ordered[fail_idx]
+                    surfaced.append(_to_merged(fail_sid, fail_action, fail_reason))
+
+        return auto_apply, surfaced
 
 
 __all__ = [
