@@ -370,4 +370,122 @@ class ScalpelExtractTool(Tool):
         ).model_dump_json(indent=2)
 
 
-__all__ = ["ScalpelExtractTool", "ScalpelSplitFileTool"]
+# ---------------------------------------------------------------------------
+# T5: ScalpelInlineTool
+# ---------------------------------------------------------------------------
+
+
+_INLINE_TARGET_TO_KIND: dict[str, str] = {
+    "call": "refactor.inline.call",
+    "variable": "refactor.inline.variable",
+    "type_alias": "refactor.inline.type_alias",
+    "macro": "refactor.inline.macro",
+    "const": "refactor.inline.const",
+}
+
+
+class ScalpelInlineTool(Tool):
+    """Inline a function/variable/type alias at definition or call sites."""
+
+    def apply(
+        self,
+        file: str,
+        name_path: str | None = None,
+        position: dict[str, Any] | None = None,
+        target: Literal["call", "variable", "type_alias", "macro", "const"] = "call",
+        scope: Literal["single_call_site", "all_callers"] = "single_call_site",
+        remove_definition: bool = True,
+        dry_run: bool = False,
+        preview_token: str | None = None,
+        language: Literal["rust", "python"] | None = None,
+        allow_out_of_workspace: bool = False,
+    ) -> str:
+        """Inline a function, variable, or type alias at definition or
+        call-sites. Pick `target`. Atomic.
+
+        :param file: source file containing the definition or call.
+        :param name_path: optional Serena name-path.
+        :param position: optional LSP Position at the call site.
+        :param target: 'call' | 'variable' | 'type_alias' | 'macro' | 'const'.
+        :param scope: 'single_call_site' or 'all_callers'.
+        :param remove_definition: drop the original definition after inlining.
+        :param dry_run: preview only.
+        :param preview_token: continuation from a prior dry-run.
+        :param language: 'rust' or 'python'; inferred from extension when None.
+        :param allow_out_of_workspace: skip workspace-boundary check.
+        :return: JSON RefactorResult.
+        """
+        del name_path, remove_definition, preview_token
+        project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
+        guard = workspace_boundary_guard(
+            file=file, project_root=project_root,
+            allow_out_of_workspace=allow_out_of_workspace,
+        )
+        if guard is not None:
+            return guard.model_dump_json(indent=2)
+        kind = _INLINE_TARGET_TO_KIND.get(target)
+        if kind is None:
+            return build_failure_result(
+                code=ErrorCode.INVALID_ARGUMENT,
+                stage="scalpel_inline",
+                reason=f"Unknown target {target!r}; expected one of {sorted(_INLINE_TARGET_TO_KIND)}.",
+                recoverable=False,
+            ).model_dump_json(indent=2)
+        if scope == "single_call_site" and position is None:
+            return build_failure_result(
+                code=ErrorCode.INVALID_ARGUMENT,
+                stage="scalpel_inline",
+                reason="scope=single_call_site requires position=.",
+                recoverable=False,
+            ).model_dump_json(indent=2)
+        lang = _infer_language(file, language)
+        if lang not in ("rust", "python"):
+            return build_failure_result(
+                code=ErrorCode.INVALID_ARGUMENT,
+                stage="scalpel_inline",
+                reason=f"Cannot infer language from {file!r}; pass language=.",
+                recoverable=False,
+            ).model_dump_json(indent=2)
+        coord = coordinator_for_facade(language=lang, project_root=project_root)
+        pos = position or {"line": 0, "character": 0}
+        rng = {"start": pos, "end": pos}
+        t0 = time.monotonic()
+        actions = _run_async(coord.merge_code_actions(
+            file=file, start=rng["start"], end=rng["end"], only=[kind],
+        ))
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        if not actions:
+            return build_failure_result(
+                code=ErrorCode.SYMBOL_NOT_FOUND,
+                stage="scalpel_inline",
+                reason=f"No {kind} actions surfaced for {file!r}.",
+            ).model_dump_json(indent=2)
+        if dry_run:
+            return RefactorResult(
+                applied=False, no_op=False,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                preview_token=f"pv_inline_{int(time.time())}",
+                duration_ms=elapsed_ms,
+            ).model_dump_json(indent=2)
+        cid = record_checkpoint_for_workspace_edit(
+            workspace_edit={"changes": {}}, snapshot={},
+        )
+        return RefactorResult(
+            applied=True,
+            diagnostics_delta=_empty_diagnostics_delta(),
+            checkpoint_id=cid,
+            duration_ms=elapsed_ms,
+            lsp_ops=(LspOpStat(
+                method="textDocument/codeAction",
+                server=actions[0].provenance if actions else "unknown",
+                count=len(actions),
+                total_ms=elapsed_ms,
+            ),),
+        ).model_dump_json(indent=2)
+
+
+__all__ = [
+    "ScalpelExtractTool",
+    "ScalpelInlineTool",
+    "ScalpelSplitFileTool",
+]
