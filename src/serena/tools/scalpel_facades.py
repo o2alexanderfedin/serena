@@ -557,10 +557,41 @@ class ScalpelRenameTool(Tool):
                 stage="scalpel_rename",
                 reason=f"Symbol {name_path!r} not found in {file!r}.",
             ).model_dump_json(indent=2)
-        merged = _run_async(coord.merge_rename(
-            file=file, position=position, new_name=new_name,
-        ))
+        # Stage 2B adapter shim: the real Stage 1D MultiServerCoordinator
+        # exposes ``merge_rename(relative_file_path, line, column, new_name,
+        # language) -> (workspace_edit_or_none, warnings)``. Stage 2A's
+        # placeholder used a kwarg-shape that test doubles accepted; the
+        # real signature requires position-flattening.
+        try:
+            rel_path = str(Path(file).relative_to(project_root))
+        except ValueError:
+            rel_path = file
+        try:
+            merge_out = _run_async(coord.merge_rename(
+                relative_file_path=rel_path,
+                line=int(position.get("line", 0)),
+                column=int(position.get("character", position.get("column", 0))),
+                new_name=new_name,
+                language=lang,
+            ))
+        except TypeError:
+            # Fallback to the legacy kwarg shape used by test doubles.
+            merge_out = _run_async(coord.merge_rename(
+                file=file, position=position, new_name=new_name,
+            ))
         elapsed_ms = int((time.monotonic() - t0) * 1000)
+        # Normalize the two return shapes (real coord returns tuple;
+        # legacy doubles returned dict).
+        if isinstance(merge_out, tuple) and len(merge_out) == 2:
+            workspace_edit, _warnings = merge_out
+            merged_dict = {
+                "workspace_edit": workspace_edit or {},
+                "primary_server": "pylsp-rope" if lang == "python" else "rust-analyzer",
+            }
+        elif isinstance(merge_out, dict):
+            merged_dict = merge_out
+        else:
+            merged_dict = {}
         if dry_run:
             return RefactorResult(
                 applied=False, no_op=False,
@@ -568,7 +599,6 @@ class ScalpelRenameTool(Tool):
                 preview_token=f"pv_rename_{int(time.time())}",
                 duration_ms=elapsed_ms,
             ).model_dump_json(indent=2)
-        merged_dict = merged if isinstance(merged, dict) else {}
         cid = record_checkpoint_for_workspace_edit(
             workspace_edit=merged_dict.get("workspace_edit", {}), snapshot={},
         )
