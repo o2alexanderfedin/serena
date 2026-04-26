@@ -14,6 +14,7 @@ from .checkpoints import CheckpointStore, inverse_workspace_edit
 from .discovery import PluginRecord, default_cache_root, discover_sibling_plugins, enabled_languages
 from .lsp_pool import LspPool, LspPoolKey, PoolEvent, PoolStats, WaitingForLspBudget
 from .multi_server import (
+    EditAttributionLog,
     MergedCodeAction,
     MultiServerBroadcastResult,
     MultiServerCoordinator,
@@ -25,6 +26,7 @@ from .transactions import TransactionStore
 
 __all__ = [
     "CheckpointStore",
+    "EditAttributionLog",
     "LspPool",
     "LspPoolKey",
     "MergedCodeAction",

@@ -14,7 +14,7 @@ Above: facades see merged ``MergedCodeAction`` lists with
 
 from __future__ import annotations
 
-from typing import Any, Literal, cast
+from typing import Any, Iterator, Literal, cast
 
 from pydantic import BaseModel, Field
 
@@ -87,6 +87,8 @@ class MultiServerBroadcastResult(BaseModel):
 # ---------------------------------------------------------------------------
 
 import asyncio
+import datetime
+import json
 import os
 import time
 
@@ -1187,7 +1189,98 @@ class MultiServerCoordinator:
         return primary_edit, warnings
 
 
+class EditAttributionLog:
+    """Append-only JSONL log of every applied WorkspaceEdit per §11.5.
+
+    Schema (one record per line):
+        {"ts": ISO8601 UTC, "checkpoint_id": str, "tool": str, "server": str,
+         "kind": "TextDocumentEdit"|"CreateFile"|"RenameFile"|"DeleteFile",
+         "uri": str, "edit_count": int, "version": int|None}
+
+    Idempotent — replaying the log replays the exact session per §11.5.
+    Writes serialise through ``self._lock`` so concurrent appends cannot
+    interleave bytes within a JSONL line.
+    """
+
+    def __init__(self, project_root: Path) -> None:
+        self._project_root = Path(project_root)
+        self._lock = asyncio.Lock()
+
+    @property
+    def path(self) -> Path:
+        return self._project_root / ".serena" / "python-edit-log.jsonl"
+
+    async def append(
+        self,
+        *,
+        checkpoint_id: str,
+        tool: str,
+        server: str,
+        edit: dict[str, Any],
+    ) -> None:
+        """Append one record per ``documentChanges`` entry in ``edit``.
+
+        Multi-entry WorkspaceEdits emit one log line per entry so replay
+        forensics can map each line to a single LSP operation.
+        """
+        records = list(self._records_from_edit(checkpoint_id, tool, server, edit))
+        if not records:
+            return
+        async with self._lock:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with self.path.open("a", encoding="utf-8") as fh:
+                for rec in records:
+                    fh.write(json.dumps(rec, separators=(",", ":")) + "\n")
+
+    def replay(self) -> Iterator[dict[str, Any]]:
+        """Yield every record in append order. Empty when the log is missing."""
+        if not self.path.exists():
+            return
+        with self.path.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                yield json.loads(line)
+
+    @staticmethod
+    def _records_from_edit(
+        checkpoint_id: str, tool: str, server: str, edit: dict[str, Any]
+    ) -> Iterator[dict[str, Any]]:
+        ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        for change in edit.get("documentChanges", []) or []:
+            kind_field = change.get("kind")
+            if kind_field == "create":
+                yield {
+                    "ts": ts, "checkpoint_id": checkpoint_id, "tool": tool, "server": server,
+                    "kind": "CreateFile", "uri": change["uri"],
+                    "edit_count": 0, "version": None,
+                }
+            elif kind_field == "rename":
+                yield {
+                    "ts": ts, "checkpoint_id": checkpoint_id, "tool": tool, "server": server,
+                    "kind": "RenameFile", "uri": change["newUri"],
+                    "edit_count": 0, "version": None,
+                }
+            elif kind_field == "delete":
+                yield {
+                    "ts": ts, "checkpoint_id": checkpoint_id, "tool": tool, "server": server,
+                    "kind": "DeleteFile", "uri": change["uri"],
+                    "edit_count": 0, "version": None,
+                }
+            else:
+                # Default: TextDocumentEdit shape.
+                td = change.get("textDocument", {})
+                edits = change.get("edits", []) or []
+                yield {
+                    "ts": ts, "checkpoint_id": checkpoint_id, "tool": tool, "server": server,
+                    "kind": "TextDocumentEdit", "uri": td.get("uri", ""),
+                    "edit_count": len(edits), "version": td.get("version"),
+                }
+
+
 __all__ = [
+    "EditAttributionLog",
     "MergedCodeAction",
     "MultiServerBroadcastResult",
     "MultiServerCoordinator",
