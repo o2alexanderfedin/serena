@@ -305,3 +305,76 @@ def capability_catalog_baseline_path() -> Path:
 @pytest.fixture(scope="session")
 def update_catalog_baseline_requested(request: pytest.FixtureRequest) -> bool:
     return bool(request.config.getoption("update_catalog_baseline"))
+
+
+# --- Stage 1J fixtures ----------------------------------------------------
+
+from dataclasses import dataclass as _t1j_dataclass
+from dataclasses import field as _t1j_field
+
+
+@_t1j_dataclass(frozen=True)
+class _FakeFacade:
+    """Stand-in for a real Stage 1H FacadeRouter facade entry."""
+
+    name: str
+    summary: str
+    trigger_phrases: tuple[str, ...]
+    primitive_chain: tuple[str, ...]
+
+
+@_t1j_dataclass(frozen=True)
+class _FakeStrategy:
+    """Stand-in for a Stage 1E ``LanguageStrategy`` used by Stage 1J render tests."""
+
+    language: str
+    display_name: str
+    file_extensions: tuple[str, ...]
+    lsp_server_cmd: tuple[str, ...]
+    facades: tuple[_FakeFacade, ...] = _t1j_field(default_factory=tuple)
+
+
+# Re-export private dataclasses so other test modules can import them.
+__all__ = ["_FakeFacade", "_FakeStrategy"]
+
+
+@pytest.fixture
+def fake_strategy_rust() -> _FakeStrategy:
+    return _FakeStrategy(
+        language="rust",
+        display_name="Rust",
+        file_extensions=(".rs",),
+        lsp_server_cmd=("rust-analyzer",),
+        facades=(
+            _FakeFacade(
+                "split_file",
+                "Split a file along symbol boundaries",
+                ("split this file", "extract symbols"),
+                ("textDocument/codeAction", "workspace/applyEdit"),
+            ),
+            _FakeFacade(
+                "rename_symbol",
+                "Rename a symbol across the workspace",
+                ("rename this", "refactor name"),
+                ("textDocument/rename",),
+            ),
+        ),
+    )
+
+
+@pytest.fixture
+def fake_strategy_python() -> _FakeStrategy:
+    return _FakeStrategy(
+        language="python",
+        display_name="Python",
+        file_extensions=(".py",),
+        lsp_server_cmd=("pylsp",),
+        facades=(
+            _FakeFacade(
+                "split_file",
+                "Split a Python module",
+                ("split module",),
+                ("textDocument/codeAction",),
+            ),
+        ),
+    )
