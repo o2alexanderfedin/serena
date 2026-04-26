@@ -1,0 +1,27 @@
+---
+name: $skill_name
+description: $description
+type: skill
+---
+
+# $title
+
+$summary
+
+## When to use
+
+Invoke `scalpel_${facade}` (language: **$language**) when the user says any of:
+
+$trigger_list
+
+## How it works
+
+The facade composes the following LSP primitives in order:
+
+$primitive_list
+
+## Tool call
+
+```json
+{"tool": "scalpel_${facade}", "arguments": {"path": "<file>", "language": "$language"}}
+```

@@ -22,6 +22,8 @@ ends in a trailing newline (POSIX). All shell scripts are POSIX ``sh``.
 from __future__ import annotations
 
 import json
+from pathlib import Path
+from string import Template
 from typing import Protocol
 
 from serena.refactoring.plugin_schemas import (
@@ -32,6 +34,15 @@ from serena.refactoring.plugin_schemas import (
     PluginEntry,
     PluginManifest,
 )
+
+_TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+
+def _load_template(name: str) -> Template:
+    return Template((_TEMPLATES_DIR / name).read_text(encoding="utf-8"))
+
+
+_SKILL_TMPL = _load_template("skill.md.tmpl")
 
 # Identity constants for every emitted plugin. Kept module-private so they
 # travel with the generator and are easy to lift to env in Stage 1K if we
@@ -49,6 +60,15 @@ class _StrategyLike(Protocol):
     display_name: str
     file_extensions: tuple[str, ...]
     lsp_server_cmd: tuple[str, ...]
+
+
+class _FacadeLike(Protocol):
+    """Structural subset of a facade entry the skill renderer depends on."""
+
+    name: str
+    summary: str
+    trigger_phrases: tuple[str, ...]
+    primitive_chain: tuple[str, ...]
 
 
 def _plugin_name(strategy: _StrategyLike) -> str:
@@ -123,9 +143,42 @@ def _render_marketplace_json(strategies: list[_StrategyLike]) -> str:
     return json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
 
 
+def _skill_name_for(strategy: _StrategyLike, facade: _FacadeLike) -> str:
+    """Compute the canonical skill name for a (strategy, facade) pair."""
+
+    return f"using-scalpel-{facade.name.replace('_', '-')}-{strategy.language}"
+
+
+def _render_skill_for_facade(
+    strategy: _StrategyLike, facade: _FacadeLike
+) -> str:
+    """Render a single ``skills/using-scalpel-<facade>-<lang>.md`` file."""
+
+    skill_name = _skill_name_for(strategy, facade)
+    description = (
+        f"When user asks to {facade.summary.lower()} in {strategy.display_name}, "
+        f"use scalpel_{facade.name}"
+    )
+    trigger_list = "\n".join(f'- "{p}"' for p in facade.trigger_phrases)
+    primitive_list = "\n".join(
+        f"{i + 1}. `{p}`" for i, p in enumerate(facade.primitive_chain)
+    )
+    return _SKILL_TMPL.substitute(
+        skill_name=skill_name,
+        description=description,
+        title=f"Scalpel - {facade.name} ({strategy.display_name})",
+        summary=facade.summary,
+        facade=facade.name,
+        language=strategy.language,
+        trigger_list=trigger_list,
+        primitive_list=primitive_list,
+    )
+
+
 __all__ = [
     "PluginManifest",  # re-export for callers
     "_render_marketplace_json",
     "_render_mcp_json",
     "_render_plugin_json",
+    "_render_skill_for_facade",
 ]
