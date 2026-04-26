@@ -69,7 +69,29 @@ def _render_plugin_json(strategy: _StrategyLike) -> str:
     return json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
 
 
+def _render_mcp_json(strategy: _StrategyLike) -> str:
+    """Render the ``.mcp.json`` registering one MCP server per language."""
+
+    payload = {
+        "mcpServers": {
+            f"scalpel-{strategy.language}": {
+                "command": "uvx",
+                "args": [
+                    "--from",
+                    "git+https://github.com/o2services/o2-scalpel.git#subdirectory=vendor/serena",
+                    "serena-mcp",
+                    "--language",
+                    strategy.language,
+                ],
+                "env": {},
+            }
+        }
+    }
+    return json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+
+
 __all__ = [
     "PluginManifest",  # re-export for callers
+    "_render_mcp_json",
     "_render_plugin_json",
 ]
