@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -26,7 +27,7 @@ def _write_plugin(root: Path, owner: str, plugin: str, language: str) -> Path:
 
 
 @pytest.fixture(autouse=True)
-def _clear_discovery_cache() -> None:
+def _clear_discovery_cache() -> Iterator[None]:
     discover_sibling_plugins.cache_clear()
     yield
     discover_sibling_plugins.cache_clear()
