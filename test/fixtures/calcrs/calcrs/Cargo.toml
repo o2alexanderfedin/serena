@@ -1,0 +1,11 @@
+[package]
+name = "calcrs"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+calcrs-core = { path = "../calcrs-core" }
