@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import time
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from serena.tools.facade_support import (
     build_failure_result,
@@ -557,41 +557,29 @@ class ScalpelRenameTool(Tool):
                 stage="scalpel_rename",
                 reason=f"Symbol {name_path!r} not found in {file!r}.",
             ).model_dump_json(indent=2)
-        # Stage 2B adapter shim: the real Stage 1D MultiServerCoordinator
-        # exposes ``merge_rename(relative_file_path, line, column, new_name,
-        # language) -> (workspace_edit_or_none, warnings)``. Stage 2A's
-        # placeholder used a kwarg-shape that test doubles accepted; the
-        # real signature requires position-flattening.
+        # v0.2.0-B: permanent integration of the real Stage 1D
+        # MultiServerCoordinator.merge_rename signature
+        # ``(relative_file_path, line, column, new_name, language)`` returning
+        # ``(workspace_edit_or_none, warnings)``. The Stage 2B adapter shim
+        # try/except over a kwarg-shape used by test doubles is gone; doubles
+        # now match the real positional signature.
         try:
             rel_path = str(Path(file).relative_to(project_root))
         except ValueError:
             rel_path = file
-        try:
-            merge_out = _run_async(coord.merge_rename(
-                relative_file_path=rel_path,
-                line=int(position.get("line", 0)),
-                column=int(position.get("character", position.get("column", 0))),
-                new_name=new_name,
-                language=lang,
-            ))
-        except TypeError:
-            # Fallback to the legacy kwarg shape used by test doubles.
-            merge_out = _run_async(coord.merge_rename(
-                file=file, position=position, new_name=new_name,
-            ))
+        merge_out = _run_async(coord.merge_rename(
+            relative_file_path=rel_path,
+            line=int(position.get("line", 0)),
+            column=int(position.get("character", position.get("column", 0))),
+            new_name=new_name,
+            language=lang,
+        ))
         elapsed_ms = int((time.monotonic() - t0) * 1000)
-        # Normalize the two return shapes (real coord returns tuple;
-        # legacy doubles returned dict).
-        if isinstance(merge_out, tuple) and len(merge_out) == 2:
-            workspace_edit, _warnings = merge_out
-            merged_dict = {
-                "workspace_edit": workspace_edit or {},
-                "primary_server": "pylsp-rope" if lang == "python" else "rust-analyzer",
-            }
-        elif isinstance(merge_out, dict):
-            merged_dict = merge_out
-        else:
-            merged_dict = {}
+        workspace_edit, _ = merge_out
+        merged_dict = {
+            "workspace_edit": workspace_edit or {},
+            "primary_server": "pylsp-rope" if lang == "python" else "rust-analyzer",
+        }
         if dry_run:
             return RefactorResult(
                 applied=False, no_op=False,
@@ -618,18 +606,18 @@ class ScalpelRenameTool(Tool):
     def _resolve_symbol_position(
         self, *, coord: Any, file: str, name_path: str,
     ) -> dict[str, int] | None:
-        """Resolve name_path to an LSP position.
+        """Resolve name_path to an LSP position via the coordinator.
 
-        Prefers ``coord.find_symbol_position(file=..., name_path=...)`` when
-        the coordinator exposes it (test doubles do). Falls back to a thin
-        text-search across the file when the coordinator does not (real
-        Stage 1D coordinator does not yet expose this method — Stage 2B
-        follow-up).
+        v0.2.0-C: ``MultiServerCoordinator.find_symbol_position`` is now a
+        first-class method backed by ``request_document_symbols`` plus a
+        ``request_workspace_symbol`` fallback. The Stage 2A text-search
+        fallback (``_text_search_position``) was removed alongside this
+        change — every coordinator (real and test-double) is expected to
+        expose ``find_symbol_position``.
         """
-        find_fn = getattr(coord, "find_symbol_position", None)
-        if find_fn is not None:
-            return _run_async(find_fn(file=file, name_path=name_path))
-        return _text_search_position(file=file, name_path=name_path)
+        return _run_async(coord.find_symbol_position(
+            file=file, name_path=name_path,
+        ))
 
     def _rename_python_module(
         self,
@@ -666,26 +654,6 @@ class ScalpelRenameTool(Tool):
                 count=1, total_ms=0,
             ),),
         )
-
-
-def _text_search_position(*, file: str, name_path: str) -> dict[str, int] | None:
-    """Thin text-search fallback when the coordinator lacks find_symbol_position.
-
-    Returns the line/character of the first occurrence of the last segment of
-    ``name_path``. Stage 2B will replace this with a real document-symbol
-    lookup. Stage 2A only needs the position to feed merge_rename — even an
-    approximate hit is better than failing closed.
-    """
-    target_name = name_path.split("::")[-1].split(".")[-1]
-    try:
-        text = Path(file).read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return None
-    for lineno, line in enumerate(text.splitlines()):
-        col = line.find(target_name)
-        if col >= 0:
-            return {"line": lineno, "character": col}
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -834,12 +802,22 @@ _FACADE_DISPATCH: dict[str, Any] = {}
 
 
 def _bind_facade_dispatch_table() -> None:
-    """Populate _FACADE_DISPATCH with bound `apply` methods of the 5 facades."""
-    _FACADE_DISPATCH["scalpel_split_file"] = lambda **kw: ScalpelSplitFileTool().apply(**kw)
-    _FACADE_DISPATCH["scalpel_extract"] = lambda **kw: ScalpelExtractTool().apply(**kw)
-    _FACADE_DISPATCH["scalpel_inline"] = lambda **kw: ScalpelInlineTool().apply(**kw)
-    _FACADE_DISPATCH["scalpel_rename"] = lambda **kw: ScalpelRenameTool().apply(**kw)
-    _FACADE_DISPATCH["scalpel_imports_organize"] = lambda **kw: ScalpelImportsOrganizeTool().apply(**kw)
+    """Populate _FACADE_DISPATCH with bound `apply` methods of the 5 facades.
+
+    NOTE: Tool subclasses inherit ``Tool.__init__(agent: SerenaAgent)`` but
+    the Scalpel facades override ``get_project_root`` and never touch
+    ``self.agent``. Tests patch _FACADE_DISPATCH wholesale; the real LLM
+    path constructs facade Tools through the MCP framework with a real
+    agent. The ``cast(Any, None)`` here is the documented seam where the
+    facade dispatch and the agent-bound Tool lifecycle meet — see v0.2.0
+    backlog item "transaction-commit dispatch passes agent forward".
+    """
+    none_agent = cast(Any, None)
+    _FACADE_DISPATCH["scalpel_split_file"] = lambda **kw: ScalpelSplitFileTool(none_agent).apply(**kw)
+    _FACADE_DISPATCH["scalpel_extract"] = lambda **kw: ScalpelExtractTool(none_agent).apply(**kw)
+    _FACADE_DISPATCH["scalpel_inline"] = lambda **kw: ScalpelInlineTool(none_agent).apply(**kw)
+    _FACADE_DISPATCH["scalpel_rename"] = lambda **kw: ScalpelRenameTool(none_agent).apply(**kw)
+    _FACADE_DISPATCH["scalpel_imports_organize"] = lambda **kw: ScalpelImportsOrganizeTool(none_agent).apply(**kw)
 
 
 class ScalpelTransactionCommitTool(Tool):
