@@ -25,6 +25,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from pydantic import BaseModel
+
 log = logging.getLogger("serena.refactoring.lsp_pool")
 
 
@@ -75,6 +77,19 @@ class PoolStats:
     budget_reject_count: int = 0
 
 
+class PoolEvent(BaseModel):
+    """One JSONL row emitted to ``.serena/pool-events.jsonl``."""
+
+    ts: float
+    kind: str  # spawn / acquire / release / pre_ping_fail / idle_reap / budget_reject
+    language: str | None = None
+    project_root: str | None = None
+    inflight: int | None = None
+    rss_mb: float | None = None
+    ceiling_mb: float | None = None
+    transaction_id: str | None = None
+
+
 class LspPool:
     """In-memory pool of ``SolidLanguageServer`` instances keyed by ``LspPoolKey``."""
 
@@ -85,6 +100,7 @@ class LspPool:
         ram_ceiling_mb: float,
         reaper_enabled: bool = True,
         pre_ping_on_acquire: bool = True,
+        events_path: Path | None = None,
     ) -> None:
         """:param spawn_fn: factory invoked once per (key) miss to create a server.
         :param idle_shutdown_seconds: how long an entry can sit at inflight=0
@@ -95,6 +111,8 @@ class LspPool:
             Tests pass ``False`` to keep the per-test state deterministic.
         :param pre_ping_on_acquire: whether to health-probe cached entries
             before returning them. Tests may pass ``False`` to skip the probe.
+        :param events_path: path to JSONL file for telemetry events. If None,
+            no events are emitted (default for tests that don't care).
         """
         import os as _os
         self._spawn_fn = spawn_fn
@@ -116,6 +134,7 @@ class LspPool:
         self._pre_ping_on_acquire = pre_ping_on_acquire
         self._txn_pins: dict[str, set[LspPoolKey]] = {}
         self._pinned_keys: dict[LspPoolKey, int] = {}
+        self._events_path = events_path
         if reaper_enabled:
             self.start_reaper()
 
@@ -135,10 +154,13 @@ class LspPool:
         with self._pool_lock:
             entry = self._entries.get(key)
             if entry is None:
-                return
-            if entry.inflight > 0:
-                entry.inflight -= 1
-            entry.last_used_ts = self._now()
+                inflight_count = 0
+            else:
+                if entry.inflight > 0:
+                    entry.inflight -= 1
+                entry.last_used_ts = self._now()
+                inflight_count = entry.inflight
+        self._emit_event("release", key=key, inflight=inflight_count)
 
     def acquire_for_transaction(self, key: LspPoolKey, transaction_id: str) -> Any:
         """Acquire ``key`` AND pin the entry to ``transaction_id``.
@@ -182,6 +204,24 @@ class LspPool:
 
     # ----------------------------------------------------------------------
 
+    def _emit_event(self, kind: str, key: LspPoolKey | None = None, **fields: object) -> None:
+        if self._events_path is None:
+            return
+        try:
+            evt = PoolEvent(
+                ts=self._now(),
+                kind=kind,
+                language=key.language if key is not None else None,
+                project_root=key.project_root if key is not None else None,
+                **fields,  # type: ignore[arg-type]
+            )
+            self._events_path.parent.mkdir(parents=True, exist_ok=True)
+            with self._events_path.open("a", encoding="utf-8") as f:
+                f.write(evt.model_dump_json())
+                f.write("\n")
+        except Exception:  # pragma: no cover — telemetry is best-effort
+            log.exception("LspPool telemetry emit failed (kind=%s)", kind)
+
     def _acquire_internal(self, key: LspPoolKey, allow_pre_ping: bool) -> Any:
         """Like ``acquire`` but with explicit pre-ping toggle.
 
@@ -215,9 +255,11 @@ class LspPool:
                 log.info("LspPool spawn key=%s", key)
                 entry.server = self._spawn_fn(key)
                 self._spawn_count += 1
+                self._emit_event("spawn", key=key)
         with self._pool_lock:
             entry.last_used_ts = self._now()
             self._entries.move_to_end(key)
+        self._emit_event("acquire", key=key, inflight=entry.inflight)
         return entry.server
 
     def _check_budget_or_raise(self, key: LspPoolKey) -> None:
@@ -225,6 +267,7 @@ class LspPool:
         if rss > self._ram_ceiling_mb:
             with self._pool_lock:
                 self._budget_reject_count += 1
+            self._emit_event("budget_reject", key=key, rss_mb=rss, ceiling_mb=self._ram_ceiling_mb)
             raise WaitingForLspBudget(
                 f"LspPool spawn refused for key={key}: "
                 f"{rss:.1f} MB > ceiling {self._ram_ceiling_mb:.1f} MB. "
@@ -255,6 +298,7 @@ class LspPool:
                 if cur is entry:
                     self._entries.pop(key, None)
                 self._pre_ping_fail_count += 1
+            self._emit_event("pre_ping_fail", key=key)
             try:
                 entry.server.stop()
             except Exception:  # pragma: no cover
@@ -331,19 +375,19 @@ class LspPool:
         # Phase 1: collect candidates under the pool lock; do not call stop()
         # while holding it (lock-order discipline mirrors Stage 1B
         # TransactionStore._evict_lru).
-        candidates: list[_ServerEntry] = []
+        candidates: list[tuple[LspPoolKey, _ServerEntry]] = []
         with self._pool_lock:
             for key, entry in list(self._entries.items()):
                 if key in self._pinned_keys:
                     continue  # transaction-pinned: exempt from reap.
                 if entry.inflight == 0 and entry.server is not None and (now - entry.last_used_ts) >= self._idle_seconds:
-                    candidates.append(entry)
+                    candidates.append((key, entry))
                     # Remove eagerly so a concurrent acquire re-spawns rather
                     # than racing the reaper into stop().
                     self._entries.pop(key, None)
         # Phase 2: actually stop them.
         reaped = 0
-        for entry in candidates:
+        for _key, entry in candidates:
             srv = entry.server
             if srv is None:
                 continue
@@ -355,6 +399,8 @@ class LspPool:
         if reaped:
             with self._pool_lock:
                 self._idle_reaped_count += reaped
+            for k, _ in candidates:
+                self._emit_event("idle_reap", key=k)
         return reaped
 
     # --- internals -------------------------------------------------------
