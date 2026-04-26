@@ -378,3 +378,56 @@ def fake_strategy_python() -> _FakeStrategy:
             ),
         ),
     )
+
+
+# --- Stage 2A: role-specific fake servers (extend Stage 1D _FakeServer) ---
+
+
+class _FakeRustAnalyzer(_FakeServer):
+    """Fake rust-analyzer for Stage 2A facade tests."""
+
+    SERVER_ID = "rust-analyzer"
+    LANGUAGE_TAG = "rust"
+
+    def __init__(self) -> None:
+        super().__init__(server_id=self.SERVER_ID)
+
+
+class _FakePylsp(_FakeServer):
+    SERVER_ID = "pylsp-rope"
+    LANGUAGE_TAG = "python:pylsp-rope"
+
+    def __init__(self) -> None:
+        super().__init__(server_id=self.SERVER_ID)
+
+
+class _FakeBasedpyright(_FakeServer):
+    SERVER_ID = "basedpyright"
+    LANGUAGE_TAG = "python:basedpyright"
+
+    def __init__(self) -> None:
+        super().__init__(server_id=self.SERVER_ID)
+
+
+class _FakeRuff(_FakeServer):
+    SERVER_ID = "ruff"
+    LANGUAGE_TAG = "python:ruff"
+
+    def __init__(self) -> None:
+        super().__init__(server_id=self.SERVER_ID)
+
+
+@pytest.fixture
+def fake_python_servers():
+    """Three-server dict shaped for `MultiServerCoordinator(servers=...)`."""
+    return {
+        "pylsp-rope": _FakePylsp(),
+        "basedpyright": _FakeBasedpyright(),
+        "ruff": _FakeRuff(),
+    }
+
+
+@pytest.fixture
+def fake_rust_servers():
+    """One-server dict for the Rust single-LSP path."""
+    return {"rust-analyzer": _FakeRustAnalyzer()}
