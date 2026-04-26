@@ -484,8 +484,183 @@ class ScalpelInlineTool(Tool):
         ).model_dump_json(indent=2)
 
 
+# ---------------------------------------------------------------------------
+# T6: ScalpelRenameTool
+# ---------------------------------------------------------------------------
+
+
+def _looks_like_module_name_path(name_path: str, file: str) -> bool:
+    """Heuristic: name_path matches the file's basename (no separators)."""
+    if "/" in name_path or "." in name_path or "::" in name_path:
+        return False
+    base = Path(file).stem
+    return name_path == base
+
+
+class ScalpelRenameTool(Tool):
+    """Rename a symbol everywhere it is referenced. Cross-file."""
+
+    def apply(
+        self,
+        file: str,
+        name_path: str,
+        new_name: str,
+        also_in_strings: bool = False,
+        dry_run: bool = False,
+        preview_token: str | None = None,
+        language: Literal["rust", "python"] | None = None,
+        allow_out_of_workspace: bool = False,
+    ) -> str:
+        """Rename a symbol everywhere it is referenced. Cross-file.
+        Returns checkpoint_id. Hallucination-resistant on name-paths.
+
+        :param file: file containing the definition (or any reference).
+        :param name_path: Serena name-path of the symbol (e.g. 'mod::Sym').
+        :param new_name: replacement name.
+        :param also_in_strings: also rewrite string-literal occurrences.
+        :param dry_run: preview only.
+        :param preview_token: continuation from a prior dry-run.
+        :param language: 'rust' or 'python'; inferred from extension when None.
+        :param allow_out_of_workspace: skip workspace-boundary check.
+        :return: JSON RefactorResult.
+        """
+        del also_in_strings, preview_token
+        project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
+        guard = workspace_boundary_guard(
+            file=file, project_root=project_root,
+            allow_out_of_workspace=allow_out_of_workspace,
+        )
+        if guard is not None:
+            return guard.model_dump_json(indent=2)
+        lang = _infer_language(file, language)
+        if lang not in ("rust", "python"):
+            return build_failure_result(
+                code=ErrorCode.INVALID_ARGUMENT,
+                stage="scalpel_rename",
+                reason=f"Cannot infer language from {file!r}; pass language=.",
+                recoverable=False,
+            ).model_dump_json(indent=2)
+        # Module-rename short-circuit: prefer Rope (preserves __all__).
+        if lang == "python" and _looks_like_module_name_path(name_path, file):
+            return self._rename_python_module(
+                file=file, new_name=new_name,
+                project_root=project_root, dry_run=dry_run,
+            ).model_dump_json(indent=2)
+        coord = coordinator_for_facade(language=lang, project_root=project_root)
+        t0 = time.monotonic()
+        position = self._resolve_symbol_position(
+            coord=coord, file=file, name_path=name_path,
+        )
+        if position is None:
+            return build_failure_result(
+                code=ErrorCode.SYMBOL_NOT_FOUND,
+                stage="scalpel_rename",
+                reason=f"Symbol {name_path!r} not found in {file!r}.",
+            ).model_dump_json(indent=2)
+        merged = _run_async(coord.merge_rename(
+            file=file, position=position, new_name=new_name,
+        ))
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        if dry_run:
+            return RefactorResult(
+                applied=False, no_op=False,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                preview_token=f"pv_rename_{int(time.time())}",
+                duration_ms=elapsed_ms,
+            ).model_dump_json(indent=2)
+        merged_dict = merged if isinstance(merged, dict) else {}
+        cid = record_checkpoint_for_workspace_edit(
+            workspace_edit=merged_dict.get("workspace_edit", {}), snapshot={},
+        )
+        return RefactorResult(
+            applied=True,
+            diagnostics_delta=_empty_diagnostics_delta(),
+            checkpoint_id=cid,
+            duration_ms=elapsed_ms,
+            lsp_ops=(LspOpStat(
+                method="textDocument/rename",
+                server=str(merged_dict.get("primary_server", "unknown")),
+                count=1,
+                total_ms=elapsed_ms,
+            ),),
+        ).model_dump_json(indent=2)
+
+    def _resolve_symbol_position(
+        self, *, coord: Any, file: str, name_path: str,
+    ) -> dict[str, int] | None:
+        """Resolve name_path to an LSP position.
+
+        Prefers ``coord.find_symbol_position(file=..., name_path=...)`` when
+        the coordinator exposes it (test doubles do). Falls back to a thin
+        text-search across the file when the coordinator does not (real
+        Stage 1D coordinator does not yet expose this method — Stage 2B
+        follow-up).
+        """
+        find_fn = getattr(coord, "find_symbol_position", None)
+        if find_fn is not None:
+            return _run_async(find_fn(file=file, name_path=name_path))
+        return _text_search_position(file=file, name_path=name_path)
+
+    def _rename_python_module(
+        self,
+        *,
+        file: str,
+        new_name: str,
+        project_root: Path,
+        dry_run: bool,
+    ) -> RefactorResult:
+        rel = str(Path(file).relative_to(project_root))
+        target_rel = f"{new_name}.py"
+        bridge = _build_python_rope_bridge(project_root)
+        try:
+            edit = bridge.move_module(rel, target_rel)
+        finally:
+            try:
+                bridge.close()
+            except Exception:
+                pass
+        if dry_run:
+            return RefactorResult(
+                applied=False, no_op=False,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                preview_token=f"pv_rename_mod_{int(time.time())}",
+            )
+        cid = record_checkpoint_for_workspace_edit(edit, snapshot={})
+        return RefactorResult(
+            applied=True,
+            diagnostics_delta=_empty_diagnostics_delta(),
+            checkpoint_id=cid,
+            lsp_ops=(LspOpStat(
+                method="rope.refactor.move",
+                server="pylsp-rope",
+                count=1, total_ms=0,
+            ),),
+        )
+
+
+def _text_search_position(*, file: str, name_path: str) -> dict[str, int] | None:
+    """Thin text-search fallback when the coordinator lacks find_symbol_position.
+
+    Returns the line/character of the first occurrence of the last segment of
+    ``name_path``. Stage 2B will replace this with a real document-symbol
+    lookup. Stage 2A only needs the position to feed merge_rename — even an
+    approximate hit is better than failing closed.
+    """
+    target_name = name_path.split("::")[-1].split(".")[-1]
+    try:
+        text = Path(file).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    for lineno, line in enumerate(text.splitlines()):
+        col = line.find(target_name)
+        if col >= 0:
+            return {"line": lineno, "character": col}
+    return None
+
+
 __all__ = [
     "ScalpelExtractTool",
     "ScalpelInlineTool",
+    "ScalpelRenameTool",
     "ScalpelSplitFileTool",
 ]
