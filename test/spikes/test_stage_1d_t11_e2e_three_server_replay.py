@@ -7,8 +7,6 @@ pipeline on the actual MultiServerCoordinator built in T1-T10.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from serena.refactoring.multi_server import (
