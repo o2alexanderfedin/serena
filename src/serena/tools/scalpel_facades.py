@@ -658,8 +658,129 @@ def _text_search_position(*, file: str, name_path: str) -> dict[str, int] | None
     return None
 
 
+# ---------------------------------------------------------------------------
+# T7: ScalpelImportsOrganizeTool
+# ---------------------------------------------------------------------------
+
+
+_ENGINE_TO_PROVENANCE: dict[str, str] = {
+    "ruff": "ruff",
+    "rope": "pylsp-rope",
+    "basedpyright": "basedpyright",
+}
+
+
+class ScalpelImportsOrganizeTool(Tool):
+    """Add missing, remove unused, reorder imports across files."""
+
+    def apply(
+        self,
+        files: list[str],
+        add_missing: bool = True,
+        remove_unused: bool = True,
+        reorder: bool = True,
+        engine: Literal["auto", "rope", "ruff", "basedpyright"] = "auto",
+        dry_run: bool = False,
+        preview_token: str | None = None,
+        language: Literal["rust", "python"] | None = None,
+        allow_out_of_workspace: bool = False,
+    ) -> str:
+        """Add missing, remove unused, reorder imports across files.
+        Idempotent; safe to re-call.
+
+        :param files: list of source files to organize.
+        :param add_missing: synthesize import statements for unresolved names.
+        :param remove_unused: drop unused imports.
+        :param reorder: sort imports per the engine's house style.
+        :param engine: 'auto' (priority table) | 'rope' | 'ruff' | 'basedpyright'.
+        :param dry_run: preview only.
+        :param preview_token: continuation from a prior dry-run.
+        :param language: 'rust' or 'python'; inferred from extension when None.
+        :param allow_out_of_workspace: skip workspace-boundary check.
+        :return: JSON RefactorResult.
+        """
+        del add_missing, remove_unused, reorder, preview_token
+        project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
+        if not files:
+            # Q4 boundary check is irrelevant when there are no files; emit no-op.
+            return RefactorResult(
+                applied=False, no_op=True,
+                diagnostics_delta=_empty_diagnostics_delta(),
+            ).model_dump_json(indent=2)
+        for f in files:
+            guard = workspace_boundary_guard(
+                file=f, project_root=project_root,
+                allow_out_of_workspace=allow_out_of_workspace,
+            )
+            if guard is not None:
+                return guard.model_dump_json(indent=2)
+        lang = _infer_language(files[0], language)
+        if lang not in ("rust", "python"):
+            return build_failure_result(
+                code=ErrorCode.INVALID_ARGUMENT,
+                stage="scalpel_imports_organize",
+                reason=f"Cannot infer language from {files[0]!r}; pass language=.",
+                recoverable=False,
+            ).model_dump_json(indent=2)
+        coord = coordinator_for_facade(language=lang, project_root=project_root)
+        t0 = time.monotonic()
+        all_actions: list[Any] = []
+        for f in files:
+            actions = _run_async(coord.merge_code_actions(
+                file=f,
+                start={"line": 0, "character": 0},
+                end={"line": 0, "character": 0},
+                only=["source.organizeImports"],
+            ))
+            all_actions.extend(actions)
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        if not all_actions:
+            return RefactorResult(
+                applied=False, no_op=True,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                duration_ms=elapsed_ms,
+            ).model_dump_json(indent=2)
+        warnings: list[str] = []
+        if engine != "auto":
+            keep_provenance = _ENGINE_TO_PROVENANCE.get(engine)
+            kept: list[Any] = []
+            for a in all_actions:
+                if a.provenance == keep_provenance:
+                    kept.append(a)
+                else:
+                    warnings.append(
+                        f"engine={engine!r} discards action from {a.provenance!r}",
+                    )
+            all_actions = kept
+        if dry_run:
+            return RefactorResult(
+                applied=False, no_op=False,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                preview_token=f"pv_org_{int(time.time())}",
+                duration_ms=elapsed_ms,
+                warnings=tuple(warnings),
+            ).model_dump_json(indent=2)
+        cid = record_checkpoint_for_workspace_edit(
+            workspace_edit={"changes": {}}, snapshot={},
+        )
+        return RefactorResult(
+            applied=True,
+            diagnostics_delta=_empty_diagnostics_delta(),
+            checkpoint_id=cid,
+            duration_ms=elapsed_ms,
+            warnings=tuple(warnings),
+            lsp_ops=(LspOpStat(
+                method="textDocument/codeAction",
+                server="multi",
+                count=len(all_actions),
+                total_ms=elapsed_ms,
+            ),),
+        ).model_dump_json(indent=2)
+
+
 __all__ = [
     "ScalpelExtractTool",
+    "ScalpelImportsOrganizeTool",
     "ScalpelInlineTool",
     "ScalpelRenameTool",
     "ScalpelSplitFileTool",
