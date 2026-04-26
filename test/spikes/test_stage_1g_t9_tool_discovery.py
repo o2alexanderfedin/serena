@@ -28,7 +28,26 @@ _STAGE_2A_NAMES: frozenset[str] = frozenset({
     "scalpel_transaction_commit",
 })
 
-EXPECTED_NAMES: frozenset[str] = _STAGE_1G_NAMES | _STAGE_2A_NAMES
+# Stage 3 (v0.2.0) — 12 ergonomic facades across 3 waves.
+_STAGE_3_NAMES: frozenset[str] = frozenset({
+    # Wave A
+    "scalpel_convert_module_layout",
+    "scalpel_change_visibility",
+    "scalpel_tidy_structure",
+    "scalpel_change_type_shape",
+    # Wave B
+    "scalpel_change_return_type",
+    "scalpel_complete_match_arms",
+    "scalpel_extract_lifetime",
+    "scalpel_expand_glob_imports",
+    # Wave C
+    "scalpel_generate_trait_impl_scaffold",
+    "scalpel_generate_member",
+    "scalpel_expand_macro",
+    "scalpel_verify_after_refactor",
+})
+
+EXPECTED_NAMES: frozenset[str] = _STAGE_1G_NAMES | _STAGE_2A_NAMES | _STAGE_3_NAMES
 
 
 def test_all_eight_tools_appear_in_iter_subclasses() -> None:
