@@ -28,6 +28,14 @@ from typing import Any
 log = logging.getLogger("serena.refactoring.lsp_pool")
 
 
+class WaitingForLspBudget(RuntimeError):
+    """Raised by ``LspPool.acquire`` when a new spawn would exceed the §16 RAM ceiling.
+
+    The error message is structured so callers can surface the actual /
+    allowed numbers to the user: ``"<actual_mb> > ceiling <ceiling_mb>"``.
+    """
+
+
 @dataclass(frozen=True, slots=True)
 class LspPoolKey:
     """Canonical (language, project_root) tuple used as a pool dict key.
@@ -137,6 +145,16 @@ class LspPool:
             entry_lock = entry.entry_lock
         with entry_lock:
             if entry.server is None:
+                try:
+                    self._check_budget_or_raise(key)
+                except WaitingForLspBudget:
+                    with self._pool_lock:
+                        # Roll back the inflight bump and pop the placeholder.
+                        if entry.inflight > 0:
+                            entry.inflight -= 1
+                        if entry.server is None and entry.inflight == 0:
+                            self._entries.pop(key, None)
+                    raise
                 log.info("LspPool spawn key=%s", key)
                 entry.server = self._spawn_fn(key)
                 self._spawn_count += 1
@@ -154,6 +172,17 @@ class LspPool:
             if entry.inflight > 0:
                 entry.inflight -= 1
             entry.last_used_ts = self._now()
+
+    def _check_budget_or_raise(self, key: LspPoolKey) -> None:
+        rss = self._resident_set_size_mb()
+        if rss > self._ram_ceiling_mb:
+            with self._pool_lock:
+                self._budget_reject_count += 1
+            raise WaitingForLspBudget(
+                f"LspPool spawn refused for key={key}: "
+                f"{rss:.1f} MB > ceiling {self._ram_ceiling_mb:.1f} MB. "
+                "Wait for idle shutdown to reclaim, or call pool.shutdown_all()."
+            )
 
     def pre_ping(self, key: LspPoolKey) -> bool:
         """Cheap health probe: ``request_workspace_symbol("")``.
@@ -285,3 +314,40 @@ class LspPool:
     def _now() -> float:
         import time
         return time.monotonic()
+
+    @staticmethod
+    def _resident_set_size_mb() -> float:
+        """Aggregate RSS of this Python process + spawned children, in MiB.
+
+        Prefers ``psutil`` (cross-platform, recursive); degrades to POSIX
+        ``resource.getrusage`` (RUSAGE_SELF + RUSAGE_CHILDREN). Per the
+        no-new-runtime-deps rule, psutil is OPTIONAL — the fallback covers
+        macOS + Linux which is the supported MVP host matrix.
+        """
+        try:
+            import psutil  # type: ignore[import-not-found]
+        except ImportError:
+            psutil = None  # type: ignore[assignment]
+        if psutil is not None:
+            try:
+                proc = psutil.Process()
+                total_bytes = proc.memory_info().rss
+                for child in proc.children(recursive=True):
+                    try:
+                        total_bytes += child.memory_info().rss
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+                return total_bytes / (1024.0 * 1024.0)
+            except Exception:  # pragma: no cover
+                pass
+        # POSIX fallback.
+        import resource
+        import sys
+        self_rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        kid_rss = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+        total = float(self_rss + kid_rss)
+        # ru_maxrss is bytes on macOS, kilobytes on Linux.
+        if sys.platform == "linux":
+            return total / 1024.0
+        # macOS / BSD: bytes.
+        return total / (1024.0 * 1024.0)
