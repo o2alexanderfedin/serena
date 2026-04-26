@@ -1,0 +1,12 @@
+[project]
+name = "calcpy-fixture"
+version = "0.1.0"
+description = "Stage 1H minimum-scope calcpy fixture (split out into calcpy/core.py)."
+requires-python = ">=3.11"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["calcpy"]
