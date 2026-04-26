@@ -8,3 +8,4 @@ from .config_tools import *
 from .workflow_tools import *
 from .jetbrains_tools import *
 from .query_project_tools import *
+from .scalpel_primitives import *  # noqa: F401, F403 — Stage 1G primitive tools
