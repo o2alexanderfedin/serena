@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from serena.refactoring.lsp_pool import LspPool, LspPoolKey, PoolEvent, WaitingForLspBudget
+from serena.refactoring.lsp_pool import LspPool, LspPoolKey, WaitingForLspBudget
 
 
 def _read_events(path: Path) -> list[dict[str, object]]:

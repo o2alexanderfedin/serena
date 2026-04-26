@@ -387,7 +387,7 @@ class LspPool:
                     self._entries.pop(key, None)
         # Phase 2: actually stop them.
         reaped = 0
-        for _key, entry in candidates:
+        for _, entry in candidates:
             srv = entry.server
             if srv is None:
                 continue
