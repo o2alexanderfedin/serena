@@ -566,11 +566,161 @@ class ScalpelWorkspaceHealthTool(Tool):
         ).model_dump_json(indent=2)
 
 
+# ---------------------------------------------------------------------------
+# T8: ScalpelExecuteCommandTool — typed workspace/executeCommand pass-through
+# ---------------------------------------------------------------------------
+
+
+# Per-language allow-list of executeCommand verbs. Stage 1G ships a
+# conservative whitelist; Stage 1H expands it as the deferred specialty
+# tools land. Anything outside the list is refused with
+# CAPABILITY_NOT_AVAILABLE so the LLM gets a structured candidate list.
+_EXECUTE_COMMAND_WHITELIST: dict[str, frozenset[str]] = {
+    "python": frozenset({
+        "pylsp.executeCommand",
+        "rope.refactor.extract",
+        "rope.refactor.inline",
+        "rope.refactor.rename",
+        "ruff.applyAutofix",
+        "ruff.applyOrganizeImports",
+        "basedpyright.addImport",
+        "basedpyright.organizeImports",
+    }),
+    "rust": frozenset({
+        "rust-analyzer.runFlycheck",
+        "rust-analyzer.cancelFlycheck",
+        "rust-analyzer.clearFlycheck",
+        "rust-analyzer.reloadWorkspace",
+        "rust-analyzer.rebuildProcMacros",
+        "rust-analyzer.expandMacro",
+        "rust-analyzer.viewSyntaxTree",
+        "rust-analyzer.viewHir",
+        "rust-analyzer.viewMir",
+        "rust-analyzer.viewItemTree",
+        "rust-analyzer.viewCrateGraph",
+        "rust-analyzer.relatedTests",
+    }),
+}
+
+
+def _execute_via_coordinator(
+    *,
+    language: Any,
+    project_root: Path,
+    command: str,
+    arguments: tuple[Any, ...],
+) -> RefactorResult:
+    """Drive Stage 1D coordinator's broadcast for workspace/executeCommand.
+
+    Stage 1G ships the plumbing; the actual SolidLanguageServer
+    .execute_command call happens via MultiServerCoordinator.broadcast
+    so the per-server dedup + priority merge rules from §11 apply.
+    """
+    runtime = ScalpelRuntime.instance()
+    coord = runtime.coordinator_for(language, project_root)
+    t0 = time.monotonic()
+    result = coord.broadcast(
+        method="workspace/executeCommand",
+        kwargs={"command": command, "arguments": list(arguments)},
+        timeout_ms=5000,
+    )
+    elapsed_ms = int((time.monotonic() - t0) * 1000)
+    return RefactorResult(
+        applied=True,
+        diagnostics_delta=_empty_diagnostics_delta(),
+        warnings=tuple(
+            f"server-timeout: {w.server_id}"
+            for w in getattr(result, "timeouts", ())
+        ),
+        duration_ms=elapsed_ms,
+        lsp_ops=(LspOpStat(
+            method="workspace/executeCommand",
+            server=language.value,
+            count=1,
+            total_ms=elapsed_ms,
+        ),),
+    )
+
+
+class ScalpelExecuteCommandTool(Tool):
+    """Server-specific JSON-RPC pass-through, whitelisted per language."""
+
+    DEFAULT_LANGUAGE: str = "python"  # cluster-prefix discipline §5.3
+
+    def apply(
+        self,
+        command: str,
+        arguments: list[Any] | None = None,
+        language: Literal["rust", "python"] | None = None,
+        allow_out_of_workspace: bool = False,
+    ) -> str:
+        """Server-specific JSON-RPC pass-through, whitelisted per
+        LanguageStrategy. Power-user escape hatch.
+
+        :param command: the workspace/executeCommand verb (e.g.
+            'rust-analyzer.runFlycheck').
+        :param arguments: positional arguments forwarded as-is.
+        :param language: 'rust' or 'python'; inferred when None.
+        :param allow_out_of_workspace: skip workspace-boundary check.
+        :return: JSON RefactorResult.
+        """
+        del allow_out_of_workspace  # T8: pass-through escape hatch only
+        from solidlsp.ls_config import Language
+
+        arguments = arguments or []
+        chosen_language = language or self.DEFAULT_LANGUAGE
+        if chosen_language not in _EXECUTE_COMMAND_WHITELIST:
+            return _failure_result(
+                ErrorCode.INVALID_ARGUMENT,
+                "scalpel_execute_command",
+                f"Unknown language {chosen_language!r}; "
+                f"expected one of {sorted(_EXECUTE_COMMAND_WHITELIST)}.",
+                recoverable=False,
+            ).model_dump_json(indent=2)
+        whitelist = _EXECUTE_COMMAND_WHITELIST[chosen_language]
+        if command not in whitelist:
+            failure = FailureInfo(
+                stage="scalpel_execute_command",
+                reason=(
+                    f"Command {command!r} is not in the {chosen_language!r} "
+                    "whitelist; expand "
+                    "vendor/serena/src/serena/tools/scalpel_primitives.py:"
+                    "_EXECUTE_COMMAND_WHITELIST to add it."
+                ),
+                code=ErrorCode.CAPABILITY_NOT_AVAILABLE,
+                recoverable=True,
+                candidates=tuple(sorted(whitelist)[:5]),
+            )
+            return RefactorResult(
+                applied=False,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                failure=failure,
+            ).model_dump_json(indent=2)
+        project_root = Path(self.get_project_root())
+        try:
+            lang_enum = Language(chosen_language)
+        except ValueError:
+            return _failure_result(
+                ErrorCode.INVALID_ARGUMENT,
+                "scalpel_execute_command",
+                f"Language {chosen_language!r} is not registered.",
+                recoverable=False,
+            ).model_dump_json(indent=2)
+        result = _execute_via_coordinator(
+            language=lang_enum,
+            project_root=project_root,
+            command=command,
+            arguments=tuple(arguments),
+        )
+        return result.model_dump_json(indent=2)
+
+
 __all__ = [
     "ScalpelApplyCapabilityTool",
     "ScalpelCapabilitiesListTool",
     "ScalpelCapabilityDescribeTool",
     "ScalpelDryRunComposeTool",
+    "ScalpelExecuteCommandTool",
     "ScalpelRollbackTool",
     "ScalpelTransactionRollbackTool",
     "ScalpelWorkspaceHealthTool",
