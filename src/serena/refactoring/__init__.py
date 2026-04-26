@@ -1,17 +1,20 @@
-"""Stage 1B + Stage 1D refactoring substrate.
+"""Stage 1B + 1C + 1D + 1E refactoring substrate.
 
-Three sibling concerns:
-- ``inverse_workspace_edit`` synthesizes the reverse of a successfully-applied
-  ``WorkspaceEdit`` so a checkpoint can roll forward through the same applier.
-- ``CheckpointStore`` keeps an LRU(50) of (applied_edit, snapshot, inverse) tuples.
-- ``TransactionStore`` keeps an LRU(20) of checkpoint groupings; rollback walks
-  member checkpoints in reverse order. (Added in T12.)
-- Multi-server coordination (Stage 1D T1–T9) exports merger schemas: ``MergedCodeAction``,
-  ``SuppressedAlternative``, ``ServerTimeoutWarning``, ``MultiServerBroadcastResult``.
+Stage 1E adds:
+- ``LanguageStrategy`` Protocol + Rust/Python extension mixin classes.
+- ``RustStrategy`` (skeleton; full body in Stage 1G).
+- ``PythonStrategy`` with three-LSP orchestration + 14-step interpreter
+  discovery + Rope library bridge.
+- ``STRATEGY_REGISTRY`` for ``Language → strategy class`` lookup.
 """
 
 from .checkpoints import CheckpointStore, inverse_workspace_edit
 from .discovery import PluginRecord, default_cache_root, discover_sibling_plugins, enabled_languages
+from .language_strategy import (
+    LanguageStrategy,
+    PythonStrategyExtensions,
+    RustStrategyExtensions,
+)
 from .lsp_pool import LspPool, LspPoolKey, PoolEvent, PoolStats, WaitingForLspBudget
 from .multi_server import (
     EditAttributionLog,
@@ -22,11 +25,34 @@ from .multi_server import (
     ServerTimeoutWarning,
     SuppressedAlternative,
 )
+from .python_strategy import (
+    ChangeSignatureSpec,
+    PythonInterpreterNotFound,
+    PythonStrategy,
+    RopeBridgeError,
+)
+from .rust_strategy import RustStrategy
 from .transactions import TransactionStore
 
+
+# Lazy-import the Language enum to keep refactoring/__init__.py free of
+# any solidlsp transitive imports at module-load time.
+def _build_strategy_registry() -> dict:
+    from solidlsp.ls_config import Language
+    return {
+        Language.PYTHON: PythonStrategy,
+        Language.RUST: RustStrategy,
+    }
+
+
+STRATEGY_REGISTRY = _build_strategy_registry()
+
+
 __all__ = [
+    "ChangeSignatureSpec",
     "CheckpointStore",
     "EditAttributionLog",
+    "LanguageStrategy",
     "LspPool",
     "LspPoolKey",
     "MergedCodeAction",
@@ -36,6 +62,13 @@ __all__ = [
     "PoolEvent",
     "PoolStats",
     "ProvenanceLiteral",
+    "PythonInterpreterNotFound",
+    "PythonStrategy",
+    "PythonStrategyExtensions",
+    "RopeBridgeError",
+    "RustStrategy",
+    "RustStrategyExtensions",
+    "STRATEGY_REGISTRY",
     "ServerTimeoutWarning",
     "SuppressedAlternative",
     "TransactionStore",
