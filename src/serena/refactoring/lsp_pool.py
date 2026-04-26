@@ -114,6 +114,8 @@ class LspPool:
         self._reaper_event = threading.Event()
         self._reaper_thread: threading.Thread | None = None
         self._pre_ping_on_acquire = pre_ping_on_acquire
+        self._txn_pins: dict[str, set[LspPoolKey]] = {}
+        self._pinned_keys: dict[LspPoolKey, int] = {}
         if reaper_enabled:
             self.start_reaper()
 
@@ -126,16 +128,72 @@ class LspPool:
         before being returned; on probe failure the entry is replaced
         transparently — the caller never sees a dead handle.
         """
-        # First pass: cache hit?
+        return self._acquire_internal(key, allow_pre_ping=True)
+
+    def release(self, key: LspPoolKey) -> None:
+        """Decrement the in-flight counter for ``key``; reaper-eligible at 0."""
+        with self._pool_lock:
+            entry = self._entries.get(key)
+            if entry is None:
+                return
+            if entry.inflight > 0:
+                entry.inflight -= 1
+            entry.last_used_ts = self._now()
+
+    def acquire_for_transaction(self, key: LspPoolKey, transaction_id: str) -> Any:
+        """Acquire ``key`` AND pin the entry to ``transaction_id``.
+
+        The pin guarantees:
+        - subsequent ``acquire_for_transaction(same key, same tid)`` returns
+          the same instance (no pre-ping replacement);
+        - the reaper skips this entry until ``release_for_transaction(tid)``
+          is called.
+
+        Multiple transactions can pin the same key; the entry is reaper-eligible
+        only after every pin is released.
+        """
+        with self._pool_lock:
+            self._txn_pins.setdefault(transaction_id, set())
+            if key not in self._txn_pins[transaction_id]:
+                self._txn_pins[transaction_id].add(key)
+                self._pinned_keys[key] = self._pinned_keys.get(key, 0) + 1
+        # Reuse the regular acquire path BUT bypass pre_ping when the entry is
+        # already pinned (the second-and-later acquire on the same tid).
+        # Implementation: temporarily flip pre_ping_on_acquire off for this
+        # call. Cleaner: route through an internal helper.
+        return self._acquire_internal(key, allow_pre_ping=False)
+
+    def release_for_transaction(self, transaction_id: str) -> None:
+        """Drop the transaction's pins; reaper becomes eligible to take them."""
+        with self._pool_lock:
+            keys = self._txn_pins.pop(transaction_id, set())
+            for k in keys:
+                # Decrement inflight (acquired via acquire_for_transaction).
+                entry = self._entries.get(k)
+                if entry is not None and entry.inflight > 0:
+                    entry.inflight -= 1
+                    entry.last_used_ts = self._now()
+                # Decrement pin count.
+                n = self._pinned_keys.get(k, 0) - 1
+                if n <= 0:
+                    self._pinned_keys.pop(k, None)
+                else:
+                    self._pinned_keys[k] = n
+
+    # ----------------------------------------------------------------------
+
+    def _acquire_internal(self, key: LspPoolKey, allow_pre_ping: bool) -> Any:
+        """Like ``acquire`` but with explicit pre-ping toggle.
+
+        ``acquire`` is a thin wrapper that sets ``allow_pre_ping`` from the
+        ctor flag. ``acquire_for_transaction`` calls this with False so the
+        bound transaction never sees a replacement.
+        """
         with self._pool_lock:
             entry = self._entries.get(key)
             had_entry = entry is not None and entry.server is not None
-        if had_entry and self._pre_ping_on_acquire:
-            if not self.pre_ping(key):
-                # pre_ping has already popped the dead entry; fall through to
-                # the spawn path below.
-                pass
-        # Second pass: locate-or-create + spawn-if-needed.
+        if had_entry and allow_pre_ping and self._pre_ping_on_acquire:
+            self.pre_ping(key)
         with self._pool_lock:
             entry = self._entries.get(key)
             if entry is None:
@@ -149,7 +207,6 @@ class LspPool:
                     self._check_budget_or_raise(key)
                 except WaitingForLspBudget:
                     with self._pool_lock:
-                        # Roll back the inflight bump and pop the placeholder.
                         if entry.inflight > 0:
                             entry.inflight -= 1
                         if entry.server is None and entry.inflight == 0:
@@ -162,16 +219,6 @@ class LspPool:
             entry.last_used_ts = self._now()
             self._entries.move_to_end(key)
         return entry.server
-
-    def release(self, key: LspPoolKey) -> None:
-        """Decrement the in-flight counter for ``key``; reaper-eligible at 0."""
-        with self._pool_lock:
-            entry = self._entries.get(key)
-            if entry is None:
-                return
-            if entry.inflight > 0:
-                entry.inflight -= 1
-            entry.last_used_ts = self._now()
 
     def _check_budget_or_raise(self, key: LspPoolKey) -> None:
         rss = self._resident_set_size_mb()
@@ -287,6 +334,8 @@ class LspPool:
         candidates: list[_ServerEntry] = []
         with self._pool_lock:
             for key, entry in list(self._entries.items()):
+                if key in self._pinned_keys:
+                    continue  # transaction-pinned: exempt from reap.
                 if entry.inflight == 0 and entry.server is not None and (now - entry.last_used_ts) >= self._idle_seconds:
                     candidates.append(entry)
                     # Remove eagerly so a concurrent acquire re-spawns rather
