@@ -43,6 +43,7 @@ def _load_template(name: str) -> Template:
 
 
 _SKILL_TMPL = _load_template("skill.md.tmpl")
+_README_TMPL = _load_template("readme.md.tmpl")
 
 # Identity constants for every emitted plugin. Kept module-private so they
 # travel with the generator and are easy to lift to env in Stage 1K if we
@@ -69,6 +70,12 @@ class _FacadeLike(Protocol):
     summary: str
     trigger_phrases: tuple[str, ...]
     primitive_chain: tuple[str, ...]
+
+
+class _StrategyWithFacades(_StrategyLike, Protocol):
+    """``_StrategyLike`` plus the facade tuple consumed by README + emit."""
+
+    facades: tuple[_FacadeLike, ...]
 
 
 def _plugin_name(strategy: _StrategyLike) -> str:
@@ -175,10 +182,27 @@ def _render_skill_for_facade(
     )
 
 
+def _render_readme(strategy: _StrategyWithFacades) -> str:
+    """Render the per-plugin ``README.md``."""
+
+    rows = ["| Facade | Summary |", "|---|---|"]
+    for facade in strategy.facades:
+        rows.append(f"| `scalpel_{facade.name}` | {facade.summary} |")
+    table = "\n".join(rows)
+    return _README_TMPL.substitute(
+        plugin_name=_plugin_name(strategy),
+        description=_description(strategy),
+        lsp_cmd=strategy.lsp_server_cmd[0],
+        extensions=", ".join(strategy.file_extensions),
+        facade_table=table,
+    )
+
+
 __all__ = [
     "PluginManifest",  # re-export for callers
     "_render_marketplace_json",
     "_render_mcp_json",
     "_render_plugin_json",
+    "_render_readme",
     "_render_skill_for_facade",
 ]
