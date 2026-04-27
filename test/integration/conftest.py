@@ -224,6 +224,39 @@ def whole_file_range(request: pytest.FixtureRequest) -> tuple[dict[str, int], di
 
 
 # ---------------------------------------------------------------------------
+# Stage 1H T8/T9 — WorkspaceEdit round-trip helper (Rust assist suites)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def assert_workspace_edit_round_trip():
+    """Apply a WorkspaceEdit to the workspace files and assert >=1 TextEdit landed.
+
+    Uses the v0.3.0 pure-python applier landed at
+    ``serena.tools.scalpel_facades._apply_workspace_edit_to_disk`` (see project
+    memory ``project_v0_3_0_facade_application.md``). The applier returns the
+    count of TextEdits actually applied; 0 means "no-op" (non-file URI or
+    missing target on disk) and is treated as a hard failure here so tests
+    surface broken edits rather than silently passing.
+
+    The helper deliberately stops at "edits hit disk". Per-suite callers may
+    layer additional assertions (cargo check, post-diagnostics delta) on top
+    of the returned count when they care about post-apply semantics.
+    """
+    from serena.tools.scalpel_facades import _apply_workspace_edit_to_disk
+
+    def _check(edit: dict) -> int:
+        applied_count = _apply_workspace_edit_to_disk(edit)
+        assert applied_count > 0, (
+            "WorkspaceEdit applied 0 TextEdits — likely non-file URI or "
+            "missing target on disk."
+        )
+        return applied_count
+
+    return _check
+
+
+# ---------------------------------------------------------------------------
 # Provenance — record what Python the harness ran under (debug aid).
 # ---------------------------------------------------------------------------
 
