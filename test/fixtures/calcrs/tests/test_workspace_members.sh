@@ -6,6 +6,7 @@ cd "$(dirname "$0")/.."
 
 expected_crates=(
     "ra_extractors"
+    "ra_inliners"
 )
 
 actual=$(CARGO_BUILD_RUSTC=rustc cargo metadata --format-version 1 --no-deps \
