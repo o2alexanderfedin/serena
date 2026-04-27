@@ -8,6 +8,7 @@ members = [
     "ra_visibility",
     "ra_imports",
     "ra_glob_imports",
+    "ra_ordering",
 ]
 
 [workspace.package]
