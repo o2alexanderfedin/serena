@@ -4,6 +4,17 @@ Generates a Claude Code plugin tree at ``--out / o2-scalpel-<lang>/``
 for the given ``--language``. The strategy resolver is split out as
 :func:`_resolve_strategy` so tests can monkey-patch it without touching
 the registry.
+
+Stream 5 / Leaf 01 Task 4 extends this CLI with an opt-in ``--repo-root``
+flag: when supplied, the generator regenerates
+``<repo-root>/marketplace.surface.json`` after the plugin tree write so
+the schema-driven publication surface stays in lockstep with the trees
+it lists. Drift-CI gates the surface file, so any plugin emit that
+forgets ``--repo-root`` is caught at CI time. The ``--repo-root`` flag is
+intentionally opt-in (rather than defaulting to ``--out``) so callers
+emitting plugins to scratch dirs don't pollute those dirs with surface
+files; the production caller (``Makefile`` ``generate-plugins`` target)
+must be updated to pass it explicitly.
 """
 
 from __future__ import annotations
@@ -133,7 +144,32 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Overwrite an existing plugin tree at the target path.",
     )
+    p.add_argument(
+        "--repo-root",
+        type=Path,
+        default=None,
+        help=(
+            "Parent o2-scalpel repo root. When supplied, "
+            "marketplace.surface.json is regenerated under this directory "
+            "in the same run as the plugin tree write. Drift-CI requires "
+            "the regenerated marketplace.surface.json to land in the same "
+            "commit as the plugin-tree change — otherwise the gate fails."
+        ),
+    )
     return p
+
+
+def _refresh_marketplace_surface(repo_root: Path) -> None:
+    """Regenerate ``<repo_root>/marketplace.surface.json`` from plugin trees.
+
+    Imports the marketplace builder lazily so a ``serena.refactoring`` import
+    doesn't pull the marketplace package eagerly (cheap layering hygiene).
+    """
+
+    from serena.marketplace.build import build_manifest, write_manifest
+
+    manifest = build_manifest(repo_root)
+    write_manifest(repo_root, manifest)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -148,6 +184,8 @@ def main(argv: list[str] | None = None) -> int:
     except FileExistsError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 3
+    if args.repo_root is not None:
+        _refresh_marketplace_surface(args.repo_root)
     print(f"wrote {root}")
     return 0
 
