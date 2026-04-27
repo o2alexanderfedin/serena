@@ -57,7 +57,14 @@ _STAGE_3_NAMES: frozenset[str] = frozenset({
     "scalpel_ignore_diagnostic",
 })
 
-EXPECTED_NAMES: frozenset[str] = _STAGE_1G_NAMES | _STAGE_2A_NAMES | _STAGE_3_NAMES
+# v1.1 Stream 5 — additional always-on primitives.
+_V11_NAMES: frozenset[str] = frozenset({
+    "scalpel_reload_plugins",  # Leaf 03 — Q10 explicit-refresh
+})
+
+EXPECTED_NAMES: frozenset[str] = (
+    _STAGE_1G_NAMES | _STAGE_2A_NAMES | _STAGE_3_NAMES | _V11_NAMES
+)
 
 
 def test_all_eight_tools_appear_in_iter_subclasses() -> None:
