@@ -75,6 +75,7 @@ PEP_FIXTURES_ROOT = SERENA_ROOT / "test" / "fixtures" / "python"
 
 PEP695_SOURCE = PEP_FIXTURES_ROOT / "pep695" / "__init__.py"
 PEP701_SOURCE = PEP_FIXTURES_ROOT / "pep701" / "__init__.py"
+PEP654_SOURCE = PEP_FIXTURES_ROOT / "pep654" / "__init__.py"
 
 
 def _read_fixture(path: Path) -> str:
@@ -340,3 +341,46 @@ def test_convert_from_relative_imports_handles_pep701(
         y_path.read_text(encoding="utf-8")
         == "from pkg.grammar import fetch\n"
     )
+
+
+# ===========================================================================
+# Task 3 — PEP 654 × {F1, F2}  (NO F3 per Mermaid / S6)
+# ===========================================================================
+
+
+def test_convert_to_async_handles_pep654_except_star(
+    tmp_path: Path,
+) -> None:
+    """F1 on PEP 654: ``except*`` must round-trip untouched after the
+    ``def`` is rewritten to ``async def``."""
+    target = _seed_flat_fixture(tmp_path, PEP654_SOURCE)
+    tool = _build_async_tool(tmp_path)
+
+    payload = json.loads(
+        tool.apply(file="__init__.py", symbol="safe_run", allow_out_of_workspace=True),
+    )
+    assert payload["applied"] is True, payload
+    assert payload.get("failure") is None, payload
+    after = target.read_text(encoding="utf-8")
+    assert "async def safe_run" in after
+    # ``except*`` syntax must survive — the helper must not have rewritten
+    # exception-group syntax.
+    assert "except* ValueError as eg:" in after
+    assert "except* (KeyError, IndexError) as eg:" in after
+
+
+def test_annotate_return_type_handles_pep654(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """F2 on PEP 654: parser must accept ``except*`` even though the helper
+    only inspects the function signature."""
+    _seed_flat_fixture(tmp_path, PEP654_SOURCE)
+    _stub_inlay_hint_provider(monkeypatch, "-> None")
+    tool = _build_annotate_tool(tmp_path)
+
+    payload = json.loads(
+        tool.apply(file="__init__.py", symbol="safe_run", allow_out_of_workspace=True),
+    )
+    assert payload.get("failure") is None, payload
+    assert payload["applied"] is True or payload["no_op"] is True, payload
