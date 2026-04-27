@@ -19,6 +19,7 @@ members = [
     "ra_ssr",
     "ra_macros",
     "ra_module_layouts",
+    "ra_quickfixes",
 ]
 
 [workspace.package]
