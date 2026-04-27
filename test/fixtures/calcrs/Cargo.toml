@@ -9,6 +9,7 @@ members = [
     "ra_imports",
     "ra_glob_imports",
     "ra_ordering",
+    "ra_generators_traits",
 ]
 
 [workspace.package]
