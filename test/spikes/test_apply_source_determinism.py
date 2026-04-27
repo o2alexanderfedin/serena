@@ -40,3 +40,14 @@ def test_apply_source_is_stable_across_repeated_calls(cls_name: str) -> None:
         f"{cls_name}.apply source non-deterministic across 100 calls"
     )
     assert "workspace_boundary_guard(" in first
+
+
+def test_every_inspected_facade_has_wrapped_source_attribute() -> None:
+    """Every facade Tool inspected by the 6 spike sites must opt in."""
+    for name in _FACADE_NAMES:
+        cls = getattr(tools_module, name)
+        captured = getattr(cls.apply, "__wrapped_source__", None)
+        assert isinstance(captured, str) and captured, (
+            f"{name}.apply must carry __wrapped_source__"
+        )
+        assert "workspace_boundary_guard(" in captured
