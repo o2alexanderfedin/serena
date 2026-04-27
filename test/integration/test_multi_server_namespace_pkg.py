@@ -26,13 +26,11 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
 
 import pytest
 
 
 def test_namespace_pkg_split_does_not_introduce_dunder_init(
-    python_coordinator: Any,
     calcpy_namespace_workspace: Path,
 ) -> None:
     """Post split-file flow, ``__init__.py`` MUST NOT appear in the
@@ -67,7 +65,6 @@ def test_namespace_pkg_split_does_not_introduce_dunder_init(
 
 
 def test_namespace_pkg_import_succeeds_post_flow(
-    python_coordinator: Any,
     calcpy_namespace_workspace: Path,
 ) -> None:
     """``python -c "import calcpy_ns.core"`` succeeds against a

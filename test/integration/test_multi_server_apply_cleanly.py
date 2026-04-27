@@ -78,7 +78,6 @@ def test_stale_version_rejected_with_reason(
 
 def test_post_rejection_no_disk_write(
     calcpy_workspace: Path,
-    tmp_path: Path,
 ) -> None:
     """Belt-and-suspenders: when an edit is rejected by
     ``_check_apply_clean``, the caller (merge_and_validate) routes it
@@ -101,7 +100,7 @@ def test_post_rejection_no_disk_write(
         "documentChanges": [_make_versioned_text_doc_edit(uri, version=1)],
     }
     document_versions = {uri: 99}
-    ok, _reason = _check_apply_clean(
+    ok, _ = _check_apply_clean(
         edit=edit,
         document_versions=document_versions,
     )
