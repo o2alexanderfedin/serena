@@ -183,14 +183,42 @@ def ruff_lsp(calcpy_workspace: Path) -> Iterator[Any]:
 
 
 @pytest.fixture
-def whole_file_range() -> tuple[dict[str, int], dict[str, int]]:
-    """LSP positions covering the start of a file to a generously large end.
+def whole_file_range(request: pytest.FixtureRequest) -> tuple[dict[str, int], dict[str, int]]:
+    """LSP positions covering an entire file.
 
-    Real code-action providers clamp to the actual document length, so
-    ``end.line=10_000`` is safe and removes the need for tests to know
-    the precise file length up front.
+    Backed by ``solidlsp.util.file_range.compute_file_range`` so the
+    16 deferred Rust integration tests stop duplicating end-of-file
+    coordinate math, and rust-analyzer's strict out-of-range rejection
+    (LSP §3.17 — it does not clamp like ruff) is satisfied centrally.
+
+    Two usage modes:
+
+    1. **Parametrized via ``indirect`` with a file path** — the fixture
+       returns the precise ``(start, end)`` for that file. Use this for
+       any rust-analyzer-driven test:
+
+       .. code-block:: python
+
+           @pytest.mark.parametrize(
+               "whole_file_range",
+               [str(calcrs / "src" / "lib.rs")],
+               indirect=True,
+           )
+           def test_x(whole_file_range): ...
+
+    2. **Unparametrized** — backwards-compatible fallback returning
+       ``(0, 0)..(10_000, 0)``. Safe only for clamping servers like
+       ruff (the existing ``test_smoke_python_codeaction.py`` caller).
+       rust-analyzer-driven callers MUST use mode (1) or compute the
+       range explicitly via ``compute_file_range``.
     """
-    return ({"line": 0, "character": 0}, {"line": 10_000, "character": 0})
+    target = getattr(request, "param", None)
+    if target is None:
+        # Backwards-compatible "generously large" range — ruff clamps.
+        return ({"line": 0, "character": 0}, {"line": 10_000, "character": 0})
+    from solidlsp.util.file_range import compute_file_range
+
+    return compute_file_range(target)
 
 
 # ---------------------------------------------------------------------------
