@@ -38,6 +38,7 @@ from serena.refactoring import (
 )
 from serena.refactoring._async_check import AWAITED_SERVER_METHODS
 from serena.refactoring.capabilities import CapabilityCatalog, build_capability_catalog
+from serena.refactoring.checkpoint_default_root import default_checkpoint_disk_root
 from solidlsp.dynamic_capabilities import DynamicCapabilityRegistry
 
 if TYPE_CHECKING:
@@ -240,9 +241,20 @@ class ScalpelRuntime:
     # --- lazy state --------------------------------------------------
 
     def checkpoint_store(self) -> CheckpointStore:
+        """Lazy-build the singleton checkpoint store.
+
+        v1.1 Stream 5 / Leaf 02 (S3 critic guard): production callers MUST
+        receive a ``disk_root`` so checkpoints survive process restart.
+        The root resolves via ``default_checkpoint_disk_root()`` —
+        ``O2_SCALPEL_CACHE`` env override → platformdirs user cache fallback.
+        Tests bypassing persistence go through ``CheckpointStore()`` directly,
+        not this factory.
+        """
         with self._lock:
             if self._checkpoint_store is None:
-                self._checkpoint_store = CheckpointStore()
+                self._checkpoint_store = CheckpointStore(
+                    disk_root=default_checkpoint_disk_root(),
+                )
             return self._checkpoint_store
 
     def transaction_store(self) -> TransactionStore:
