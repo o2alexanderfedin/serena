@@ -17,6 +17,7 @@ from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependen
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.file_range import compute_file_range
 
 log = logging.getLogger(__name__)
 
@@ -209,6 +210,41 @@ class RustAnalyzer(SolidLanguageServer):
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["target"]
+
+    @override
+    def request_code_actions(
+        self,
+        file: str,
+        start: dict[str, int],
+        end: dict[str, int],
+        only: list[str] | None = None,
+        trigger_kind: int = 2,
+        diagnostics: list[dict[str, Any]] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Preflight ``end`` against EOF before delegating to the base.
+
+        rust-analyzer rejects out-of-range positions per LSP §3.17 rather
+        than clamping (unlike ruff), so we centralise the validation here
+        to (a) surface the failure as a fast local ``ValueError`` instead
+        of a wire round-trip, and (b) remove the duplicated end-of-file
+        coordinate math previously copied across 16 deferred Rust
+        integration tests. See
+        ``vendor/serena/src/solidlsp/util/file_range.py`` and
+        Stage v0.2.0 follow-up #02.
+        """
+        _, eof = compute_file_range(file)
+        if (end["line"], end["character"]) > (eof["line"], eof["character"]):
+            raise ValueError(
+                f"position {end} out of range for {file} (eof={eof})"
+            )
+        return super().request_code_actions(
+            file,
+            start,
+            end,
+            only=only,
+            trigger_kind=trigger_kind,
+            diagnostics=diagnostics,
+        )
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:

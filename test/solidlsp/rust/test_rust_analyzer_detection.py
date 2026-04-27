@@ -553,3 +553,102 @@ class TestRustAnalyzerDetectionIntegration:
         assert result is not None
         assert os.path.isfile(result)
         assert os.access(result, os.X_OK)
+
+
+# ---------------------------------------------------------------------------
+# Stage v0.2.0 follow-up #02 — preflight position validation
+# ---------------------------------------------------------------------------
+#
+# These tests cover the RustAnalyzer override of ``request_code_actions`` that
+# validates ``end`` against ``compute_file_range(file)`` *before* sending the
+# LSP request. rust-analyzer rejects out-of-range positions per LSP §3.17
+# rather than clamping (unlike ruff), so the preflight stops 16 deferred Rust
+# integration tests from depending on ad-hoc EOF maths and surfaces the same
+# failure mode as a fast, local ``ValueError`` instead of a wire round-trip.
+#
+# We do NOT boot rust-analyzer here — the override is a thin, deterministic
+# guard that we exercise by stubbing ``SolidLanguageServer.request_code_actions``
+# (the parent ``super()`` call). This keeps the test ~ms-fast and free of any
+# host rust-analyzer dependency.
+
+
+class TestRustAnalyzerPreflightPositionValidation:
+    """RustAnalyzer.request_code_actions must reject out-of-range positions."""
+
+    @staticmethod
+    def _make_adapter_without_init(tmp_path):
+        """Return a RustAnalyzer instance bypassing ``__init__``.
+
+        ``__init__`` would try to construct an underlying server process.
+        For the preflight unit test we only exercise the override, so we
+        side-step ``__init__`` entirely and call the bound method on a
+        bare instance.
+        """
+        from solidlsp.language_servers.rust_analyzer import RustAnalyzer
+
+        return RustAnalyzer.__new__(RustAnalyzer)
+
+    @pytest.mark.rust
+    def test_rejects_position_past_end_of_file(self, tmp_path):
+        """End position past EOF must raise ValueError before any LSP call."""
+        src = tmp_path / "lib.rs"
+        src.write_text("fn main() {}\n", encoding="utf-8")
+
+        adapter = self._make_adapter_without_init(tmp_path)
+
+        # If preflight is missing, the parent ``request_code_actions`` runs
+        # and tries to talk to ``self.server`` — which doesn't exist on the
+        # bare instance. Either way, the test fails loudly without preflight.
+        with patch.object(
+            type(adapter).__mro__[1], "request_code_actions"
+        ) as parent_call:
+            with pytest.raises(ValueError, match="out of range"):
+                adapter.request_code_actions(
+                    file=str(src),
+                    start={"line": 0, "character": 0},
+                    end={"line": 9_999_999, "character": 0},
+                )
+
+        # Critical: preflight must run BEFORE the parent call.
+        parent_call.assert_not_called()
+
+    @pytest.mark.rust
+    def test_passes_through_when_position_in_range(self, tmp_path):
+        """In-range positions delegate to the parent without error."""
+        src = tmp_path / "lib.rs"
+        src.write_text("fn main() {}\n", encoding="utf-8")
+
+        adapter = self._make_adapter_without_init(tmp_path)
+
+        with patch.object(
+            type(adapter).__mro__[1], "request_code_actions", return_value=[]
+        ) as parent_call:
+            result = adapter.request_code_actions(
+                file=str(src),
+                start={"line": 0, "character": 0},
+                end={"line": 1, "character": 0},
+            )
+
+        assert result == []
+        parent_call.assert_called_once()
+
+    @pytest.mark.rust
+    def test_rejects_end_character_past_eof_on_last_line(self, tmp_path):
+        """Same line as EOF but character past the last column must fail."""
+        src = tmp_path / "lib.rs"
+        # Single line, 12 chars, no trailing newline -> EOF = (0, 12).
+        src.write_text("fn main() {}", encoding="utf-8")
+
+        adapter = self._make_adapter_without_init(tmp_path)
+
+        with patch.object(
+            type(adapter).__mro__[1], "request_code_actions"
+        ) as parent_call:
+            with pytest.raises(ValueError, match="out of range"):
+                adapter.request_code_actions(
+                    file=str(src),
+                    start={"line": 0, "character": 0},
+                    end={"line": 0, "character": 13},
+                )
+
+        parent_call.assert_not_called()

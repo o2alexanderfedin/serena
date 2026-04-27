@@ -23,19 +23,19 @@ PathLike = Union[str, Path]
 
 
 def compute_file_range(path: PathLike) -> tuple[LSPPosition, LSPPosition]:
-    """Return ``(start, end)`` LSP positions covering the entire file.
+    r"""Return ``(start, end)`` LSP positions covering the entire file.
 
     The returned ``start`` is always ``{"line": 0, "character": 0}``.
     ``end`` points past the last character of the file:
 
     - empty file ........................ ``(0, 0)``
     - single line, no trailing newline .. ``(0, len(line))``
-    - file ending with ``\\n`` ........... ``(N, 0)`` where ``N`` is the
+    - file ending with ``\n`` ........... ``(N, 0)`` where ``N`` is the
       number of line terminators
     - file with no trailing newline ..... ``(N-1, len(last))``
 
-    Line-terminator handling follows LSP §3.17: each of ``\\n``, ``\\r``,
-    and ``\\r\\n`` counts as exactly one line break. Encoding is the LSP
+    Line-terminator handling follows LSP §3.17: each of ``\n``, ``\r``,
+    and ``\r\n`` counts as exactly one line break. Encoding is the LSP
     default UTF-16; for ASCII-only fixtures (the smoke-test corpus) this
     is identical to a UTF-8 character count.
 
