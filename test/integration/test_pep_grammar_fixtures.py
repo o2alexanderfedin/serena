@@ -384,3 +384,73 @@ def test_annotate_return_type_handles_pep654(
     )
     assert payload.get("failure") is None, payload
     assert payload["applied"] is True or payload["no_op"] is True, payload
+
+
+# ===========================================================================
+# Task 4 — Cross-grammar smoke
+# ===========================================================================
+
+
+def test_all_three_pep_fixtures_coexist(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Combined workspace: all three PEP fixtures live as sibling modules
+    in one root. Drive one facade per fixture and assert no parser-level
+    error escapes from any of them.
+
+    Mapping (per spec Step 4.1):
+      * ``pep695/__init__.py`` symbol ``two``       -> F2 (annotate)
+      * ``pep701/__init__.py`` symbol ``fetch``     -> F1 (async)
+      * ``pep654/__init__.py`` symbol ``safe_run``  -> F1 (async)
+    """
+    for sub, source in (
+        ("pep695", PEP695_SOURCE),
+        ("pep701", PEP701_SOURCE),
+        ("pep654", PEP654_SOURCE),
+    ):
+        sub_dir = tmp_path / sub
+        sub_dir.mkdir()
+        (sub_dir / "__init__.py").write_text(
+            _read_fixture(source), encoding="utf-8",
+        )
+
+    _stub_inlay_hint_provider(monkeypatch, "-> int")
+
+    # PEP 695: F2 (already annotated -> skipped, but no parser error).
+    annotate = _build_annotate_tool(tmp_path)
+    out_695 = json.loads(
+        annotate.apply(
+            file="pep695/__init__.py",
+            symbol="two",
+            allow_out_of_workspace=True,
+        ),
+    )
+    assert out_695.get("failure") is None, out_695
+    assert out_695["applied"] is True or out_695["no_op"] is True, out_695
+
+    # PEP 701: F1 on ``fetch`` -> async.
+    async_tool = _build_async_tool(tmp_path)
+    out_701 = json.loads(
+        async_tool.apply(
+            file="pep701/__init__.py",
+            symbol="fetch",
+            allow_out_of_workspace=True,
+        ),
+    )
+    assert out_701.get("failure") is None, out_701
+    assert out_701["applied"] is True, out_701
+
+    # PEP 654: F1 on ``safe_run`` -> async, ``except*`` preserved.
+    out_654 = json.loads(
+        async_tool.apply(
+            file="pep654/__init__.py",
+            symbol="safe_run",
+            allow_out_of_workspace=True,
+        ),
+    )
+    assert out_654.get("failure") is None, out_654
+    assert out_654["applied"] is True, out_654
+    after_654 = (tmp_path / "pep654" / "__init__.py").read_text(encoding="utf-8")
+    assert "async def safe_run" in after_654
+    assert "except* ValueError" in after_654
