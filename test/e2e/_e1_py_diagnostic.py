@@ -38,6 +38,7 @@ Author: AI Hive(R).
 from __future__ import annotations
 
 import json
+import statistics
 import time
 from pathlib import Path
 from typing import Any
@@ -75,13 +76,29 @@ def collect(driver: Any, src: Path, n: int = 30) -> list[dict[str, Any]]:
 
 
 def summarize(ledger: list[dict[str, Any]]) -> dict[str, Any]:
-    """Reduce the per-run ledger into pass/fail counts and percentile timings."""
+    """Reduce the per-run ledger into pass/fail counts and percentile timings.
+
+    Percentiles use ``statistics.quantiles(n=100, method="exclusive")`` —
+    the standard library's correct percentile math (linear interpolation
+    between order statistics). The earlier ad-hoc indexing
+    (``elapsed[total // 2]``, ``elapsed[int(total * 0.99) - 1]``)
+    silently mislabels: for ``total=30`` the old p50 was the 16th order
+    statistic (upper median, not the median) and the old p99 was the
+    29th order statistic — actually the 96.7th percentile.
+    """
     total = len(ledger)
     applied = sum(1 for row in ledger if row.get("applied") is True)
     failures = [row for row in ledger if row.get("applied") is not True]
     elapsed = sorted(float(row["elapsed_s"]) for row in ledger)
-    p50 = elapsed[total // 2] if total else 0.0
-    p99 = elapsed[max(0, int(total * 0.99) - 1)] if total else 0.0
+    if total >= 2:
+        # quantiles(n=100) returns 99 cut points (1st through 99th percentile).
+        quantile_points = statistics.quantiles(elapsed, n=100, method="exclusive")
+        p50 = quantile_points[49]
+        p99 = quantile_points[98]
+    elif total == 1:
+        p50 = p99 = elapsed[0]
+    else:
+        p50 = p99 = 0.0
     return {
         "total_runs": total,
         "applied_runs": applied,
