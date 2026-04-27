@@ -20,7 +20,6 @@ if TYPE_CHECKING:
 def test_rust_analyzer_returns_code_actions_on_calcrs_lib(
     ra_lsp: "SolidLanguageServer",
     calcrs_workspace: Path,
-    whole_file_range: tuple[dict[str, int], dict[str, int]],
 ) -> None:
     """rust-analyzer must offer >=1 code action on ``calcrs/src/lib.rs``."""
     lib_path = str(calcrs_workspace / "calcrs" / "src" / "lib.rs")
@@ -38,8 +37,6 @@ def test_rust_analyzer_returns_code_actions_on_calcrs_lib(
     from solidlsp.util.file_range import compute_file_range
 
     _, file_end = compute_file_range(lib_path)
-
-    del whole_file_range  # unused on Rust path; kept for fixture symmetry
 
     actions: list[dict[str, Any]] = []
     with ra_lsp.open_file("calcrs/src/lib.rs"):
