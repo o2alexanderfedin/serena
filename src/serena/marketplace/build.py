@@ -122,17 +122,45 @@ def render_manifest_json(manifest: MarketplaceManifest) -> str:
     )
 
 
+SURFACE_FILENAME = "marketplace.surface.json"
+"""On-disk filename for the schema-driven publication-surface descriptor.
+
+Distinct from the existing parent-root ``marketplace.json`` (boostvolt-shape,
+Claude-Code-marketplace consumer-facing artifact emitted by Stage 1I's
+``serena.refactoring.cli_newplugin_marketplace`` path). The two files coexist:
+this leaf adds the schema-driven internal surface gated by drift-CI, while
+the boostvolt-shape file remains the consumer-facing publication artifact.
+"""
+
+
+def write_manifest(repo_root: Path, manifest: MarketplaceManifest) -> Path:
+    """Write ``manifest`` to ``<repo_root>/marketplace.surface.json``.
+
+    Returns the path written. The same code path is used by the drift-CI
+    re-baseline command (``--write``) and by the ``cli_newplugin`` integration
+    that updates the surface file after each plugin emit.
+    """
+
+    payload = render_manifest_json(manifest)
+    out = repo_root / SURFACE_FILENAME
+    out.write_text(payload, encoding="utf-8")
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     """``python -m serena.marketplace.build`` entry point.
 
     Without ``--write`` the rendered JSON goes to stdout; with ``--write`` it
-    is persisted to ``<root>/marketplace.json``. The drift-CI gate uses the
-    no-flag form to compare against the on-disk golden.
+    is persisted to ``<root>/marketplace.surface.json``. The drift-CI gate
+    uses the no-flag form to compare against the on-disk golden.
     """
 
     parser = argparse.ArgumentParser(
         prog="serena.marketplace.build",
-        description="Build the o2-scalpel marketplace.json from plugin trees.",
+        description=(
+            "Build the o2-scalpel publication-surface manifest "
+            "(marketplace.surface.json) from plugin trees under --root."
+        ),
     )
     parser.add_argument(
         "--root",
@@ -143,15 +171,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--write",
         action="store_true",
-        help="Persist the manifest to <root>/marketplace.json.",
+        help=f"Persist the manifest to <root>/{SURFACE_FILENAME}.",
     )
     args = parser.parse_args(argv)
     manifest = build_manifest(args.root)
-    payload = render_manifest_json(manifest)
     if args.write:
-        (args.root / "marketplace.json").write_text(payload, encoding="utf-8")
+        write_manifest(args.root, manifest)
     else:
-        sys.stdout.write(payload)
+        sys.stdout.write(render_manifest_json(manifest))
     return 0
 
 
@@ -159,4 +186,10 @@ if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main())
 
 
-__all__ = ["build_manifest", "main", "render_manifest_json"]
+__all__ = [
+    "SURFACE_FILENAME",
+    "build_manifest",
+    "main",
+    "render_manifest_json",
+    "write_manifest",
+]
