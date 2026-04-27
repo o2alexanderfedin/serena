@@ -212,6 +212,15 @@ class ScalpelRuntime:
         self._coordinators: dict[tuple[str, Path], MultiServerCoordinator] = {}
         self._dynamic_capability_registry: DynamicCapabilityRegistry | None = None
         self._plugin_registry: PluginRegistry | None = None
+        # v1.1 Stream 5 / Leaf 05 — resolve the engine knob at runtime
+        # construction so an unknown ``O2_SCALPEL_ENGINE`` value fails
+        # fast (Settings validator raises ValidationError) rather than
+        # silently degrading at first use. Lazy import of the Settings
+        # module avoids pulling pydantic-settings into every consumer
+        # of ``serena.tools.scalpel_runtime`` at module-load time.
+        from serena.config.engine import Settings
+
+        self.engine_id: str = Settings().engine
 
     # --- singleton accessors -----------------------------------------
 
