@@ -109,7 +109,7 @@ def _xfail_if_any_binary_missing() -> None:
     parallelism-evidence guarantee this test is meant to provide.
     """
     missing = [
-        binary for _sid, binary, *_ in _PYTHON_SERVERS if shutil.which(binary) is None
+        binary for _, binary, *_ in _PYTHON_SERVERS if shutil.which(binary) is None
     ]
     if missing:
         pytest.xfail(
@@ -138,7 +138,7 @@ async def test_broadcast_runs_three_python_servers_in_parallel(
 
     servers: dict[str, Any] = {}
     with ExitStack() as stack:
-        for server_id, _binary, adapter_module, adapter_class in _PYTHON_SERVERS:
+        for server_id, _, adapter_module, adapter_class in _PYTHON_SERVERS:
             srv = _build_python_server(adapter_module, adapter_class, calcpy_workspace)
             stack.enter_context(srv.start_server())
             servers[server_id] = srv

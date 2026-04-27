@@ -16,7 +16,6 @@ Closes WHAT-REMAINS.md §4 line 104 and the Stage 1H follow-up at
 
 from __future__ import annotations
 
-import asyncio
 import inspect
 from collections.abc import Iterable
 from typing import Any
@@ -31,7 +30,7 @@ def is_async_callable(obj: Any) -> bool:
     anything we cannot **prove** to be sync. The cases:
 
     * ``async def`` function or bound method → ``True``
-      (``asyncio.iscoroutinefunction`` covers both).
+      (``inspect.iscoroutinefunction`` covers both).
     * Awaitable instance (already-running coroutine) → ``True``.
     * Callable object whose ``__call__`` is a coroutine function
       (e.g. the ``_AsyncAdapter._async_call`` closure) → ``True``.
@@ -44,7 +43,7 @@ def is_async_callable(obj: Any) -> bool:
       (the only failure mode that warrants the loud TypeError).
     * Non-callable → ``False`` (treated as misuse).
     """
-    if asyncio.iscoroutinefunction(obj):
+    if inspect.iscoroutinefunction(obj):
         return True
     if inspect.isawaitable(obj):
         return True
@@ -56,7 +55,7 @@ def is_async_callable(obj: Any) -> bool:
     if callable(obj):
         # Some callable objects implement ``__call__`` as ``async def``.
         call_attr = getattr(obj, "__call__", None)
-        if call_attr is not None and asyncio.iscoroutinefunction(call_attr):
+        if call_attr is not None and inspect.iscoroutinefunction(call_attr):
             return True
     return False
 
