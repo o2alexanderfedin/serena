@@ -91,14 +91,27 @@ def test_async_adapter_wraps_sync_server_into_async_callable() -> None:
     assert is_async_callable(adapter.request_code_actions) is True
 
 
-def test_magic_mock_is_treated_as_async_callable() -> None:
-    """``MagicMock`` test doubles must NOT be rejected.
+def test_unmarked_magic_mock_is_rejected() -> None:
+    """Unmarked ``MagicMock`` test doubles must be rejected.
 
-    ``test_v0_2_0_c_find_symbol_position.py`` constructs coordinators from
-    ``MagicMock`` instances; rejecting them would break Stage 1D / v0.2.0-C
-    unit tests. The check only rejects *definitely-sync* callables.
+    Without explicit opt-in, a stray ``MagicMock`` would silently slip
+    through the loud-TypeError gate. The marker ``_o2_async_callable``
+    forces tests to declare intent (TRIZ separation: production gate
+    is not shaped by test convenience).
     """
     mock = MagicMock()
+    assert is_async_callable(mock.request_code_actions) is False
+
+
+def test_marked_magic_mock_is_treated_as_async_callable() -> None:
+    """Mocks carrying the ``_o2_async_callable`` marker pass the gate.
+
+    ``test_v0_2_0_c_find_symbol_position.py`` constructs coordinators
+    from ``MagicMock`` instances and stamps each awaited method with
+    the marker via ``_mark_async_callable`` before construction.
+    """
+    mock = MagicMock()
+    mock.request_code_actions._o2_async_callable = True
     assert is_async_callable(mock.request_code_actions) is True
 
 

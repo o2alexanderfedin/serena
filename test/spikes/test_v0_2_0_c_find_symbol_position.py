@@ -15,7 +15,21 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from serena.refactoring._async_check import AWAITED_SERVER_METHODS
 from serena.refactoring.multi_server import MultiServerCoordinator
+
+
+def _mark_async_callable(server: MagicMock) -> MagicMock:
+    """Stamp the ``_o2_async_callable`` marker on every awaited method.
+
+    ``MultiServerCoordinator.__init__`` runs ``assert_servers_async_callable``
+    which now requires Mocks to opt-in via the ``_o2_async_callable=True``
+    marker (TRIZ separation: production gate must reject accidental Mocks).
+    Test doubles that intentionally back the coordinator must declare intent.
+    """
+    for method_name in AWAITED_SERVER_METHODS:
+        getattr(server, method_name)._o2_async_callable = True
+    return server
 
 
 def _doc_symbol(name: str, line: int, character: int, children: list[Any] | None = None):
@@ -41,6 +55,7 @@ def _make_coord_with_doc_symbols(symbols, server_id="pylsp-rope"):
     server = MagicMock()
     server.request_document_symbols = MagicMock(return_value=symbols)
     server.request_workspace_symbol = MagicMock(return_value=None)
+    _mark_async_callable(server)
     return MultiServerCoordinator(servers={server_id: server})
 
 
@@ -110,6 +125,7 @@ async def test_find_symbol_position_falls_back_to_workspace_symbol(
             },
         },
     ])
+    _mark_async_callable(server)
     coord = MultiServerCoordinator(servers={"pylsp-rope": server})
     pos = await coord.find_symbol_position(file=str(file), name_path="gamma")
     assert pos == {"line": 5, "character": 0}
@@ -131,6 +147,7 @@ async def test_find_symbol_position_workspace_filter_rejects_other_files(
                       "range": {"start": {"line": 0, "character": 0},
                                 "end": {"line": 0, "character": 0}}}},
     ])
+    _mark_async_callable(server)
     coord = MultiServerCoordinator(servers={"pylsp-rope": server})
     pos = await coord.find_symbol_position(file=str(target), name_path="gamma")
     assert pos is None
@@ -149,6 +166,7 @@ async def test_find_symbol_position_relative_to_project_root(
     server = MagicMock()
     server.request_document_symbols = MagicMock(return_value=[])
     server.request_workspace_symbol = MagicMock(return_value=None)
+    _mark_async_callable(server)
     coord = MultiServerCoordinator(servers={"pylsp-rope": server})
     await coord.find_symbol_position(
         file=str(src), name_path="x", project_root=str(project),

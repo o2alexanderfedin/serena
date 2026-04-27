@@ -17,6 +17,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from serena.refactoring._async_check import AWAITED_SERVER_METHODS
 from serena.refactoring.multi_server import MultiServerCoordinator
 from serena.tools.scalpel_runtime import _AsyncAdapter
 
@@ -97,9 +98,27 @@ def test_init_accepts_async_adapter_wrapped_sync_server() -> None:
     assert "ruff" in coord.servers
 
 
-def test_init_accepts_magic_mock_servers() -> None:
-    """v0.2.0-C ``find_symbol_position`` tests rely on ``MagicMock`` servers."""
-    coord = MultiServerCoordinator(servers={"pylsp-rope": MagicMock()})
+def test_init_rejects_unmarked_mock_server() -> None:
+    """Unmarked ``MagicMock`` servers must be rejected at construction.
+
+    The opt-in marker ``_o2_async_callable=True`` (TRIZ separation:
+    production gate not shaped by test convenience) forces tests that
+    intentionally wire ``MagicMock`` servers to declare their intent.
+    Without the marker, an accidental Mock in production code paths
+    would slip past the loud-TypeError gate.
+    """
+    with pytest.raises(TypeError, match="not async-callable"):
+        MultiServerCoordinator(servers={"pylsp-rope": MagicMock()})
+
+
+def test_init_accepts_marked_magic_mock_servers() -> None:
+    """v0.2.0-C ``find_symbol_position`` tests stamp the marker on each
+    awaited method before constructing the coordinator. Verify that the
+    marker contract works end-to-end through the gate."""
+    server = MagicMock()
+    for method_name in AWAITED_SERVER_METHODS:
+        getattr(server, method_name)._o2_async_callable = True
+    coord = MultiServerCoordinator(servers={"pylsp-rope": server})
     assert "pylsp-rope" in coord.servers
 
 
