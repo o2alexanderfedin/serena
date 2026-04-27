@@ -19,3 +19,14 @@ def test_p5a_mypy_decision_pylsp_config_enables_plugin() -> None:
     assert cfg["pylsp"]["plugins"]["pylsp_mypy"]["enabled"] is True
     assert cfg["pylsp"]["plugins"]["pylsp_mypy"]["live_mode"] is False
     assert cfg["pylsp"]["plugins"]["pylsp_mypy"]["dmypy"] is True
+
+
+def test_pylsp_server_initialize_params_enable_mypy(tmp_path) -> None:
+    """PylspServer must consume P5A_MYPY_DECISION.pylsp_initialization_options."""
+    from solidlsp.language_servers.pylsp_server import PylspServer
+
+    params = PylspServer._get_initialize_params(str(tmp_path))
+    plugins = params["initializationOptions"]["pylsp"]["plugins"]
+    assert plugins["pylsp_mypy"]["enabled"] is True
+    assert plugins["pylsp_mypy"]["live_mode"] is False
+    assert plugins["pylsp_mypy"]["dmypy"] is True
