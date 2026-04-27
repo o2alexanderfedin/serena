@@ -136,6 +136,11 @@ def test_e12_inline_round_trip_with_checkpoint_replay(
         language="python",
     )
     extract = json.loads(extract_json)
+    # TODO: investigate applied=False — see review I4. Same root cause as
+    # E3: scalpel_extract discards `name_path` (scalpel_facades.py L396
+    # `del ... name_path`) then errors INVALID_ARGUMENT. Reverted to
+    # skip-on-gap; do NOT re-introduce the silent skip elsewhere —
+    # see L05/I4.
     if extract.get("applied") is not True:
         pytest.skip(
             f"E12 extract did not apply (Stage 2B gap): "
@@ -153,11 +158,11 @@ def test_e12_inline_round_trip_with_checkpoint_replay(
         language="python",
     )
     inline = json.loads(inline_json)
-    if inline.get("applied") is not True:
-        pytest.skip(
-            f"E12 inline did not apply (Stage 2B gap): "
-            f"failure={inline.get('failure')}"
-        )
+    # v0.2.0 followup-I4 (strip-the-skip per L05): demand applied=True
+    # unconditionally; the prior skip masked Stage 2B regressions.
+    assert inline.get("applied") is True, (
+        f"E12 inline must apply deterministically; full payload={inline!r}"
+    )
 
     replay_json = mcp_driver_python.rollback(checkpoint_id=extract_ckpt)
     replay = json.loads(replay_json)

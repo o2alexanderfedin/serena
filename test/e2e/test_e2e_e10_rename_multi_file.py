@@ -41,6 +41,13 @@ def test_e10_rust_rename_across_modules(
             f"not initialized in pool spawn): {exc!r}"
         )
     rename = json.loads(rename_json)
+    # TODO: investigate applied=False — see review I4. The strip-the-skip
+    # pass surfaced a fixture/test args mismatch: the rename targets
+    # `parser/parse` but rust-analyzer reports SYMBOL_NOT_FOUND for that
+    # name-path on the calcrs_e2e fixture. Either the fixture exposes a
+    # different module layout, or the name-path resolver doesn't follow
+    # rust-analyzer's symbol-tree shape. Reverted to skip-on-gap; do NOT
+    # re-introduce the silent skip elsewhere — see L05/I4.
     if rename.get("applied") is not True:
         pytest.skip(
             f"E10 rename did not apply (Stage 2A backlog: rename signature "
@@ -104,12 +111,13 @@ def test_e10_py_rename_preserves_dunder_all(
             f"LSP not initialized in pool spawn): {exc!r}"
         )
     rename = json.loads(rename_json)
-    if rename.get("applied") is not True:
-        pytest.skip(
-            f"E10-py rename did not apply (Stage 2A backlog: __all__ "
-            f"preservation in symbol-path rename): "
-            f"failure={rename.get('failure')}"
-        )
+    # v0.2.0 followup-I4 (strip-the-skip per L05): demand applied=True
+    # unconditionally; the prior skip masked Stage 2A regressions in the
+    # __all__ preservation path. The try/except above still legitimately
+    # guards the LSP-init gap (pylsp pool-spawn race).
+    assert rename.get("applied") is True, (
+        f"E10-py rename must apply deterministically; full payload={rename!r}"
+    )
 
     init_text = init.read_text(encoding="utf-8")
     assert "compute" in init_text, "__all__ did not gain `compute`"
@@ -141,6 +149,14 @@ def test_e13_py_organize_imports_single_action(
         language="python",
     )
     organize = json.loads(organize_json)
+    # TODO: investigate applied=False — see review I4. On this host the
+    # python venv lacks `pylsp` (No module named pylsp), so the LSP pool
+    # spawn fails before organize_imports can return applied=True. This is
+    # a host-prerequisite gap, not a flake; the strip-the-skip pass
+    # confirmed the underlying assertion (`text.count("import sys\n") == 1`)
+    # was already failing in baseline for the same reason. Reverted to
+    # skip-on-gap until pylsp is provisioned; do NOT re-introduce the
+    # silent skip elsewhere — see L05/I4.
     if organize.get("applied") is not True:
         pytest.skip(
             f"E13-py organize did not apply (Stage 2B gap): "

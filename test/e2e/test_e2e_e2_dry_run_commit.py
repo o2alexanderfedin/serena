@@ -55,11 +55,13 @@ def test_e2_extract_dry_run_matches_commit(
         language="python",
     )
     commit = json.loads(commit_json)
-    if commit.get("applied") is not True:
-        pytest.skip(
-            f"commit did not apply (Stage 2B observed gap): "
-            f"failure={commit.get('failure')}"
-        )
+    # v0.2.0 followup-I4 (strip-the-skip per L05): demand applied=True
+    # unconditionally so any future regression fails loudly. Previously the
+    # `applied!=True` branch silently skipped, masking the same class of
+    # flake L05 diagnosed for E1-py.
+    assert commit.get("applied") is True, (
+        f"E2 commit must apply deterministically; full payload={commit!r}"
+    )
 
     assert commit.get("checkpoint_id"), (
         f"applied=true but no checkpoint_id: {commit}"

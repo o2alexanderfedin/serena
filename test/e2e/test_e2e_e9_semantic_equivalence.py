@@ -103,11 +103,11 @@ def test_e9_rust_semantic_equivalence(
         language="rust",
     )
     split = json.loads(split_json)
-    if split.get("applied") is not True:
-        pytest.skip(
-            f"E9 split did not apply (Stage 2B gap): "
-            f"failure={split.get('failure')}"
-        )
+    # v0.2.0 followup-I4 (strip-the-skip per L05): demand applied=True
+    # unconditionally; the prior skip masked Stage 2B regressions.
+    assert split.get("applied") is True, (
+        f"E9 Rust split must apply deterministically; full payload={split!r}"
+    )
 
     post_rc, post_pass, post_fail = _run_cargo_test(calcrs_e2e_root, cargo_bin)
     assert post_rc == 0
@@ -144,11 +144,11 @@ def test_e9_py_semantic_equivalence(
         language="python",
     )
     split = json.loads(split_json)
-    if split.get("applied") is not True:
-        pytest.skip(
-            f"E9-py split did not apply (Stage 2B gap): "
-            f"failure={split.get('failure')}"
-        )
+    # v0.2.0 followup-I4 (strip-the-skip per L05): demand applied=True
+    # unconditionally; the prior skip masked Stage 2B regressions.
+    assert split.get("applied") is True, (
+        f"E9-py split must apply deterministically; full payload={split!r}"
+    )
 
     post_rc, post_pass, post_fail = _run_pytest_doctest(calcpy_e2e_root, python_bin)
     assert post_rc == 0
