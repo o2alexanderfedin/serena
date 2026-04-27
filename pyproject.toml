@@ -26,6 +26,11 @@ dependencies = [
   "flask==3.1.3", # bumped from 3.1.1 for CVE fix (also fixes werkzeug alert)
   "sensai-utils==1.5.0",
   "pydantic==2.12.5",
+  # v1.1 Stream 5 / Leaf 05: env-var-driven engine selection — used by
+  # ``serena.config.engine.Settings`` to read ``O2_SCALPEL_ENGINE`` and
+  # validate it against ``EngineRegistry``. Was a transitive dep before,
+  # promoted to direct (Leaf 02 precedent — exact pin, see uv.lock).
+  "pydantic-settings==2.13.1",
   "types-pyyaml==6.0.12.20250516",
   "pyyaml==6.0.2",
   "ruamel.yaml==0.18.14",
