@@ -6,6 +6,7 @@ members = [
     "ra_extractors",
     "ra_inliners",
     "ra_visibility",
+    "ra_imports",
 ]
 
 [workspace.package]
