@@ -9,9 +9,12 @@ Two halves land in two tasks:
     per Phase 0 P3).
 
 Hard constraints (do not relax without re-running the relevant Phase 0 spike):
-  - NO pylsp-mypy in SERVER_SET (Phase 0 P5a verdict C).
-  - NO synthetic per-step didSave (Q1 cascade — pylsp-mypy mitigation
-    became redundant once mypy was dropped).
+  - pylsp-mypy ships as a *plugin inside pylsp-rope*, NOT a separate
+    SERVER_SET entry (Phase 0 P5a re-run verdict B); SERVER_SET stays
+    {pylsp-rope, basedpyright, ruff}.
+  - NO synthetic per-step didSave: the dmypy daemon's warm-path plus
+    pylsp's didSave debounce satisfy the latency budget on re-run
+    (Q1 mitigation redundant under outcome B).
   - basedpyright pinned to 1.39.3 (Phase 0 Q3).
   - Interpreter version floor: ``>=3.10,<3.14`` (Phase 0 P3).
   - Rope library bridge ships 2 of 5 ops at MVP
