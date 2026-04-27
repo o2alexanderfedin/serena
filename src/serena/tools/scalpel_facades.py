@@ -2298,6 +2298,123 @@ class ScalpelConvertToAsyncTool(Tool):
         ).model_dump_json(indent=2)
 
 
+class ScalpelAnnotateReturnTypeTool(Tool):
+    """Insert `-> <Type>` on a function using basedpyright inlay-hint inference."""
+
+    def apply(
+        self,
+        file: str,
+        symbol: str,
+        dry_run: bool = False,
+        preview_token: str | None = None,
+        language: Literal["python"] | None = None,
+        allow_out_of_workspace: bool = False,
+    ) -> str:
+        """Insert `-> <Type>` on a function via basedpyright inlay hints.
+
+        :param file: Python source file containing the function.
+        :param symbol: name of the function to annotate.
+        :param dry_run: preview only.
+        :param preview_token: continuation from a prior dry-run.
+        :param language: 'python' (the only supported language for this facade).
+        :param allow_out_of_workspace: skip workspace-boundary check.
+        :return: JSON RefactorResult.
+        """
+        del preview_token, language
+        project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
+        guard = workspace_boundary_guard(
+            file=file, project_root=project_root,
+            allow_out_of_workspace=allow_out_of_workspace,
+        )
+        if guard is not None:
+            return guard.model_dump_json(indent=2)
+        from serena.refactoring.python_return_type_infer import (
+            annotate_return_type,
+        )
+        provider = _get_inlay_hint_provider(project_root)
+        t0 = time.monotonic()
+        try:
+            workspace_edit, status = annotate_return_type(
+                file=file,
+                symbol=symbol,
+                project_root=project_root,
+                inlay_hint_provider=provider,
+            )
+        except FileNotFoundError as exc:
+            return build_failure_result(
+                code=ErrorCode.INVALID_ARGUMENT,
+                stage="scalpel_annotate_return_type",
+                reason=str(exc),
+                recoverable=False,
+            ).model_dump_json(indent=2)
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        if status.get("status") == "skipped":
+            return RefactorResult(
+                applied=False, no_op=True,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                duration_ms=elapsed_ms,
+                language_options=dict(status),
+                lsp_ops=(LspOpStat(
+                    method="textDocument/inlayHint",
+                    server="basedpyright",
+                    count=0,
+                    total_ms=elapsed_ms,
+                ),),
+            ).model_dump_json(indent=2)
+        if status.get("status") != "applied" or workspace_edit is None:
+            return build_failure_result(
+                code=ErrorCode.SYMBOL_NOT_FOUND,
+                stage="scalpel_annotate_return_type",
+                reason=str(status),
+            ).model_dump_json(indent=2)
+        if dry_run:
+            return RefactorResult(
+                applied=False, no_op=False,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                preview_token=f"pv_annotate_return_type_{int(time.time())}",
+                duration_ms=elapsed_ms,
+                language_options=dict(status),
+            ).model_dump_json(indent=2)
+        edits_applied = _apply_workspace_edit_to_disk(workspace_edit)
+        cid = record_checkpoint_for_workspace_edit(
+            workspace_edit=workspace_edit, snapshot={},
+        )
+        return RefactorResult(
+            applied=True,
+            diagnostics_delta=_empty_diagnostics_delta(),
+            checkpoint_id=cid,
+            duration_ms=elapsed_ms,
+            language_options=dict(status),
+            lsp_ops=(LspOpStat(
+                method="textDocument/inlayHint",
+                server="basedpyright",
+                count=edits_applied,
+                total_ms=elapsed_ms,
+            ),),
+        ).model_dump_json(indent=2)
+
+
+def _get_inlay_hint_provider(project_root: Path):
+    """Bind a basedpyright inlay-hint provider for the project, or ``None``.
+
+    Resolution path:
+      1. Acquire the Python ``MultiServerCoordinator`` for the project.
+      2. If it exposes a callable ``fetch_inlay_hints(file_uri, range)``,
+         hand it back as the provider.
+      3. Otherwise return ``None`` so the helper short-circuits with the
+         ``basedpyright_unavailable`` skip discriminator. Tests patch
+         this function to inject a stub provider.
+    """
+    try:
+        coord = coordinator_for_facade(language="python", project_root=project_root)
+    except Exception:
+        return None
+    fetcher = getattr(coord, "fetch_inlay_hints", None)
+    if not callable(fetcher):
+        return None
+    return fetcher
+
+
 # Dispatch table for commit-time replay. Entries are bound at module load
 # from the facade Tool subclasses; tests patch this dict to inject mocks.
 _FACADE_DISPATCH: dict[str, Any] = {}
@@ -2347,6 +2464,7 @@ def _bind_facade_dispatch_table() -> None:
     _FACADE_DISPATCH["scalpel_ignore_diagnostic"] = lambda **kw: ScalpelIgnoreDiagnosticTool(none_agent).apply(**kw)
     # v1.1 Stream 5 / Leaf 07 — Python-only ergonomic facades.
     _FACADE_DISPATCH["scalpel_convert_to_async"] = lambda **kw: ScalpelConvertToAsyncTool(none_agent).apply(**kw)
+    _FACADE_DISPATCH["scalpel_annotate_return_type"] = lambda **kw: ScalpelAnnotateReturnTypeTool(none_agent).apply(**kw)
 
 
 class ScalpelTransactionCommitTool(Tool):
@@ -2448,6 +2566,7 @@ _bind_facade_dispatch_table()
 
 
 __all__ = [
+    "ScalpelAnnotateReturnTypeTool",
     "ScalpelAutoImportSpecializedTool",
     "ScalpelChangeReturnTypeTool",
     "ScalpelChangeTypeShapeTool",
