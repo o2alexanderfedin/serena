@@ -28,7 +28,7 @@ def test_main_emits_tree_for_rust(
     from serena.refactoring import cli_newplugin
 
     monkeypatch.setattr(
-        cli_newplugin, "_resolve_strategy", lambda lang: fake_strategy_rust
+        cli_newplugin, "_resolve_strategy", lambda _lang: fake_strategy_rust
     )
     rc = main(["--language", "rust", "--out", str(tmp_path)])
     assert rc == 0
@@ -55,7 +55,7 @@ def test_main_existing_dir_without_force_errors(
     from serena.refactoring import cli_newplugin
 
     monkeypatch.setattr(
-        cli_newplugin, "_resolve_strategy", lambda lang: fake_strategy_rust
+        cli_newplugin, "_resolve_strategy", lambda _lang: fake_strategy_rust
     )
     (tmp_path / "o2-scalpel-rust").mkdir()
     rc = main(["--language", "rust", "--out", str(tmp_path)])
@@ -97,7 +97,7 @@ def test_main_appends_to_marketplace_surface(
     from serena.refactoring import cli_newplugin
 
     monkeypatch.setattr(
-        cli_newplugin, "_resolve_strategy", lambda lang: fake_strategy_rust
+        cli_newplugin, "_resolve_strategy", lambda _lang: fake_strategy_rust
     )
     rc = main(
         [
@@ -131,7 +131,7 @@ def test_main_skips_surface_update_when_repo_root_omitted(
     from serena.refactoring import cli_newplugin
 
     monkeypatch.setattr(
-        cli_newplugin, "_resolve_strategy", lambda lang: fake_strategy_rust
+        cli_newplugin, "_resolve_strategy", lambda _lang: fake_strategy_rust
     )
     rc = main(["--language", "rust", "--out", str(tmp_path)])
     assert rc == 0
