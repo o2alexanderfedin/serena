@@ -384,6 +384,70 @@ def _derive_annotation_groups(
     return tuple(groups)
 
 
+def _filter_workspace_edit_by_labels(
+    workspace_edit: dict[str, Any],
+    accepted_labels: set[str],
+) -> dict[str, Any]:
+    """Build a new WorkspaceEdit containing only edits annotated with accepted labels.
+
+    Walks ``documentChanges`` (per LSP §3.17 the modern shape; ``changes`` map
+    cannot carry ``annotationId``s so it's preserved verbatim if present but
+    is not subject to the filter — Stage 1G clippy adapter and every Stage 2A
+    facade that integrates manual review will use ``documentChanges``).
+
+    Annotation lookup goes ``edit.annotationId → annotations[id].label``, so an
+    accepted *label* admits every edit that carries any annotation id whose
+    label is in ``accepted_labels``. Edits with no ``annotationId`` are dropped
+    (manual mode treats unannotated edits as part of an implicit "unknown" group
+    that is never accepted).
+    """
+    annotations = workspace_edit.get("changeAnnotations") or {}
+    if not isinstance(annotations, dict):
+        annotations = {}
+    # Accepted annotation ids = ids whose label is in accepted_labels.
+    accepted_ids: set[str] = set()
+    for anno_id, meta in annotations.items():
+        if not isinstance(meta, dict):
+            continue
+        label_raw = meta.get("label")
+        label = label_raw if isinstance(label_raw, str) else anno_id
+        if label in accepted_labels:
+            accepted_ids.add(anno_id)
+
+    filtered: dict[str, Any] = {}
+    if "changes" in workspace_edit:
+        # ``changes`` map has no per-edit annotationId; preserved verbatim.
+        filtered["changes"] = workspace_edit["changes"]
+    if accepted_ids and annotations:
+        filtered["changeAnnotations"] = {
+            aid: meta for aid, meta in annotations.items() if aid in accepted_ids
+        }
+    new_doc_changes: list[dict[str, Any]] = []
+    for dc in workspace_edit.get("documentChanges") or []:
+        if not isinstance(dc, dict):
+            continue
+        if "kind" in dc:
+            anno_id = dc.get("annotationId")
+            if isinstance(anno_id, str) and anno_id in accepted_ids:
+                new_doc_changes.append(dc)
+            continue
+        kept_edits: list[dict[str, Any]] = []
+        for edit in dc.get("edits") or []:
+            if not isinstance(edit, dict):
+                continue
+            anno_id = edit.get("annotationId")
+            if isinstance(anno_id, str) and anno_id in accepted_ids:
+                kept_edits.append(edit)
+        if kept_edits:
+            new_doc_changes.append({
+                "textDocument": dc.get("textDocument") or {},
+                "edits": kept_edits,
+            })
+    if new_doc_changes:
+        filtered["documentChanges"] = new_doc_changes
+    return filtered
+
+
 class ScalpelDryRunComposeTool(Tool):
     """Preview a chain of refactor steps without committing any.
 
@@ -500,6 +564,62 @@ class ScalpelDryRunComposeTool(Tool):
         }
         import json as _json  # local import keeps top-level deps unchanged
         return _json.dumps(envelope, indent=2)
+
+
+# ---------------------------------------------------------------------------
+# Leaf 06: ScalpelConfirmAnnotationsTool — manual-review confirmation tool
+# ---------------------------------------------------------------------------
+
+
+class ScalpelConfirmAnnotationsTool(Tool):
+    """Apply only the accepted annotation groups of a manual-mode pending transaction.
+
+    See docs/design/mvp/open-questions/q4-changeannotations-auto-accept.md
+    §6.3 line 211 (the v1.1 endorsement of optional manual review — the
+    surrounding paragraph rejects this for MVP; only line 211 carries the
+    v1.1 endorsement).
+    """
+
+    def apply(self, transaction_id: str, accept: list[str]) -> str:
+        """Apply only the accepted annotation groups of a manual-mode
+        pending transaction. Rejected groups have zero side effects.
+
+        :param transaction_id: id returned by scalpel_dry_run_compose with
+            confirmation_mode='manual'.
+        :param accept: list of annotation labels to apply; empty = abandon.
+        :return: JSON {transaction_id, applied_groups, rejected_groups,
+            applied_edits, error_code?}.
+        """
+        # Local imports avoid pulling the facade module into every consumer
+        # of scalpel_primitives at import time (Stage 1G — primitives must
+        # stay light to keep MCP startup snappy).
+        from serena.tools.scalpel_facades import _apply_workspace_edit_to_disk
+        import json as _json
+
+        runtime = ScalpelRuntime.instance()
+        store = runtime.pending_tx_store()
+        pending = store.get(transaction_id)
+        if pending is None:
+            return _json.dumps({
+                "error_code": "UNKNOWN_TRANSACTION",
+                "transaction_id": transaction_id,
+            }, indent=2)
+        accept_set = set(accept)
+        applied_groups = [g.label for g in pending.groups if g.label in accept_set]
+        rejected_groups = [g.label for g in pending.groups if g.label not in accept_set]
+        filtered_edit = _filter_workspace_edit_by_labels(
+            pending.workspace_edit, accept_set,
+        )
+        applied_count = (
+            _apply_workspace_edit_to_disk(filtered_edit) if accept_set else 0
+        )
+        store.discard(transaction_id)
+        return _json.dumps({
+            "transaction_id": transaction_id,
+            "applied_groups": applied_groups,
+            "rejected_groups": rejected_groups,
+            "applied_edits": applied_count,
+        }, indent=2)
 
 
 # ---------------------------------------------------------------------------
@@ -883,6 +1003,7 @@ __all__ = [
     "ScalpelApplyCapabilityTool",
     "ScalpelCapabilitiesListTool",
     "ScalpelCapabilityDescribeTool",
+    "ScalpelConfirmAnnotationsTool",
     "ScalpelDryRunComposeTool",
     "ScalpelExecuteCommandTool",
     "ScalpelReloadPluginsTool",
