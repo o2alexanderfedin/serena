@@ -36,6 +36,7 @@ from serena.refactoring import (
     MultiServerCoordinator,
     TransactionStore,
 )
+from serena.plugins.registry import PluginRegistry
 from serena.refactoring._async_check import AWAITED_SERVER_METHODS
 from serena.refactoring.capabilities import CapabilityCatalog, build_capability_catalog
 from serena.refactoring.checkpoint_default_root import default_checkpoint_disk_root
@@ -210,6 +211,7 @@ class ScalpelRuntime:
         self._pools: dict[tuple[str, Path], LspPool] = {}
         self._coordinators: dict[tuple[str, Path], MultiServerCoordinator] = {}
         self._dynamic_capability_registry: DynamicCapabilityRegistry | None = None
+        self._plugin_registry: PluginRegistry | None = None
 
     # --- singleton accessors -----------------------------------------
 
@@ -274,6 +276,36 @@ class ScalpelRuntime:
                     STRATEGY_REGISTRY, project_root=None,
                 )
             return self._catalog
+
+    def plugin_registry(self) -> PluginRegistry:
+        """Lazy-build the singleton plugin registry.
+
+        v1.1 Stream 5 / Leaf 03 — backs ``scalpel_reload_plugins``. The
+        plugins root resolves via ``O2_SCALPEL_PLUGINS_ROOT`` env override
+        → current working directory fallback. The registry is constructed
+        empty; the first ``reload()`` call populates state from disk so
+        startup stays cheap (Q10: explicit-refresh model).
+        """
+        with self._lock:
+            if self._plugin_registry is None:
+                root = Path(
+                    os.environ.get("O2_SCALPEL_PLUGINS_ROOT", str(Path.cwd())),
+                ).expanduser().resolve(strict=False)
+                self._plugin_registry = PluginRegistry(root)
+            return self._plugin_registry
+
+    def set_plugin_registry_for_testing(
+        self, registry: PluginRegistry,
+    ) -> None:
+        """Replace the in-memory plugin registry; tests only.
+
+        Production paths must use :meth:`plugin_registry`. The companion
+        :meth:`reset_for_testing` drops the singleton entirely; this
+        accessor is a finer-grained hook for tests that want a custom
+        ``plugins_dir`` without rebuilding the rest of the runtime.
+        """
+        with self._lock:
+            self._plugin_registry = registry
 
     def dynamic_capability_registry(self) -> DynamicCapabilityRegistry:
         """Process-global registry of LSP ``client/registerCapability``
