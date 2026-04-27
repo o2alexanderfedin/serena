@@ -15,6 +15,7 @@ members = [
     "ra_convert_returntype",
     "ra_pattern_destructuring",
     "ra_lifetimes",
+    "ra_proc_macros",
 ]
 
 [workspace.package]

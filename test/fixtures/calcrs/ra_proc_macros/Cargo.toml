@@ -1,0 +1,15 @@
+[package]
+name = "ra_proc_macros"
+version = "0.0.0"
+edition.workspace = true
+publish = false
+rust-version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["macros", "rt"] }
+async-trait = "0.1"
+clap = { version = "4", features = ["derive"] }
