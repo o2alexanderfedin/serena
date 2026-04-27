@@ -12,7 +12,7 @@ This module ships in two stages:
     (Phase 0 P1 finding — pylsp-rope ships its inline/refactor
     ``WorkspaceEdit`` via the reverse-request channel).
 
-pylsp-mypy is DELIBERATELY NOT enabled here — Phase 0 P5a verdict C.
+pylsp-mypy is enabled with live_mode=false + dmypy=true per P5a re-run outcome B (stale 0.00%, p95 2.668s); see solidlsp.decisions.p5a_mypy.
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ from typing import Any, ClassVar, cast
 
 from overrides import override
 
+from solidlsp.decisions.p5a_mypy import P5A_MYPY_DECISION
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
@@ -141,20 +142,10 @@ class PylspServer(SolidLanguageServer):
                     "rename": {"dynamicRegistration": True, "prepareSupport": True},
                 },
             },
-            "initializationOptions": {
-                # pylsp-rope is auto-discovered; only declare plugin
-                # toggles that override defaults. Keep the surface small
-                # to minimize churn in v1.1.
-                "pylsp": {
-                    "plugins": {
-                        # P5a: pylsp-mypy is dropped at MVP — disable
-                        # explicitly even though it is not installed,
-                        # so installing it later does not silently
-                        # re-activate behaviour scalpel does not test.
-                        "pylsp_mypy": {"enabled": False},
-                    }
-                }
-            },
+            # pylsp-rope is auto-discovered; only declare plugin toggles that
+            # override defaults. Owned by `solidlsp.decisions.p5a_mypy` so any
+            # future re-flip is gated by `test/decisions/test_p5a_mypy_decision.py`.
+            "initializationOptions": P5A_MYPY_DECISION.pylsp_initialization_options,
             "workspaceFolders": [
                 {"uri": root_uri, "name": pathlib.Path(repository_absolute_path).name}
             ],

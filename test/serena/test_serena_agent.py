@@ -904,6 +904,34 @@ class TestSerenaAgent:
         if symbol["kind"] == SymbolKind.Class.name and serena_agent.get_active_lsp_languages() == [Language.JAVA]:
             assert "A simple model class" in symbol_info, f"Java class docstring not found in symbol info: {symbol}"
 
+    @pytest.mark.parametrize(
+        "serena_agent,symbol_name,expected_kind,expected_file",
+        [
+            pytest.param(Language.FSHARP, "Calculator", "Module", "Calculator.fs", marks=pytest.mark.fsharp),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_find_symbol_fsharp(self, serena_agent: SerenaAgent, symbol_name: str, expected_kind: str, expected_file: str) -> None:
+        # Promoted in stage-v0.2.0-review-i6: this test was @pytest.mark.xfail
+        # for upstream issue #1040 ("F# language server is unreliable") but
+        # has been XPASSing on recent local runs. Promote so future regressions
+        # surface as failures instead of being absorbed by xfail.
+        self._assert_find_symbol(serena_agent, symbol_name, expected_kind, expected_file)
+
+    @pytest.mark.parametrize(
+        "serena_agent,symbol_name,expected_kind,expected_file",
+        [
+            pytest.param(Language.RUST, "add", "Function", "lib.rs", marks=pytest.mark.rust),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_find_symbol_rust(self, serena_agent: SerenaAgent, symbol_name: str, expected_kind: str, expected_file: str) -> None:
+        # Promoted in stage-v0.2.0-review-i6: this test was @pytest.mark.xfail
+        # for upstream issue #1040 ("Rust language server is unreliable") but
+        # has been XPASSing on recent local runs. Promote so future regressions
+        # surface as failures instead of being absorbed by xfail.
+        self._assert_find_symbol(serena_agent, symbol_name, expected_kind, expected_file)
+
     @pytest.mark.parametrize("serena_agent,case", FIND_SYMBOL_REFERENCES_CASES, indirect=["serena_agent"])
     def test_find_symbol(self, serena_agent: SerenaAgent, case: FindSymbolCase) -> None:
         agent = serena_agent

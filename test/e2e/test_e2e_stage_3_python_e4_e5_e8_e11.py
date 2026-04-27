@@ -57,17 +57,22 @@ def test_e4_py_cross_package_extract(
     except Exception as exc:
         pytest.skip(f"E4-py extract raised: {exc!r}")
     payload = json.loads(result_json)
-    if payload.get("applied") is not True:
-        pytest.skip(
-            f"E4-py extract did not apply (Stage 3 facade-application gap): "
-            f"failure={payload.get('failure')}"
-        )
-    if src.read_text(encoding="utf-8") == pre_text:
-        pytest.skip(
-            "extract returned applied=True but file unchanged "
-            "(Stage 3 facade-application gap: WorkspaceEdit not yet "
-            "written to disk — see v0.3.0 backlog)"
-        )
+    # v0.2.0 followup-I4 (strip-the-skip per L05): demand applied=True
+    # unconditionally; the prior skip masked Stage 3 facade-application
+    # regressions. The try/except above still legitimately guards a raise
+    # before result.
+    assert payload.get("applied") is True, (
+        f"E4-py extract must apply deterministically; full payload={payload!r}"
+    )
+    # v0.2.0 followup-I4: the v0.3.0 WorkspaceEdit-applier (commit
+    # `v0.3.0-facade-application-complete`) now writes WorkspaceEdit to
+    # disk, so the prior "applied=True but file unchanged" skip is dead
+    # weight. Demand a real disk mutation.
+    assert src.read_text(encoding="utf-8") != pre_text, (
+        "E4-py extract returned applied=True but file unchanged on disk; "
+        "the Stage 3 facade-application gap was supposed to be CLOSED in "
+        "v0.3.0 — see project_v0_3_0_facade_application memory."
+    )
     proc = subprocess.run(
         [python_bin, "-m", "pytest", "-q", "tests"],
         cwd=str(calcpy_e2e_root),
@@ -121,10 +126,11 @@ def test_e5_py_multi_package_byte_identical(
     except Exception as exc:
         pytest.skip(f"E5-py split raised: {exc!r}")
     payload = json.loads(result_json)
-    if payload.get("applied") is not True:
-        pytest.skip(
-            f"E5-py split did not apply: failure={payload.get('failure')}"
-        )
+    # v0.2.0 followup-I4 (strip-the-skip per L05): demand applied=True
+    # unconditionally; the prior skip masked split-facade regressions.
+    assert payload.get("applied") is True, (
+        f"E5-py split must apply deterministically; full payload={payload!r}"
+    )
     post_proc = subprocess.run(
         [python_bin, "-m", "pytest", "-q", "tests"],
         cwd=str(calcpy_e2e_root),
@@ -163,16 +169,22 @@ def test_e8_py_crash_recovery_on_partial_failure(
     except Exception as exc:
         pytest.skip(f"E8-py split raised: {exc!r}")
     payload = json.loads(result_json)
-    if payload.get("applied") is not True or not payload.get("checkpoint_id"):
-        pytest.skip(
-            f"E8-py split path did not produce a checkpoint: {payload}"
-        )
+    # v0.2.0 followup-I4 (strip-the-skip per L05): demand applied=True and
+    # a checkpoint_id unconditionally; the prior skip masked checkpoint
+    # creation regressions.
+    assert payload.get("applied") is True, (
+        f"E8-py split must apply deterministically; full payload={payload!r}"
+    )
+    assert payload.get("checkpoint_id"), (
+        f"E8-py split applied but produced no checkpoint_id: {payload!r}"
+    )
     rb_json = mcp_driver_python.rollback(checkpoint_id=payload["checkpoint_id"])
     rb = json.loads(rb_json)
-    if rb.get("applied") is not True:
-        pytest.skip(
-            f"E8-py rollback did not apply (Stage 3 rollback gap): {rb}"
-        )
+    # v0.2.0 followup-I4 (strip-the-skip per L05): demand rollback applied=True
+    # unconditionally; the prior skip masked rollback-engine regressions.
+    assert rb.get("applied") is True, (
+        f"E8-py rollback must apply deterministically; full payload={rb!r}"
+    )
     assert src.read_bytes() == pre_bytes, "rollback did not restore byte-identity"
 
 
@@ -201,10 +213,11 @@ def test_e11_py_dunder_all_preserved_under_rename(
     except Exception as exc:
         pytest.skip(f"E11-py rename raised: {exc!r}")
     payload = json.loads(result_json)
-    if payload.get("applied") is not True:
-        pytest.skip(
-            f"E11-py rename did not apply: failure={payload.get('failure')}"
-        )
+    # v0.2.0 followup-I4 (strip-the-skip per L05): demand applied=True
+    # unconditionally; the prior skip masked rename-facade regressions.
+    assert payload.get("applied") is True, (
+        f"E11-py rename must apply deterministically; full payload={payload!r}"
+    )
     init_post = init.read_text(encoding="utf-8")
     assert "run_eval" in init_post, (
         f"__all__ in __init__.py did not pick up renamed symbol: {init_post!r}"

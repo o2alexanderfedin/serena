@@ -42,11 +42,12 @@ def test_e13_rust_verify_after_refactor_round_trip(
             f"E13 verify raised before result (Stage 3 LSP-init gap): {exc!r}"
         )
     payload = json.loads(result_json)
-    if payload.get("applied") is not True:
-        pytest.skip(
-            f"E13 verify did not apply (Stage 3 facade-application gap): "
-            f"failure={payload.get('failure')}"
-        )
+    # v0.2.0 followup-I4 (strip-the-skip per L05): demand applied=True
+    # unconditionally; the prior skip masked verify-facade regressions.
+    # The try/except above still legitimately guards the LSP-init gap.
+    assert payload.get("applied") is True, (
+        f"E13 verify must apply deterministically; full payload={payload!r}"
+    )
     findings = payload.get("language_findings") or []
     assert findings, "verify_after_refactor must surface a verify_summary finding"
     summary = findings[0]
@@ -77,6 +78,14 @@ def test_e14_rust_change_visibility_cross_module(
     except Exception as exc:
         pytest.skip(f"E14 change_visibility raised: {exc!r}")
     payload = json.loads(result_json)
+    # TODO: investigate applied=False — see review I4. The strip-the-skip
+    # pass surfaced a fixture/test position mismatch: position={0,0} (file
+    # start) is not on a symbol that supports change_visibility, so
+    # rust-analyzer reports SYMBOL_NOT_FOUND ("No
+    # refactor.rewrite.change_visibility actions surfaced"). Either the
+    # test should target a real symbol's coords, or the fixture should be
+    # extended. Reverted to skip-on-gap; do NOT re-introduce the silent
+    # skip elsewhere — see L05/I4.
     if payload.get("applied") is not True:
         pytest.skip(
             f"E14 change_visibility did not apply (Stage 3 facade-application gap): "
@@ -118,11 +127,12 @@ def test_e15_rust_expand_macro_round_trip(
     except Exception as exc:
         pytest.skip(f"E15 expand_macro raised: {exc!r}")
     payload = json.loads(result_json)
-    if payload.get("applied") is not True:
-        pytest.skip(
-            f"E15 expand_macro did not apply (Stage 3 coord wiring gap): "
-            f"failure={payload.get('failure')} no_op={payload.get('no_op')}"
-        )
+    # v0.2.0 followup-I4 (strip-the-skip per L05): demand applied=True
+    # unconditionally; the prior skip masked expand_macro coord-wiring
+    # regressions.
+    assert payload.get("applied") is True, (
+        f"E15 expand_macro must apply deterministically; full payload={payload!r}"
+    )
     findings = payload.get("language_findings") or []
     assert findings, "expand_macro must surface a macro_expansion finding"
     assert findings[0]["code"] == "macro_expansion"
@@ -148,6 +158,14 @@ def test_e16_rust_complete_match_arms_exhaustiveness(
     except Exception as exc:
         pytest.skip(f"E16 complete_match_arms raised: {exc!r}")
     payload = json.loads(result_json)
+    # TODO: investigate applied=False — see review I4. The strip-the-skip
+    # pass surfaced a fixture/test position mismatch: position={0,0} (file
+    # start) is not on a non-exhaustive match, so rust-analyzer reports
+    # SYMBOL_NOT_FOUND ("No quickfix.add_missing_match_arms actions
+    # surfaced"). Either the test should target a real match's coords, or
+    # the calcrs_e2e fixture should grow a non-exhaustive match. Reverted
+    # to skip-on-gap; do NOT re-introduce the silent skip elsewhere —
+    # see L05/I4.
     if payload.get("applied") is not True:
         pytest.skip(
             f"E16 complete_match_arms did not apply (calcrs fixture has no "

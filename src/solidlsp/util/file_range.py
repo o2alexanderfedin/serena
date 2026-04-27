@@ -39,8 +39,14 @@ def compute_file_range(path: PathLike) -> tuple[LSPPosition, LSPPosition]:
     default UTF-16; for ASCII-only fixtures (the smoke-test corpus) this
     is identical to a UTF-8 character count.
 
+    The file is read as UTF-8. Non-UTF-8 sources (e.g., latin-1, UTF-16
+    BOM-prefixed files) raise ``UnicodeDecodeError``; callers that need to
+    support arbitrary encodings should detect/decode upstream and pass a
+    materialised path of UTF-8 text, or catch the exception explicitly.
+
     :param path: file to measure. Accepts ``str`` or ``pathlib.Path``.
     :raises FileNotFoundError: if ``path`` does not exist.
+    :raises UnicodeDecodeError: if ``path`` is not valid UTF-8.
     """
     text = Path(path).read_text(encoding="utf-8")
     if not text:

@@ -14,7 +14,7 @@ Above: facades see merged ``MergedCodeAction`` lists with
 
 from __future__ import annotations
 
-from typing import Any, Iterator, Literal, cast
+from typing import Any, Iterator, Literal, cast, get_args
 
 from pydantic import BaseModel, Field
 
@@ -30,6 +30,11 @@ ProvenanceLiteral = Literal[
     "pylsp-mypy",
     "rust-analyzer",
 ]
+
+# Tuple of valid provenance values, derived from ``ProvenanceLiteral`` so the
+# two stay in lockstep. Used by the merge code paths to validate ``sid`` before
+# narrowing it to ``ProvenanceLiteral`` (see DRY note in §11.6).
+_PROVENANCE_VALUES: tuple[ProvenanceLiteral, ...] = get_args(ProvenanceLiteral)
 
 
 class SuppressedAlternative(BaseModel):
@@ -473,110 +478,16 @@ def _dedup(
 
 
 # ---------------------------------------------------------------------------
-# §11.2 disagreement helpers — case 1 (overlap classification) + case 5
-# (kind:null / unrecognized → quickfix.other).
-# ---------------------------------------------------------------------------
-
-
-def _flatten_text_edits(edit: dict[str, Any]) -> list[tuple]:
-    """Flatten a WorkspaceEdit to a sortable list of (uri, sl, sc, el, ec, newText) tuples.
-
-    File-level operations (``create`` / ``rename`` / ``delete``) are
-    excluded — only TextDocumentEdit hunks are flattened, since the
-    §11.2 case-1 overlap analysis is byte-range based.
-    """
-    out: list[tuple] = []
-    for change in edit.get("documentChanges", []) or []:
-        if change.get("kind") in ("create", "rename", "delete"):
-            continue
-        uri = change.get("textDocument", {}).get("uri", "")
-        for te in change.get("edits", []) or []:
-            r = te.get("range", {})
-            s = r.get("start", {}); e = r.get("end", {})
-            out.append((uri, s.get("line", 0), s.get("character", 0),
-                        e.get("line", 0), e.get("character", 0),
-                        te.get("newText", "")))
-    return out
-
-
-def _range_contains(outer: tuple, inner: tuple) -> bool:
-    """Does ``outer`` (sl, sc, el, ec) geometrically contain ``inner``?
-    Inclusive on both ends."""
-    o_sl, o_sc, o_el, o_ec = outer
-    i_sl, i_sc, i_el, i_ec = inner
-    # inner.start >= outer.start
-    if (i_sl, i_sc) < (o_sl, o_sc):
-        return False
-    # inner.end <= outer.end
-    if (i_el, i_ec) > (o_el, o_ec):
-        return False
-    return True
-
-
-def _classify_overlap(higher: dict[str, Any], lower: dict[str, Any]) -> str:
-    """§11.2 case 1: classify the relationship between two WorkspaceEdits.
-
-    Returns:
-        "subset_lossless"  — every change in ``lower`` is also in ``higher``
-                             (each lower hunk's range is geometrically
-                             contained by some same-uri hunk in ``higher``)
-        "subset_lossy"     — ``lower`` carries extra changes ``higher`` does not
-                             (at least one lower hunk has no covering higher hunk
-                             AND at least one lower hunk IS covered → partial
-                             overlap with extras)
-        "disjoint"         — no lower hunk is covered by any higher hunk
-                             (caller should NOT call this; reach via Stage-2
-                             dedup instead)
-    """
-    higher_tuples = _flatten_text_edits(higher)
-    lower_tuples = _flatten_text_edits(lower)
-
-    # Group higher hunks by uri for O(N) containment checks.
-    higher_by_uri: dict[str, list[tuple]] = {}
-    for h in higher_tuples:
-        higher_by_uri.setdefault(h[0], []).append(h[1:5])  # (sl, sc, el, ec)
-
-    covered = 0
-    uncovered = 0
-    for uri, l_sl, l_sc, l_el, l_ec, _ in lower_tuples:
-        candidates = higher_by_uri.get(uri, [])
-        inner = (l_sl, l_sc, l_el, l_ec)
-        if any(_range_contains(outer, inner) for outer in candidates):
-            covered += 1
-        else:
-            uncovered += 1
-
-    if covered == 0:
-        return "disjoint"
-    if uncovered == 0:
-        return "subset_lossless"
-    return "subset_lossy"
-
-
-_KNOWN_KIND_PREFIXES: tuple[str, ...] = (
-    "source.organizeImports", "source.fixAll", "source",
-    "quickfix", "refactor.extract", "refactor.inline", "refactor.rewrite", "refactor",
-)
-
-
-def _bucket_unknown_kind(kind: str | None) -> str:
-    """§11.2 case 5: map null/unrecognized kinds to ``quickfix.other`` (lowest priority).
-
-    A kind is "known" iff its dotted prefix matches one of the canonical
-    LSP CodeActionKind buckets (LSP §3.18.1). Anything else collapses to
-    the lowest-priority sentinel ``quickfix.other``.
-    """
-    if not kind:
-        return "quickfix.other"
-    for known in _KNOWN_KIND_PREFIXES:
-        if kind == known or kind.startswith(known + "."):
-            return kind
-    return "quickfix.other"
-
-
-# ---------------------------------------------------------------------------
 # §11.7 invariants — apply-clean / syntactic-validity / disabled / boundary.
 # ---------------------------------------------------------------------------
+#
+# Note: the §11.2 case-1 overlap classifier (``_classify_overlap`` +
+# ``_flatten_text_edits`` + ``_range_contains``) and the §11.2 case-5
+# kind-bucketer (``_bucket_unknown_kind`` + ``_KNOWN_KIND_PREFIXES``)
+# were removed in stage-v0.2.0-review-i2 (YAGNI per CLAUDE.md). They
+# were referenced only by the spike test, never wired into
+# ``merge_and_validate_code_actions`` or ``merge_code_actions``.
+# Reintroduce them only when production logic actually consumes them.
 
 import ast
 from pathlib import Path
@@ -894,7 +805,11 @@ class MultiServerCoordinator:
                 return server_id, resp, (time.monotonic() - t0) * 1000.0
             except asyncio.TimeoutError as exc:
                 return server_id, exc, (time.monotonic() - t0) * 1000.0
-            except BaseException as exc:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
+                # Narrowed from ``BaseException`` so KeyboardInterrupt and
+                # SystemExit propagate to the caller instead of being captured
+                # as per-server "errors". asyncio.CancelledError is a
+                # BaseException subclass on Python 3.8+ and likewise propagates.
                 return server_id, exc, (time.monotonic() - t0) * 1000.0
 
         gathered = await asyncio.gather(
@@ -1039,9 +954,9 @@ class MultiServerCoordinator:
                             provenance=drop_sid,
                             reason="lower_priority",
                         ))
-                provenance = sid if sid in (
-                    "pylsp-rope", "pylsp-base", "basedpyright", "ruff", "pylsp-mypy", "rust-analyzer"
-                ) else "pylsp-base"
+                provenance: ProvenanceLiteral = (
+                    cast(ProvenanceLiteral, sid) if sid in _PROVENANCE_VALUES else "pylsp-base"
+                )
                 if isinstance(action.get("edit"), dict):
                     self._action_edits[action_id] = action["edit"]
                 out.append(MergedCodeAction(
@@ -1050,7 +965,7 @@ class MultiServerCoordinator:
                     kind=action.get("kind", ""),
                     disabled_reason=disabled_reason,
                     is_preferred=bool(action.get("isPreferred", False)),
-                    provenance=provenance,  # type: ignore[arg-type]
+                    provenance=provenance,
                     suppressed_alternatives=suppressed,
                 ))
             # Disabled candidates are also surfaced.
@@ -1058,9 +973,9 @@ class MultiServerCoordinator:
                 action_seq += 1
                 action_id = action.get("data", {}).get("id") if isinstance(action.get("data"), dict) else None
                 action_id = str(action_id) if action_id is not None else f"merge-{action_seq}"
-                provenance = sid if sid in (
-                    "pylsp-rope", "pylsp-base", "basedpyright", "ruff", "pylsp-mypy", "rust-analyzer"
-                ) else "pylsp-base"
+                provenance = (
+                    cast(ProvenanceLiteral, sid) if sid in _PROVENANCE_VALUES else "pylsp-base"
+                )
                 if isinstance(action.get("edit"), dict):
                     self._action_edits[action_id] = action["edit"]
                 out.append(MergedCodeAction(
@@ -1069,7 +984,7 @@ class MultiServerCoordinator:
                     kind=action.get("kind", ""),
                     disabled_reason=action["disabled"].get("reason"),
                     is_preferred=bool(action.get("isPreferred", False)),
-                    provenance=provenance,  # type: ignore[arg-type]
+                    provenance=provenance,
                     suppressed_alternatives=[],
                 ))
         return out
@@ -1159,9 +1074,9 @@ class MultiServerCoordinator:
             action_seq += 1
             raw_id = action.get("data", {}).get("id") if isinstance(action.get("data"), dict) else None
             aid = str(raw_id) if raw_id is not None else f"merge-{action_seq}"
-            provenance = sid if sid in (
-                "pylsp-rope", "pylsp-base", "basedpyright", "ruff", "pylsp-mypy", "rust-analyzer"
-            ) else "pylsp-base"
+            provenance: ProvenanceLiteral = (
+                cast(ProvenanceLiteral, sid) if sid in _PROVENANCE_VALUES else "pylsp-base"
+            )
             disabled_reason: str | None = reason
             if disabled_reason is None and isinstance(action.get("disabled"), dict):
                 disabled_reason = action["disabled"].get("reason")
@@ -1173,7 +1088,7 @@ class MultiServerCoordinator:
                 kind=action.get("kind", ""),
                 disabled_reason=disabled_reason,
                 is_preferred=bool(action.get("isPreferred", False)),
-                provenance=provenance,  # type: ignore[arg-type]
+                provenance=provenance,
                 suppressed_alternatives=[],
             )
 

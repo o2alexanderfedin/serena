@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 from serena.tools.facade_support import (
+    attach_apply_source,
     build_failure_result,
     coordinator_for_facade,
     record_checkpoint_for_workspace_edit,
@@ -2366,3 +2367,21 @@ __all__ = [
     "ScalpelUseFunctionTool",
     "ScalpelVerifyAfterRefactorTool",
 ]
+
+
+# Apply-source capture — fixes D-debt.md §2 flakes. Function attaches
+# __wrapped_source__ to every Scalpel*Tool.apply so introspection is
+# independent of linecache. Name-based discovery (DRY): new facades
+# auto-register. Callers read via facade_support.get_apply_source(cls).
+def _attach_apply_source_to_all_facades() -> None:
+    for _name, _obj in list(globals().items()):
+        if (
+            isinstance(_obj, type)
+            and _name.startswith("Scalpel")
+            and _name.endswith("Tool")
+        ):
+            attach_apply_source(_obj)
+
+
+_attach_apply_source_to_all_facades()
+del _attach_apply_source_to_all_facades
