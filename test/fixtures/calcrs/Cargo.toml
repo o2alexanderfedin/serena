@@ -3,9 +3,29 @@ resolver = "2"
 members = [
     "calcrs",
     "calcrs-core",
+    "ra_convert_returntype",
+    "ra_convert_typeshape",
+    "ra_extractors",
+    "ra_generators_methods",
+    "ra_generators_traits",
+    "ra_glob_imports",
+    "ra_imports",
+    "ra_inliners",
+    "ra_lifetimes",
+    "ra_macros",
+    "ra_module_layouts",
+    "ra_ordering",
+    "ra_pattern_destructuring",
+    "ra_proc_macros",
+    "ra_quickfixes",
+    "ra_ssr",
+    "ra_term_search",
+    "ra_visibility",
+    "ra_workspace_edit_shapes",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
 publish = false
+rust-version = "1.74"
