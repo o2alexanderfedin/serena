@@ -36,6 +36,7 @@ from serena.refactoring import (
     MultiServerCoordinator,
     TransactionStore,
 )
+from serena.refactoring._async_check import AWAITED_SERVER_METHODS
 from serena.refactoring.capabilities import CapabilityCatalog, build_capability_catalog
 from solidlsp.dynamic_capabilities import DynamicCapabilityRegistry
 
@@ -72,16 +73,11 @@ class _AsyncAdapter:
 
     __slots__ = ("_inner",)
 
-    # Facade method names that need async wrapping (mirrors
-    # ``_BROADCAST_DISPATCH`` in ``multi_server.py``).
-    _ASYNC_METHODS = frozenset(
-        {
-            "request_code_actions",
-            "resolve_code_action",
-            "execute_command",
-            "request_rename_symbol_edit",
-        }
-    )
+    # Facade method names that need async wrapping. Canonical definition
+    # lives in ``serena.refactoring._async_check.AWAITED_SERVER_METHODS``
+    # and is shared with ``MultiServerCoordinator._AWAITED_SERVER_METHODS``
+    # (single source of truth per CLAUDE.md).
+    _ASYNC_METHODS = frozenset(AWAITED_SERVER_METHODS)
 
     def __init__(self, inner: Any) -> None:
         object.__setattr__(self, "_inner", inner)

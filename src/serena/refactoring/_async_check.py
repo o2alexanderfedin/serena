@@ -21,6 +21,22 @@ from collections.abc import Iterable
 from typing import Any
 from unittest.mock import Mock
 
+# ---------------------------------------------------------------------------
+# Single source of truth for the four LSP facade method names that
+# ``MultiServerCoordinator.broadcast`` awaits on each server. Both
+# ``MultiServerCoordinator._AWAITED_SERVER_METHODS`` (gate input) and
+# ``_AsyncAdapter._ASYNC_METHODS`` (which methods to wrap in a coroutine)
+# derive from this tuple. Per project CLAUDE.md: "Each piece of
+# information has one canonical location. Never duplicate across files."
+# ---------------------------------------------------------------------------
+
+AWAITED_SERVER_METHODS: tuple[str, ...] = (
+    "request_code_actions",
+    "resolve_code_action",
+    "execute_command",
+    "request_rename_symbol_edit",
+)
+
 
 def is_async_callable(obj: Any) -> bool:
     """Return ``True`` when ``obj`` can be safely ``await``\\ed by
@@ -89,4 +105,8 @@ def assert_servers_async_callable(
                 )
 
 
-__all__ = ["assert_servers_async_callable", "is_async_callable"]
+__all__ = [
+    "AWAITED_SERVER_METHODS",
+    "assert_servers_async_callable",
+    "is_async_callable",
+]
