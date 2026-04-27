@@ -220,6 +220,7 @@ class LanguageHealth(_Frozen):
     indexing_progress: str | None = None
     servers: tuple[ServerHealth, ...] = ()
     capabilities_count: int = 0
+    dynamic_capabilities: tuple[str, ...] = ()
     estimated_wait_ms: int | None = None
     capability_catalog_hash: str = ""
 

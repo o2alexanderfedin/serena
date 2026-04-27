@@ -34,6 +34,7 @@ from serena.tools.scalpel_schemas import (
     WorkspaceHealth,
 )
 from serena.tools.tools_base import Tool
+from solidlsp.dynamic_capabilities import DynamicCapabilityRegistry
 
 
 class ScalpelCapabilitiesListTool(Tool):
@@ -502,8 +503,15 @@ class ScalpelTransactionRollbackTool(Tool):
 def _build_language_health(
     language: Any,
     project_root: Path,
+    *,
+    dynamic_registry: DynamicCapabilityRegistry | None = None,
 ) -> LanguageHealth:
-    """Aggregate ServerHealth rows for one language from the pool stats."""
+    """Aggregate ServerHealth rows for one language from the pool stats.
+
+    When ``dynamic_registry`` is provided, methods registered under any
+    static-catalog ``source_server`` for this language are unioned (sorted)
+    into ``dynamic_capabilities`` and added to ``capabilities_count``.
+    """
     runtime = ScalpelRuntime.instance()
     pool = runtime.pool_for(language, project_root)
     stats = pool.stats()
@@ -511,6 +519,15 @@ def _build_language_health(
     lang_records = [r for r in catalog.records if r.language == language.value]
     server_ids = sorted({r.source_server for r in lang_records})
     catalog_hash = catalog.hash() if hasattr(catalog, "hash") else ""
+    dynamic_methods: tuple[str, ...] = (
+        tuple(sorted({
+            method
+            for sid in server_ids
+            for method in dynamic_registry.list_for(sid)
+        }))
+        if dynamic_registry is not None
+        else ()
+    )
     server_rows: list[ServerHealth] = []
     for sid in server_ids:
         # PoolStats v1 doesn't expose per-server pid/rss; surface placeholders
@@ -530,7 +547,8 @@ def _build_language_health(
         indexing_state=indexing_state,  # type: ignore[arg-type]
         indexing_progress=None,
         servers=tuple(server_rows),
-        capabilities_count=len(lang_records),
+        capabilities_count=len(lang_records) + len(dynamic_methods),
+        dynamic_capabilities=dynamic_methods,
         estimated_wait_ms=None,
         capability_catalog_hash=catalog_hash,
     )
@@ -564,6 +582,7 @@ class ScalpelWorkspaceHealthTool(Tool):
                     indexing_progress=str(exc),
                     servers=(),
                     capabilities_count=0,
+                    dynamic_capabilities=(),
                     estimated_wait_ms=None,
                     capability_catalog_hash="",
                 )
