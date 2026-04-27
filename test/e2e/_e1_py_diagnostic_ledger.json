@@ -216,7 +216,7 @@
     "applied_runs": 30,
     "applied_rate": 1.0,
     "failure_rows": [],
-    "elapsed_p50_s": 0.03885587499826215,
-    "elapsed_p99_s": 0.08660629099176731
+    "elapsed_p50_s": 0.03870454199932283,
+    "elapsed_p99_s": 0.12336449744252605
   }
 }
