@@ -404,3 +404,53 @@ def test_invariant_3_path_filter_accepts_in_workspace_clippy_fix(
         f"ok={ok} reason={reason!r}"
     )
     assert reason is None
+
+
+# ---------------------------------------------------------------------------
+# Task 5 — Invariant 4 (change-annotation warning surface).
+# ---------------------------------------------------------------------------
+
+
+def test_invariant_4_clippy_annotations_round_trip_with_needs_confirmation(
+    tmp_path: Path,
+) -> None:
+    """``ClippyAdapter`` MUST emit ``changeAnnotations`` with
+    ``needsConfirmation=True`` so the dry-run surface can warn the LLM
+    before any bytes hit disk. Default allowlist is empty per the leaf
+    spec — every clippy lint surfaces as needs-confirmation."""
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    src = workspace / "src" / "main.rs"
+    src.parent.mkdir(parents=True)
+    src.write_text("fn main() {}\n")
+
+    record = {
+        "reason": "compiler-message",
+        "message": {
+            "message": "useless use of `vec!`",
+            "code": {"code": "clippy::useless_vec"},
+            "spans": [
+                {
+                    "file_name": "src/main.rs",
+                    "line_start": 1,
+                    "line_end": 1,
+                    "column_start": 1,
+                    "column_end": 13,
+                    "suggested_replacement": "fn main() {}",
+                    "suggestion_applicability": "MachineApplicable",
+                },
+            ],
+        },
+    }
+    edit = clippy_json_to_workspace_edit(json.dumps(record) + "\n", workspace)
+
+    annotations = edit.get("changeAnnotations") or {}
+    assert "clippy::useless_vec" in annotations, (
+        f"expected clippy::useless_vec annotation; got {sorted(annotations)}"
+    )
+    entry = annotations["clippy::useless_vec"]
+    assert entry["label"] == "clippy::useless_vec"
+    assert entry["needsConfirmation"] is True
+    # The description carries the human-readable message so the LLM /
+    # confirmation surface can show it verbatim.
+    assert entry["description"] == "useless use of `vec!`"
