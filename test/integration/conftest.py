@@ -31,15 +31,15 @@ Critical implementation notes
    sync ``start_server`` context managers are correctly torn down
    at session end.
 7. ``CARGO_BUILD_RUSTC=rustc`` is exported into the rust-analyzer
-   environment to defeat the user's global ``rust-fv-driver`` cargo
-   wrapper (an environmental quirk; see
-   ``test/spikes/test_spike_s3_apply_edit_reverse.py:24`` for the
-   same workaround).
+   environment by the **opt-in** ``test.conftest_dev_host`` pytest
+   plugin (auto-loaded via ``addopts`` in ``pyproject.toml``) when
+   ``O2_SCALPEL_LOCAL_HOST=1`` is set. CI does not set the flag and
+   inherits a clean environment. See
+   ``docs/dev/host-rustc-shim.md`` for the full context.
 """
 
 from __future__ import annotations
 
-import os
 import shutil
 import sys
 from collections.abc import Iterator
@@ -52,9 +52,9 @@ if TYPE_CHECKING:
     from solidlsp.ls import SolidLanguageServer
 
 
-# Neutralise the user's global ``rust-fv-driver`` cargo config wrapper
-# before any rust-analyzer subprocess inherits the environment.
-os.environ.setdefault("CARGO_BUILD_RUSTC", "rustc")
+# Note: the developer-host ``CARGO_BUILD_RUSTC=rustc`` shim now lives
+# in the opt-in ``test.conftest_dev_host`` pytest plugin (activated by
+# ``O2_SCALPEL_LOCAL_HOST=1``). See ``docs/dev/host-rustc-shim.md``.
 
 
 # ---------------------------------------------------------------------------
