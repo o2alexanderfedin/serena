@@ -34,6 +34,24 @@ from serena.tools.scalpel_schemas import (
     WorkspaceHealth,
 )
 from serena.tools.tools_base import Tool
+from solidlsp.dynamic_capabilities import DynamicCapabilityRegistry
+
+
+def _ensure_supported_language(language: str) -> Literal["rust", "python"]:
+    """Narrow a catalog ``language`` string to the MVP-supported literal.
+
+    ``CapabilityRecord.language`` is ``str`` (loaded from JSON) but every
+    descriptor schema in the response is ``Literal["rust", "python"]``.
+    Centralising the narrowing here keeps consumers type-safe and fails
+    fast if the catalog ever leaks an unexpected value.
+    """
+    if language == "rust":
+        return "rust"
+    if language == "python":
+        return "python"
+    raise ValueError(
+        f"unsupported catalog language: {language!r}; expected 'rust' or 'python'"
+    )
 
 
 class ScalpelCapabilitiesListTool(Tool):
@@ -64,7 +82,7 @@ class ScalpelCapabilitiesListTool(Tool):
             rows.append(CapabilityDescriptor(
                 capability_id=rec.id,
                 title=rec.id.rsplit(".", 1)[-1].replace("_", " ").title(),
-                language=rec.language,
+                language=_ensure_supported_language(rec.language),
                 kind=rec.kind,
                 source_server=rec.source_server,
                 preferred_facade=rec.preferred_facade,
@@ -89,11 +107,11 @@ class ScalpelCapabilityDescribeTool(Tool):
                 desc = CapabilityFullDescriptor(
                     capability_id=rec.id,
                     title=rec.id.rsplit(".", 1)[-1].replace("_", " ").title(),
-                    language=rec.language,
+                    language=_ensure_supported_language(rec.language),
                     kind=rec.kind,
                     source_server=rec.source_server,
                     preferred_facade=rec.preferred_facade,
-                    params_schema=rec.params_schema,
+                    params_schema=dict(rec.params_schema),
                     extension_allow_list=tuple(sorted(rec.extension_allow_list)),
                     description=(
                         f"{rec.kind} from {rec.source_server} (Stage 1F catalog)."
@@ -392,7 +410,7 @@ class ScalpelDryRunComposeTool(Tool):
 # ---------------------------------------------------------------------------
 
 
-def _no_op_applier(_workspace_edit: dict[str, Any]) -> int:
+def _no_op_applier(_: dict[str, Any]) -> int:
     """Stage 1G synthetic applier — exists so checkpoint_store.restore
     can be invoked without spinning up a real LSP. Returns 0 so restore()
     surfaces as ``no_op=True`` in RefactorResult.
@@ -502,8 +520,15 @@ class ScalpelTransactionRollbackTool(Tool):
 def _build_language_health(
     language: Any,
     project_root: Path,
+    *,
+    dynamic_registry: DynamicCapabilityRegistry | None = None,
 ) -> LanguageHealth:
-    """Aggregate ServerHealth rows for one language from the pool stats."""
+    """Aggregate ServerHealth rows for one language from the pool stats.
+
+    When ``dynamic_registry`` is provided, methods registered under any
+    static-catalog ``source_server`` for this language are unioned (sorted)
+    into ``dynamic_capabilities`` and added to ``capabilities_count``.
+    """
     runtime = ScalpelRuntime.instance()
     pool = runtime.pool_for(language, project_root)
     stats = pool.stats()
@@ -511,6 +536,15 @@ def _build_language_health(
     lang_records = [r for r in catalog.records if r.language == language.value]
     server_ids = sorted({r.source_server for r in lang_records})
     catalog_hash = catalog.hash() if hasattr(catalog, "hash") else ""
+    dynamic_methods: tuple[str, ...] = (
+        tuple(sorted({
+            method
+            for sid in server_ids
+            for method in dynamic_registry.list_for(sid)
+        }))
+        if dynamic_registry is not None
+        else ()
+    )
     server_rows: list[ServerHealth] = []
     for sid in server_ids:
         # PoolStats v1 doesn't expose per-server pid/rss; surface placeholders
@@ -530,7 +564,8 @@ def _build_language_health(
         indexing_state=indexing_state,  # type: ignore[arg-type]
         indexing_progress=None,
         servers=tuple(server_rows),
-        capabilities_count=len(lang_records),
+        capabilities_count=len(lang_records) + len(dynamic_methods),
+        dynamic_capabilities=dynamic_methods,
         estimated_wait_ms=None,
         capability_catalog_hash=catalog_hash,
     )
@@ -554,9 +589,12 @@ class ScalpelWorkspaceHealthTool(Tool):
             else Path(self.get_project_root()).expanduser().resolve(strict=False)
         )
         languages: dict[str, LanguageHealth] = {}
+        registry = ScalpelRuntime.instance().dynamic_capability_registry()
         for lang in (Language.PYTHON, Language.RUST):
             try:
-                languages[lang.value] = _build_language_health(lang, root)
+                languages[lang.value] = _build_language_health(
+                    lang, root, dynamic_registry=registry,
+                )
             except Exception as exc:  # noqa: BLE001 — surface as failed
                 languages[lang.value] = LanguageHealth(
                     language=lang.value,
@@ -564,6 +602,7 @@ class ScalpelWorkspaceHealthTool(Tool):
                     indexing_progress=str(exc),
                     servers=(),
                     capabilities_count=0,
+                    dynamic_capabilities=(),
                     estimated_wait_ms=None,
                     capability_catalog_hash="",
                 )

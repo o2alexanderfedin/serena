@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from copy import copy
 from pathlib import Path, PurePath
 from time import monotonic, perf_counter, sleep
-from typing import Any, Self, Union, cast
+from typing import Any, ClassVar, Self, Union, cast
 
 import pathspec
 from sensai.util.pickle import getstate, load_pickle
@@ -339,6 +339,13 @@ class SolidLanguageServer(ABC):
     """
 
     CACHE_FOLDER_NAME = "cache"
+
+    server_id: ClassVar[str] = ""
+    """Canonical id used to key dynamic capability registrations. Concrete
+    subclasses override (e.g. ``"basedpyright"``, ``"pylsp-base"``,
+    ``"rust-analyzer"``). Empty string means "unknown server" and the base
+    ``_handle_register_capability`` skips recording for that instance."""
+
     RAW_DOCUMENT_SYMBOLS_CACHE_VERSION = 1
     """
     global version identifier for raw symbol caches; an LS-specific version is defined separately and combined with this.
@@ -612,7 +619,7 @@ class SolidLanguageServer(ABC):
         log.debug(f"Processing {len(processed_patterns)} ignored paths from the config")
 
         # Create a pathspec matcher from the processed patterns
-        self._ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, processed_patterns)
+        self._ignore_spec = pathspec.PathSpec.from_lines("gitwildmatch", processed_patterns)
 
         self._has_waited_for_cross_file_references = False
 
@@ -677,9 +684,29 @@ class SolidLanguageServer(ABC):
     def _handle_register_capability(self, params: dict[str, Any]) -> None:
         """LSP `client/registerCapability` request: ACK with null per spec.
 
+        Side effect (Stage v0.2.0-followup-01c): for servers with a known
+        ``server_id``, record each registration's ``method`` into the
+        process-global ``DynamicCapabilityRegistry`` exposed by
+        ``ScalpelRuntime``. ``workspace_health`` then surfaces them in
+        ``LanguageHealth.dynamic_capabilities``.
+
         rust-analyzer dynamically registers workspace/didChangeWatchedFiles
         via this method (§4.1). We accept all registrations passively.
         """
+        sid = type(self).server_id
+        if sid:
+            # Lazy-import to keep ls.py free of serena dependencies at import
+            # time (solidlsp is a strict subset and may be reused independently).
+            try:
+                from serena.tools.scalpel_runtime import ScalpelRuntime  # noqa: PLC0415
+                registry = ScalpelRuntime.instance().dynamic_capability_registry()
+            except Exception:  # noqa: BLE001
+                # Standalone solidlsp tests may not have a runtime; ACK silently.
+                return None
+            for reg in params.get("registrations", []) or []:
+                method = reg.get("method") if isinstance(reg, dict) else None
+                if isinstance(method, str):
+                    registry.register(sid, method)
         return None
 
     def _handle_unregister_capability(self, params: dict[str, Any]) -> None:
@@ -2092,7 +2119,7 @@ class SolidLanguageServer(ABC):
             response = cast(list[LSPTypes.CompletionItem], response)
 
             # TODO: Handle the case when the completion is a keyword
-            items = [item for item in response if item["kind"] != LSPTypes.CompletionItemKind.Keyword]
+            items = [item for item in response if item.get("kind") != LSPTypes.CompletionItemKind.Keyword]
 
             completions_list: list[ls_types.CompletionItem] = []
 
@@ -2507,7 +2534,10 @@ class SolidLanguageServer(ABC):
                 # For file symbols, process their children (top-level symbols)
                 for child in symbol["children"]:
                     # Handle cross-platform path resolution (fixes Docker/macOS path issues)
-                    absolute_path = Path(child["location"]["absolutePath"]).resolve()
+                    child_location = child.get("location")
+                    if child_location is None:
+                        continue
+                    absolute_path = Path(child_location["absolutePath"]).resolve()
                     repository_root = Path(self.repository_root_path).resolve()
 
                     # Try pathlib first, fallback to alternative approach if paths are incompatible
@@ -2516,8 +2546,8 @@ class SolidLanguageServer(ABC):
                     except ValueError:
                         # If paths are from different roots (e.g., /workspaces vs /Users),
                         # use the relativePath from location if available, or extract from absolutePath
-                        if "relativePath" in child["location"] and child["location"]["relativePath"]:
-                            path = Path(child["location"]["relativePath"])
+                        if "relativePath" in child_location and child_location["relativePath"]:
+                            path = Path(child_location["relativePath"])
                         else:
                             # Extract relative path by finding common structure
                             # Example: /workspaces/.../test_repo/file.py -> test_repo/file.py
@@ -2644,8 +2674,9 @@ class SolidLanguageServer(ABC):
         factory: SymbolBodyFactory | None = None,
     ) -> SymbolBody:
         if factory is None:
-            assert "relativePath" in symbol["location"]
-            with self._open_file_context(symbol["location"]["relativePath"]) as f:  # type: ignore
+            symbol_location = symbol.get("location")
+            assert symbol_location is not None and "relativePath" in symbol_location
+            with self._open_file_context(symbol_location["relativePath"]) as f:  # type: ignore
                 factory = SymbolBodyFactory(f)
 
         return factory.create_symbol_body(symbol)
@@ -2859,17 +2890,19 @@ class SolidLanguageServer(ABC):
         # the former has no location, the later has no range
         # we will just always add location of the desired format to all symbols
         for symbol in document_symbols.iter_symbols():
-            if "location" not in symbol:
-                range = symbol["range"]
+            existing_location = symbol.get("location")
+            if existing_location is None:
+                symbol_range = symbol.get("range")
+                assert symbol_range is not None
                 location = ls_types.Location(
                     uri=f"file:/{absolute_file_path}",
-                    range=range,
+                    range=symbol_range,
                     absolutePath=absolute_file_path,
                     relativePath=relative_file_path,
                 )
                 symbol["location"] = location
             else:
-                location = symbol["location"]
+                location = existing_location
                 assert "range" in location
                 location["absolutePath"] = absolute_file_path
                 location["relativePath"] = relative_file_path
@@ -2894,11 +2927,19 @@ class SolidLanguageServer(ABC):
             return line_condition and column_condition
 
         # Only consider containers that are not one-liners (otherwise we may get imports)
-        candidate_containers = [
-            s
-            for s in document_symbols.iter_symbols()
-            if s["kind"] in container_symbol_kinds and s["location"]["range"]["start"]["line"] != s["location"]["range"]["end"]["line"]
-        ]
+        def _container_range(sym: ls_types.UnifiedSymbolInformation) -> ls_types.Range | None:
+            loc = sym.get("location")
+            return loc["range"] if loc is not None else None
+
+        candidate_containers = []
+        for s in document_symbols.iter_symbols():
+            if s["kind"] not in container_symbol_kinds:
+                continue
+            cr = _container_range(s)
+            if cr is None:
+                continue
+            if cr["start"]["line"] != cr["end"]["line"]:
+                candidate_containers.append(s)
         var_containers = [s for s in document_symbols.iter_symbols() if s["kind"] == ls_types.SymbolKind.Variable]
         candidate_containers.extend(var_containers)
 
@@ -2908,14 +2949,18 @@ class SolidLanguageServer(ABC):
         # From the candidates, find those whose range contains the given position.
         containing_symbols = []
         for symbol in candidate_containers:
-            s_range = symbol["location"]["range"]
-            if not is_position_in_range(line, s_range):
+            s_range = _container_range(symbol)
+            if s_range is None or not is_position_in_range(line, s_range):
                 continue
             containing_symbols.append(symbol)
 
         if containing_symbols:
             # Return the one with the greatest starting position (i.e. the innermost container).
-            containing_symbol = max(containing_symbols, key=lambda s: s["location"]["range"]["start"]["line"])
+            def _sort_line(s: ls_types.UnifiedSymbolInformation) -> int:
+                cr = _container_range(s)
+                return cr["start"]["line"] if cr is not None else -1
+
+            containing_symbol = max(containing_symbols, key=_sort_line)
             if include_body:
                 containing_symbol["body"] = self.create_symbol_body(containing_symbol, factory=body_factory)
             return containing_symbol
@@ -2993,7 +3038,8 @@ class SolidLanguageServer(ABC):
 
     @staticmethod
     def _symbol_match_sort_key(symbol: ls_types.UnifiedSymbolInformation, match_priority: int) -> tuple[int, int, int, int, int]:
-        location = symbol["location"]
+        location = symbol.get("location")
+        assert location is not None
         symbol_range = location["range"]
         start = symbol_range["start"]
         end = symbol_range["end"]
@@ -3011,7 +3057,8 @@ class SolidLanguageServer(ABC):
     ) -> ls_types.UnifiedSymbolInformation | None:
         candidates: list[tuple[tuple[int, int, int, int, int], ls_types.UnifiedSymbolInformation]] = []
         for symbol in self._get_document_symbols_with_locations(relative_file_path):
-            location = symbol["location"]
+            location = symbol.get("location")
+            assert location is not None
             symbol_range = location["range"]
             selection_range = symbol.get("selectionRange") or symbol_range
 
