@@ -80,6 +80,8 @@ pub mod eval {
     }
 }
 
+pub mod ops;
+
 pub use ast::Expr;
 pub use errors::CalcError;
 pub use eval::eval;
