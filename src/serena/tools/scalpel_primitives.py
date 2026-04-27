@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from serena.refactoring.capabilities import CapabilityRecord
+from serena.refactoring.pending_tx import AnnotationGroup, PendingTransaction
 from serena.tools.scalpel_runtime import ScalpelRuntime
 from serena.tools.scalpel_schemas import (
     CapabilityDescriptor,
@@ -337,8 +338,125 @@ def _dry_run_one_step(
     )
 
 
+def _derive_annotation_groups(
+    workspace_edit: dict[str, Any],
+) -> tuple[AnnotationGroup, ...]:
+    """Project an LSP ``WorkspaceEdit.changeAnnotations`` map into ``AnnotationGroup``s.
+
+    Each top-level annotation id becomes one group; ``edit_ids`` enumerates
+    the annotation ids of every ``AnnotatedTextEdit`` (or resource op) that
+    references it. Order is the iteration order of ``changeAnnotations``,
+    which Python preserves for dicts since 3.7. Empty / missing
+    ``changeAnnotations`` returns an empty tuple.
+    """
+    annotations = workspace_edit.get("changeAnnotations") or {}
+    if not isinstance(annotations, dict):
+        return ()
+    # Build {annotation_id: [edit_ids]} by walking every edit that points at it.
+    edit_ids_by_anno: dict[str, list[str]] = {aid: [] for aid in annotations}
+    for dc in workspace_edit.get("documentChanges") or []:
+        if not isinstance(dc, dict):
+            continue
+        if "kind" in dc:
+            anno_id = dc.get("annotationId")
+            if isinstance(anno_id, str) and anno_id in edit_ids_by_anno:
+                edit_ids_by_anno[anno_id].append(anno_id)
+            continue
+        for edit in dc.get("edits") or []:
+            if not isinstance(edit, dict):
+                continue
+            anno_id = edit.get("annotationId")
+            if isinstance(anno_id, str) and anno_id in edit_ids_by_anno:
+                edit_ids_by_anno[anno_id].append(anno_id)
+    groups: list[AnnotationGroup] = []
+    for anno_id, meta in annotations.items():
+        if not isinstance(meta, dict):
+            continue
+        label_raw = meta.get("label")
+        label = label_raw if isinstance(label_raw, str) else anno_id
+        needs_raw = meta.get("needsConfirmation", False)
+        needs_confirmation = bool(needs_raw)
+        groups.append(AnnotationGroup(
+            label=label,
+            needs_confirmation=needs_confirmation,
+            edit_ids=tuple(edit_ids_by_anno[anno_id]),
+        ))
+    return tuple(groups)
+
+
+def _filter_workspace_edit_by_labels(
+    workspace_edit: dict[str, Any],
+    accepted_labels: set[str],
+) -> dict[str, Any]:
+    """Build a new WorkspaceEdit containing only edits annotated with accepted labels.
+
+    Walks ``documentChanges`` (per LSP §3.17 the modern shape; ``changes`` map
+    cannot carry ``annotationId``s so it's preserved verbatim if present but
+    is not subject to the filter — Stage 1G clippy adapter and every Stage 2A
+    facade that integrates manual review will use ``documentChanges``).
+
+    Annotation lookup goes ``edit.annotationId → annotations[id].label``, so an
+    accepted *label* admits every edit that carries any annotation id whose
+    label is in ``accepted_labels``. Edits with no ``annotationId`` are dropped
+    (manual mode treats unannotated edits as part of an implicit "unknown" group
+    that is never accepted).
+    """
+    annotations = workspace_edit.get("changeAnnotations") or {}
+    if not isinstance(annotations, dict):
+        annotations = {}
+    # Accepted annotation ids = ids whose label is in accepted_labels.
+    accepted_ids: set[str] = set()
+    for anno_id, meta in annotations.items():
+        if not isinstance(meta, dict):
+            continue
+        label_raw = meta.get("label")
+        label = label_raw if isinstance(label_raw, str) else anno_id
+        if label in accepted_labels:
+            accepted_ids.add(anno_id)
+
+    filtered: dict[str, Any] = {}
+    if "changes" in workspace_edit:
+        # ``changes`` map has no per-edit annotationId; preserved verbatim.
+        filtered["changes"] = workspace_edit["changes"]
+    if accepted_ids and annotations:
+        filtered["changeAnnotations"] = {
+            aid: meta for aid, meta in annotations.items() if aid in accepted_ids
+        }
+    new_doc_changes: list[dict[str, Any]] = []
+    for dc in workspace_edit.get("documentChanges") or []:
+        if not isinstance(dc, dict):
+            continue
+        if "kind" in dc:
+            anno_id = dc.get("annotationId")
+            if isinstance(anno_id, str) and anno_id in accepted_ids:
+                new_doc_changes.append(dc)
+            continue
+        kept_edits: list[dict[str, Any]] = []
+        for edit in dc.get("edits") or []:
+            if not isinstance(edit, dict):
+                continue
+            anno_id = edit.get("annotationId")
+            if isinstance(anno_id, str) and anno_id in accepted_ids:
+                kept_edits.append(edit)
+        if kept_edits:
+            new_doc_changes.append({
+                "textDocument": dc.get("textDocument") or {},
+                "edits": kept_edits,
+            })
+    if new_doc_changes:
+        filtered["documentChanges"] = new_doc_changes
+    return filtered
+
+
 class ScalpelDryRunComposeTool(Tool):
-    """Preview a chain of refactor steps without committing any."""
+    """Preview a chain of refactor steps without committing any.
+
+    When ``confirmation_mode='manual'`` (Q4 §6.3 line 211 — the v1.1
+    optional override the surrounding paragraph rejects for MVP), the
+    tool short-circuits application, persists a ``PendingTransaction`` to
+    the disk-backed pending-tx store, and returns ``awaiting_confirmation=True``
+    so the caller routes through ``scalpel_confirm_annotations`` next.
+    """
 
     PREVIEW_TTL_SECONDS = 300  # 5-min, per §5.5
 
@@ -346,14 +464,24 @@ class ScalpelDryRunComposeTool(Tool):
         self,
         steps: list[dict[str, Any]],
         fail_fast: bool = True,
+        confirmation_mode: Literal["auto", "manual"] = "auto",
+        workspace_edit: dict[str, Any] | None = None,
     ) -> str:
         """Preview a chain of refactor steps without committing any.
         Returns transaction_id; call scalpel_transaction_commit to apply.
 
         :param steps: ordered list of {tool, args} dicts.
         :param fail_fast: stop at the first failing step (default True).
+        :param confirmation_mode: 'auto' (default, unchanged behaviour) or
+            'manual' (Q4 §6.3 line 211; persists pending tx, expects a
+            follow-up scalpel_confirm_annotations call).
+        :param workspace_edit: aggregate LSP WorkspaceEdit whose
+            changeAnnotations seed the manual-mode pending tx; ignored when
+            confirmation_mode='auto'.
         :return: JSON ComposeResult.
         """
+        if confirmation_mode == "manual":
+            return self._apply_manual_mode(workspace_edit or {})
         project_root = Path(self.get_project_root())
         warnings: list[str] = []
         validated: list[ComposeStep] = []
@@ -403,6 +531,95 @@ class ScalpelDryRunComposeTool(Tool):
             expires_at=time.time() + self.PREVIEW_TTL_SECONDS,
             warnings=tuple(warnings),
         ).model_dump_json(indent=2)
+
+    def _apply_manual_mode(self, workspace_edit: dict[str, Any]) -> str:
+        """Persist a ``PendingTransaction`` and short-circuit application.
+
+        Q4 §6.3 line 211 — the v1.1 optional override: the LLM passed
+        ``confirmation_mode='manual'``, so every annotation group is staged
+        on disk for ``scalpel_confirm_annotations`` to filter rather than
+        being applied here. Returns a JSON envelope carrying the
+        ``transaction_id`` + ``awaiting_confirmation=True`` plus a snapshot
+        of the derived groups so the caller can reason about what to accept.
+        """
+        runtime = ScalpelRuntime.instance()
+        raw_id = runtime.transaction_store().begin()
+        txn_id = f"txn_{raw_id}"
+        groups = _derive_annotation_groups(workspace_edit)
+        runtime.pending_tx_store().put(PendingTransaction(
+            id=txn_id, groups=groups, workspace_edit=workspace_edit,
+        ))
+        envelope = {
+            "transaction_id": txn_id,
+            "awaiting_confirmation": True,
+            "expires_at": time.time() + self.PREVIEW_TTL_SECONDS,
+            "groups": [
+                {
+                    "label": g.label,
+                    "needs_confirmation": g.needs_confirmation,
+                    "edit_ids": list(g.edit_ids),
+                }
+                for g in groups
+            ],
+        }
+        import json as _json  # local import keeps top-level deps unchanged
+        return _json.dumps(envelope, indent=2)
+
+
+# ---------------------------------------------------------------------------
+# Leaf 06: ScalpelConfirmAnnotationsTool — manual-review confirmation tool
+# ---------------------------------------------------------------------------
+
+
+class ScalpelConfirmAnnotationsTool(Tool):
+    """Apply only the accepted annotation groups of a manual-mode pending transaction.
+
+    See docs/design/mvp/open-questions/q4-changeannotations-auto-accept.md
+    §6.3 line 211 (the v1.1 endorsement of optional manual review — the
+    surrounding paragraph rejects this for MVP; only line 211 carries the
+    v1.1 endorsement).
+    """
+
+    def apply(self, transaction_id: str, accept: list[str]) -> str:
+        """Apply only the accepted annotation groups of a manual-mode
+        pending transaction. Rejected groups have zero side effects.
+
+        :param transaction_id: id returned by scalpel_dry_run_compose with
+            confirmation_mode='manual'.
+        :param accept: list of annotation labels to apply; empty = abandon.
+        :return: JSON {transaction_id, applied_groups, rejected_groups,
+            applied_edits, error_code?}.
+        """
+        # Local imports avoid pulling the facade module into every consumer
+        # of scalpel_primitives at import time (Stage 1G — primitives must
+        # stay light to keep MCP startup snappy).
+        from serena.tools.scalpel_facades import _apply_workspace_edit_to_disk
+        import json as _json
+
+        runtime = ScalpelRuntime.instance()
+        store = runtime.pending_tx_store()
+        pending = store.get(transaction_id)
+        if pending is None:
+            return _json.dumps({
+                "error_code": "UNKNOWN_TRANSACTION",
+                "transaction_id": transaction_id,
+            }, indent=2)
+        accept_set = set(accept)
+        applied_groups = [g.label for g in pending.groups if g.label in accept_set]
+        rejected_groups = [g.label for g in pending.groups if g.label not in accept_set]
+        filtered_edit = _filter_workspace_edit_by_labels(
+            pending.workspace_edit, accept_set,
+        )
+        applied_count = (
+            _apply_workspace_edit_to_disk(filtered_edit) if accept_set else 0
+        )
+        store.discard(transaction_id)
+        return _json.dumps({
+            "transaction_id": transaction_id,
+            "applied_groups": applied_groups,
+            "rejected_groups": rejected_groups,
+            "applied_edits": applied_count,
+        }, indent=2)
 
 
 # ---------------------------------------------------------------------------
@@ -786,6 +1003,7 @@ __all__ = [
     "ScalpelApplyCapabilityTool",
     "ScalpelCapabilitiesListTool",
     "ScalpelCapabilityDescribeTool",
+    "ScalpelConfirmAnnotationsTool",
     "ScalpelDryRunComposeTool",
     "ScalpelExecuteCommandTool",
     "ScalpelReloadPluginsTool",
