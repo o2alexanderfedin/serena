@@ -15,11 +15,12 @@ import time
 from pathlib import Path
 from typing import Any
 
+from solidlsp.util.file_range import compute_file_range
+
 
 def test_ruff_offers_organize_imports_on_calcpy_core(
     ruff_lsp: Any,
     calcpy_workspace: Path,
-    whole_file_range: tuple[dict[str, int], dict[str, int]],
 ) -> None:
     """ruff must surface ``source.organizeImports`` (any suffix) on core.py."""
     core_path = str(calcpy_workspace / "calcpy" / "core.py")
@@ -29,7 +30,10 @@ def test_ruff_offers_organize_imports_on_calcpy_core(
     # is enough for the LSP to be ready to answer codeAction.
     time.sleep(0.5)
 
-    start, end = whole_file_range
+    # Migrated from the ``whole_file_range`` fixture's legacy
+    # unparametrized fallback (removed in stage-v0.2.0-review-i3).
+    # ``compute_file_range`` returns the precise (start, end) pair.
+    start, end = compute_file_range(core_path)
     actions: list[dict[str, Any]] = []
     with ruff_lsp.open_file("calcpy/core.py"):
         time.sleep(0.5)
