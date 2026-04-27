@@ -252,41 +252,58 @@ async def test_broadcast_runs_three_python_servers_in_parallel(
 
     # Parallelism evidence — the headline guarantee.
     #
-    # Bounds:
-    #   theoretical_max_save = serial - max_single  (Amdahl's law: the
-    #     broadcast cannot finish faster than max_single, so the most we
-    #     can save vs serial round-robin is everything-but-the-slowest)
-    #   actual_save          = serial - parallel
+    # In stage-v0.2.0-review-m9 the single Amdahl-aware budget was SPLIT
+    # into two narrower assertions, each catching a distinct regression
+    # mode. The original combined ``parallel < 0.9*serial + 0.1*max_single``
+    # accepted runs that captured as little as 2% real save, masking
+    # subtle parallelism degradation behind the Amdahl floor.
     #
-    # Budget: ``parallel`` must capture at least 10% of the theoretical
-    # max save. Equivalently:
-    #   parallel < serial - 0.1 × (serial - max_single)
-    #            = 0.9 × serial + 0.1 × max_single
+    # Both assertions must pass for the test to pass.
     #
-    # Why 10% and not 50% (midpoint) or 70% (spec's original budget)?
-    #   - 70% × serial is infeasible: when one server (pylsp here)
-    #     dominates ~80% of serial, ``parallel`` is bounded BELOW by
-    #     ``max_single ≈ 0.8 × serial > 0.7 × serial``.
-    #   - 50% midpoint detected round-robin reliably but flaked at ~50%
-    #     under combined-suite load (parallel-overhead consumes most of
-    #     the (serial - max_single) gap).
-    #   - 10%-of-save still cleanly detects round-robin (which saves
-    #     exactly 0%) while absorbing 5-15ms of asyncio + thread-pool
-    #     scheduling overhead. Verified 10/10 stable in mixed-suite runs.
+    # ----- Assertion 1: regression detector -----
+    #
+    # Catches "broadcast collapsed back to serial round-robin" — the
+    # historical TypeError-on-await failure mode and any future
+    # equivalent. Threshold: parallel must be at least 5% faster than
+    # serial. A round-robin regression saves exactly 0% (modulo
+    # noise), so 5% cleanly separates real parallelism from sequential
+    # execution.
     max_single_server = max(per_server_totals.values())
-    save_floor_fraction = 0.1
-    parallelism_budget = (
-        serial_total
-        - save_floor_fraction * (serial_total - max_single_server)
-    )
-    assert parallel_elapsed < parallelism_budget, (
-        f"broadcast did not parallelise: "
+    serial_regression_budget = serial_total * 0.95
+    assert parallel_elapsed < serial_regression_budget, (
+        f"REGRESSION DETECTOR: broadcast collapsed to serial round-robin: "
         f"parallel={parallel_elapsed:.3f}s "
         f"vs serial={serial_total:.3f}s "
+        f"vs 95%-of-serial budget={serial_regression_budget:.3f}s "
+        f"(parallel must save >=5% vs serial; got "
+        f"{(serial_total - parallel_elapsed) / serial_total:.1%}) "
+        f"per_server={ {k: round(v, 3) for k, v in per_server_totals.items()} }"
+    )
+
+    # ----- Assertion 2: parallelism-quality detector -----
+    #
+    # Catches "parallelism degraded to glorified round-robin" — broadcast
+    # is faster than serial but well above ``max_single``, indicating the
+    # fan-out is dispatching but the scheduler is not actually overlapping
+    # the per-server work. Amdahl's law floors the parallel time at
+    # ``max_single``; we allow up to 50ms of asyncio + thread-pool
+    # scheduling overhead on top of that floor.
+    #
+    # Why 50ms and not the original 10% slack? With three Python LSPs and
+    # N=20 iterations, asyncio task-creation + thread-pool dispatch costs
+    # roughly 1-3ms per iteration, so 50ms absorbs ~15-50× the median
+    # scheduling cost — generous enough to absorb mixed-suite jitter while
+    # still catching a degradation that pushes parallel time toward the
+    # 10-20% above-Amdahl-floor regime.
+    parallelism_quality_budget = max_single_server + 0.050
+    assert parallel_elapsed < parallelism_quality_budget, (
+        f"PARALLELISM DEGRADED: broadcast wall-time well above the "
+        f"Amdahl floor of max(per_server_total): "
+        f"parallel={parallel_elapsed:.3f}s "
         f"vs max_single={max_single_server:.3f}s "
-        f"vs budget={parallelism_budget:.3f}s "
-        f"(must save >= {save_floor_fraction:.0%} of "
-        f"theoretical max save = "
-        f"{serial_total - max_single_server:.3f}s) "
+        f"vs floor+50ms budget={parallelism_quality_budget:.3f}s "
+        f"(real parallelism should land within 50ms of max_single; "
+        f"current overshoot suggests round-robin-with-extra-steps) "
+        f"serial={serial_total:.3f}s "
         f"per_server={ {k: round(v, 3) for k, v in per_server_totals.items()} }"
     )
