@@ -15,6 +15,7 @@ expected_crates=(
     "ra_generators_methods"
     "ra_convert_typeshape"
     "ra_convert_returntype"
+    "ra_pattern_destructuring"
 )
 
 actual=$(CARGO_BUILD_RUSTC=rustc cargo metadata --format-version 1 --no-deps \

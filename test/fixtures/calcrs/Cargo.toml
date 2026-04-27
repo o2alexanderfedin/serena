@@ -13,6 +13,7 @@ members = [
     "ra_generators_methods",
     "ra_convert_typeshape",
     "ra_convert_returntype",
+    "ra_pattern_destructuring",
 ]
 
 [workspace.package]
