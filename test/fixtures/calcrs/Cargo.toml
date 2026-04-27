@@ -20,6 +20,7 @@ members = [
     "ra_macros",
     "ra_module_layouts",
     "ra_quickfixes",
+    "ra_workspace_edit_shapes",
 ]
 
 [workspace.package]
