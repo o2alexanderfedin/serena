@@ -14,7 +14,7 @@ Above: facades see merged ``MergedCodeAction`` lists with
 
 from __future__ import annotations
 
-from typing import Any, Iterator, Literal, cast
+from typing import Any, Iterator, Literal, cast, get_args
 
 from pydantic import BaseModel, Field
 
@@ -30,6 +30,11 @@ ProvenanceLiteral = Literal[
     "pylsp-mypy",
     "rust-analyzer",
 ]
+
+# Tuple of valid provenance values, derived from ``ProvenanceLiteral`` so the
+# two stay in lockstep. Used by the merge code paths to validate ``sid`` before
+# narrowing it to ``ProvenanceLiteral`` (see DRY note in §11.6).
+_PROVENANCE_VALUES: tuple[ProvenanceLiteral, ...] = get_args(ProvenanceLiteral)
 
 
 class SuppressedAlternative(BaseModel):
@@ -800,7 +805,11 @@ class MultiServerCoordinator:
                 return server_id, resp, (time.monotonic() - t0) * 1000.0
             except asyncio.TimeoutError as exc:
                 return server_id, exc, (time.monotonic() - t0) * 1000.0
-            except BaseException as exc:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
+                # Narrowed from ``BaseException`` so KeyboardInterrupt and
+                # SystemExit propagate to the caller instead of being captured
+                # as per-server "errors". asyncio.CancelledError is a
+                # BaseException subclass on Python 3.8+ and likewise propagates.
                 return server_id, exc, (time.monotonic() - t0) * 1000.0
 
         gathered = await asyncio.gather(
@@ -945,9 +954,9 @@ class MultiServerCoordinator:
                             provenance=drop_sid,
                             reason="lower_priority",
                         ))
-                provenance = sid if sid in (
-                    "pylsp-rope", "pylsp-base", "basedpyright", "ruff", "pylsp-mypy", "rust-analyzer"
-                ) else "pylsp-base"
+                provenance: ProvenanceLiteral = (
+                    cast(ProvenanceLiteral, sid) if sid in _PROVENANCE_VALUES else "pylsp-base"
+                )
                 if isinstance(action.get("edit"), dict):
                     self._action_edits[action_id] = action["edit"]
                 out.append(MergedCodeAction(
@@ -956,7 +965,7 @@ class MultiServerCoordinator:
                     kind=action.get("kind", ""),
                     disabled_reason=disabled_reason,
                     is_preferred=bool(action.get("isPreferred", False)),
-                    provenance=provenance,  # type: ignore[arg-type]
+                    provenance=provenance,
                     suppressed_alternatives=suppressed,
                 ))
             # Disabled candidates are also surfaced.
@@ -964,9 +973,9 @@ class MultiServerCoordinator:
                 action_seq += 1
                 action_id = action.get("data", {}).get("id") if isinstance(action.get("data"), dict) else None
                 action_id = str(action_id) if action_id is not None else f"merge-{action_seq}"
-                provenance = sid if sid in (
-                    "pylsp-rope", "pylsp-base", "basedpyright", "ruff", "pylsp-mypy", "rust-analyzer"
-                ) else "pylsp-base"
+                provenance = (
+                    cast(ProvenanceLiteral, sid) if sid in _PROVENANCE_VALUES else "pylsp-base"
+                )
                 if isinstance(action.get("edit"), dict):
                     self._action_edits[action_id] = action["edit"]
                 out.append(MergedCodeAction(
@@ -975,7 +984,7 @@ class MultiServerCoordinator:
                     kind=action.get("kind", ""),
                     disabled_reason=action["disabled"].get("reason"),
                     is_preferred=bool(action.get("isPreferred", False)),
-                    provenance=provenance,  # type: ignore[arg-type]
+                    provenance=provenance,
                     suppressed_alternatives=[],
                 ))
         return out
@@ -1065,9 +1074,9 @@ class MultiServerCoordinator:
             action_seq += 1
             raw_id = action.get("data", {}).get("id") if isinstance(action.get("data"), dict) else None
             aid = str(raw_id) if raw_id is not None else f"merge-{action_seq}"
-            provenance = sid if sid in (
-                "pylsp-rope", "pylsp-base", "basedpyright", "ruff", "pylsp-mypy", "rust-analyzer"
-            ) else "pylsp-base"
+            provenance: ProvenanceLiteral = (
+                cast(ProvenanceLiteral, sid) if sid in _PROVENANCE_VALUES else "pylsp-base"
+            )
             disabled_reason: str | None = reason
             if disabled_reason is None and isinstance(action.get("disabled"), dict):
                 disabled_reason = action["disabled"].get("reason")
@@ -1079,7 +1088,7 @@ class MultiServerCoordinator:
                 kind=action.get("kind", ""),
                 disabled_reason=disabled_reason,
                 is_preferred=bool(action.get("isPreferred", False)),
-                provenance=provenance,  # type: ignore[arg-type]
+                provenance=provenance,
                 suppressed_alternatives=[],
             )
 
