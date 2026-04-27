@@ -20,7 +20,6 @@ if TYPE_CHECKING:
 def test_rust_analyzer_returns_code_actions_on_calcrs_lib(
     ra_lsp: "SolidLanguageServer",
     calcrs_workspace: Path,
-    whole_file_range: tuple[dict[str, int], dict[str, int]],
 ) -> None:
     """rust-analyzer must offer >=1 code action on ``calcrs/src/lib.rs``."""
     lib_path = str(calcrs_workspace / "calcrs" / "src" / "lib.rs")
@@ -31,16 +30,13 @@ def test_rust_analyzer_returns_code_actions_on_calcrs_lib(
     # budget against the larger seed.
     time.sleep(3.0)
 
-    # Compute a safe whole-file range — rust-analyzer rejects positions
-    # past EOF (unlike ruff which clamps).  Fall back to a fixed end at
-    # the last byte of the file in (line, char) terms.
-    text = Path(lib_path).read_text(encoding="utf-8")
-    lines = text.splitlines()
-    last_line = max(0, len(lines) - 1)
-    last_char = len(lines[-1]) if lines else 0
-    file_end = {"line": last_line, "character": last_char}
+    # Compute a safe whole-file range via the shared helper.
+    # rust-analyzer rejects positions past EOF (unlike ruff which
+    # clamps), so we delegate to ``compute_file_range`` instead of
+    # inlining the EOF coordinate math here.
+    from solidlsp.util.file_range import compute_file_range
 
-    del whole_file_range  # unused on Rust path; kept for fixture symmetry
+    _, file_end = compute_file_range(lib_path)
 
     actions: list[dict[str, Any]] = []
     with ra_lsp.open_file("calcrs/src/lib.rs"):
