@@ -121,8 +121,8 @@ def _insert_full_content(uri: str, content: str) -> dict[str, Any]:
 class Checkpoint:
     """One stored applied edit + its inverse, ready for restore.
 
-    v1.1: ``created_at_ns`` records monotonic creation time, used by the
-    disk layer's FIFO retention. ``to_persisted`` / ``from_persisted``
+    v1.1: ``created_at_ns`` records wall-clock creation time (``time_ns``),
+    used by the disk layer's FIFO retention. ``to_persisted`` / ``from_persisted``
     bridge to ``PersistedCheckpoint`` for cross-session durability;
     ``from_persisted`` bypasses ``__init__`` (which would recompute the
     inverse from ``applied``/``snapshot``) and rehydrates the stored
@@ -140,11 +140,11 @@ class Checkpoint:
         self.applied: dict[str, Any] = applied
         self.snapshot: dict[str, str] = snapshot
         self.inverse: dict[str, Any] = inverse_workspace_edit(applied, snapshot)
-        # time.monotonic_ns is preferred for ordering (immune to wall-clock
-        # adjustments) and matches the disk layer's FIFO-by-mtime semantics
-        # in spirit. Stored on the in-memory object so ``to_persisted`` is a
-        # cheap projection.
-        self.created_at_ns: int = time.monotonic_ns()
+        # time.time_ns is wall-clock so the value remains meaningful across
+        # process restarts when round-tripped through the disk layer. Disk
+        # FIFO retention uses filesystem mtime (more authoritative across
+        # sessions); this field is informational metadata.
+        self.created_at_ns: int = time.time_ns()
 
     def to_persisted(self) -> PersistedCheckpoint:
         """Project to the on-disk schema. Lossy on ``applied``/``snapshot`` —
