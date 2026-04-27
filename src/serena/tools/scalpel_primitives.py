@@ -37,6 +37,23 @@ from serena.tools.tools_base import Tool
 from solidlsp.dynamic_capabilities import DynamicCapabilityRegistry
 
 
+def _ensure_supported_language(language: str) -> Literal["rust", "python"]:
+    """Narrow a catalog ``language`` string to the MVP-supported literal.
+
+    ``CapabilityRecord.language`` is ``str`` (loaded from JSON) but every
+    descriptor schema in the response is ``Literal["rust", "python"]``.
+    Centralising the narrowing here keeps consumers type-safe and fails
+    fast if the catalog ever leaks an unexpected value.
+    """
+    if language == "rust":
+        return "rust"
+    if language == "python":
+        return "python"
+    raise ValueError(
+        f"unsupported catalog language: {language!r}; expected 'rust' or 'python'"
+    )
+
+
 class ScalpelCapabilitiesListTool(Tool):
     """List capabilities for a language with optional filter."""
 
@@ -65,7 +82,7 @@ class ScalpelCapabilitiesListTool(Tool):
             rows.append(CapabilityDescriptor(
                 capability_id=rec.id,
                 title=rec.id.rsplit(".", 1)[-1].replace("_", " ").title(),
-                language=rec.language,
+                language=_ensure_supported_language(rec.language),
                 kind=rec.kind,
                 source_server=rec.source_server,
                 preferred_facade=rec.preferred_facade,
@@ -90,11 +107,11 @@ class ScalpelCapabilityDescribeTool(Tool):
                 desc = CapabilityFullDescriptor(
                     capability_id=rec.id,
                     title=rec.id.rsplit(".", 1)[-1].replace("_", " ").title(),
-                    language=rec.language,
+                    language=_ensure_supported_language(rec.language),
                     kind=rec.kind,
                     source_server=rec.source_server,
                     preferred_facade=rec.preferred_facade,
-                    params_schema=rec.params_schema,
+                    params_schema=dict(rec.params_schema),
                     extension_allow_list=tuple(sorted(rec.extension_allow_list)),
                     description=(
                         f"{rec.kind} from {rec.source_server} (Stage 1F catalog)."
@@ -393,7 +410,7 @@ class ScalpelDryRunComposeTool(Tool):
 # ---------------------------------------------------------------------------
 
 
-def _no_op_applier(_workspace_edit: dict[str, Any]) -> int:
+def _no_op_applier(_: dict[str, Any]) -> int:
     """Stage 1G synthetic applier — exists so checkpoint_store.restore
     can be invoked without spinning up a real LSP. Returns 0 so restore()
     surfaces as ``no_op=True`` in RefactorResult.
