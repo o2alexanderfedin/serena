@@ -15,8 +15,9 @@ import time
 from pathlib import Path
 from typing import Any
 
-os.environ.setdefault("CARGO_BUILD_RUSTC", "rustc")  # neutralize rust-fv-driver alias
-
+# Developer-host CARGO_BUILD_RUSTC shim moved to opt-in pytest plugin
+# ``test.conftest_dev_host`` (activated by ``O2_SCALPEL_LOCAL_HOST=1``).
+# See ``docs/dev/host-rustc-shim.md``.
 import psutil
 
 from solidlsp.ls import SolidLanguageServer

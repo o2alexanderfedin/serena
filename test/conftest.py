@@ -26,6 +26,12 @@ configure(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 
+# Auto-load the opt-in developer-host plugin. It is a no-op unless
+# ``O2_SCALPEL_LOCAL_HOST=1`` is set, so CI inherits a clean
+# environment. See ``docs/dev/host-rustc-shim.md``.
+pytest_plugins = ["test.conftest_dev_host"]
+
+
 @pytest.fixture(scope="session")
 def resources_dir() -> Path:
     """Path to the test resources directory."""
