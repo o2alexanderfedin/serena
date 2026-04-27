@@ -74,6 +74,7 @@ SERENA_ROOT = INTEGRATION_DIR.parents[1]  # vendor/serena
 PEP_FIXTURES_ROOT = SERENA_ROOT / "test" / "fixtures" / "python"
 
 PEP695_SOURCE = PEP_FIXTURES_ROOT / "pep695" / "__init__.py"
+PEP701_SOURCE = PEP_FIXTURES_ROOT / "pep701" / "__init__.py"
 
 
 def _read_fixture(path: Path) -> str:
@@ -275,4 +276,67 @@ def test_convert_from_relative_imports_handles_pep695(
     assert payload["applied"] is True, payload
     assert (
         y_path.read_text(encoding="utf-8") == "from pkg.grammar import two\n"
+    )
+
+
+# ===========================================================================
+# Task 2 — PEP 701 × {F1, F2, F3}
+# ===========================================================================
+
+
+def test_convert_to_async_handles_pep701_fstrings(
+    tmp_path: Path,
+) -> None:
+    """F1 on PEP 701: f-strings with nested quotes / multi-line expressions
+    must not break ``ast.parse`` in the async-conversion helper."""
+    target = _seed_flat_fixture(tmp_path, PEP701_SOURCE)
+    tool = _build_async_tool(tmp_path)
+
+    payload = json.loads(
+        tool.apply(file="__init__.py", symbol="fetch", allow_out_of_workspace=True),
+    )
+    assert payload["applied"] is True, payload
+    assert payload.get("failure") is None, payload
+    after = target.read_text(encoding="utf-8")
+    assert "async def fetch" in after
+    # Nested-quote f-string must round-trip untouched.
+    assert "note={f\"inner-{name}\"}" in after
+
+
+def test_annotate_return_type_handles_pep701_nested_quotes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """F2 on PEP 701: parser must accept the nested-quote f-string in
+    ``label``. The function is already annotated so we accept skipped."""
+    _seed_flat_fixture(tmp_path, PEP701_SOURCE)
+    _stub_inlay_hint_provider(monkeypatch, "-> str")
+    tool = _build_annotate_tool(tmp_path)
+
+    payload = json.loads(
+        tool.apply(file="__init__.py", symbol="label", allow_out_of_workspace=True),
+    )
+    assert payload.get("failure") is None, payload
+    assert payload["applied"] is True or payload["no_op"] is True, payload
+
+
+def test_convert_from_relative_imports_handles_pep701(
+    tmp_path: Path,
+) -> None:
+    """F3 on PEP 701: rope must rewrite the sibling-module relative import
+    despite the package containing PEP 701 nested-quote f-strings."""
+    y_path = _seed_relimport_workspace(tmp_path, PEP701_SOURCE)
+    # The PEP 701 fixture defines ``fetch``, not ``two`` — re-seed y.py
+    # with the appropriate import target.
+    y_path.write_text("from .grammar import fetch\n", encoding="utf-8")
+    tool = _build_relimports_tool(tmp_path)
+
+    payload = json.loads(
+        tool.apply(file="pkg/y.py", allow_out_of_workspace=True),
+    )
+    assert payload.get("failure") is None, payload
+    assert payload["applied"] is True, payload
+    assert (
+        y_path.read_text(encoding="utf-8")
+        == "from pkg.grammar import fetch\n"
     )
