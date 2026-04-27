@@ -70,6 +70,8 @@ CALCRS_FIXTURE = FIXTURES_ROOT / "calcrs"
 CALCPY_FIXTURE = FIXTURES_ROOT / "calcpy"
 CALCPY_DATACLASSES_FIXTURE = FIXTURES_ROOT / "calcpy_dataclasses"
 CALCPY_NOTEBOOKS_FIXTURE = FIXTURES_ROOT / "calcpy_notebooks"
+CALCPY_CIRCULAR_FIXTURE = FIXTURES_ROOT / "calcpy_circular"
+CALCPY_NAMESPACE_FIXTURE = FIXTURES_ROOT / "calcpy_namespace"
 
 
 @pytest.fixture(scope="session")
@@ -127,6 +129,43 @@ def calcpy_notebooks_workspace() -> Path:
             f"Stage 1H Leaf 02 should have created it."
         )
     return CALCPY_NOTEBOOKS_FIXTURE.resolve(strict=False)
+
+
+@pytest.fixture(scope="session")
+def calcpy_circular_workspace() -> Path:
+    """Absolute path to the calcpy_circular sub-fixture root.
+
+    Stage 1H Leaf 05 — drives the circular-import-detection multi-server
+    invariant test (T11 module 7). Skip cleanly if the fixture's a.py /
+    b.py modules are missing rather than fail collection.
+    """
+    a_py = CALCPY_CIRCULAR_FIXTURE / "calcpy_circular" / "a.py"
+    if not a_py.exists():
+        pytest.skip(
+            f"calcpy_circular fixture missing a.py at {a_py}; "
+            f"Stage 1H Leaf 02 should have created it."
+        )
+    return CALCPY_CIRCULAR_FIXTURE.resolve(strict=False)
+
+
+@pytest.fixture(scope="session")
+def calcpy_namespace_workspace() -> Path:
+    """Absolute path to the calcpy_namespace sub-fixture root.
+
+    Stage 1H Leaf 05 — drives the PEP 420 namespace-package multi-server
+    invariant test (T11 module 6). The fixture was deferred at v0.1.0 cut;
+    this fixture reports the deferral via ``pytest.skip`` rather than
+    fail collection so the test infrastructure ships even though the
+    runtime gate is fixture-availability.
+    """
+    if not CALCPY_NAMESPACE_FIXTURE.is_dir():
+        pytest.skip(
+            f"calcpy_namespace fixture not provisioned at "
+            f"{CALCPY_NAMESPACE_FIXTURE}; deferred at v0.1.0 cut. "
+            f"This test infrastructure ships; the fixture-tree is the "
+            f"runtime gate."
+        )
+    return CALCPY_NAMESPACE_FIXTURE.resolve(strict=False)
 
 
 # ---------------------------------------------------------------------------
