@@ -39,7 +39,6 @@ def _request_diagnostics(srv: "SolidLanguageServer", rel: str) -> list[dict[str,
     method is unsupported we return an empty list so callers skip cleanly.
     """
     try:
-        from urllib.parse import quote
         abs_path = Path(srv.repository_root_path) / rel
         uri = abs_path.as_uri()
         params = {"textDocument": {"uri": uri}}
