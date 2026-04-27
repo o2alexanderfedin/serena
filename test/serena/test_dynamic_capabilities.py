@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
 from solidlsp.dynamic_capabilities import DynamicCapabilityRegistry
 
 
