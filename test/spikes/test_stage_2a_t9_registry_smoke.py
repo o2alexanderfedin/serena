@@ -1,11 +1,10 @@
 """Stage 2A T10 — registry smoke + tool-name + docstring contract."""
 from __future__ import annotations
 
-import inspect
-
 import pytest
 
 import serena.tools as tools_module
+from serena.tools.facade_support import get_apply_source
 from serena.tools.tools_base import Tool
 
 
@@ -60,7 +59,7 @@ def test_2a_apply_docstring_under_30_words(cls_name):
 ])
 def test_2a_apply_invokes_workspace_boundary_guard(cls_name):
     cls = getattr(tools_module, cls_name)
-    src = inspect.getsource(cls.apply)
+    src = get_apply_source(cls)
     assert "workspace_boundary_guard(" in src, (
         f"{cls_name}.apply must call workspace_boundary_guard() per Q4 §11.8."
     )

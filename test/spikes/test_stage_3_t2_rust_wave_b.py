@@ -13,13 +13,13 @@ RefactorResult applied/dry_run/SYMBOL_NOT_FOUND branches.
 
 from __future__ import annotations
 
-import inspect
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from serena.tools.facade_support import get_apply_source
 from serena.tools.scalpel_facades import (
     ScalpelChangeReturnTypeTool,
     ScalpelCompleteMatchArmsTool,
@@ -198,7 +198,7 @@ def test_apply_methods_invoke_workspace_boundary_guard():
         ScalpelExtractLifetimeTool,
         ScalpelExpandGlobImportsTool,
     ):
-        src = inspect.getsource(cls.apply)
+        src = get_apply_source(cls)
         assert "workspace_boundary_guard(" in src, (
             f"{cls.__name__}.apply must call workspace_boundary_guard()"
         )

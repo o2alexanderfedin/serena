@@ -19,6 +19,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from serena.tools.facade_support import get_apply_source
 from serena.tools.scalpel_facades import (
     ScalpelChangeTypeShapeTool,
     ScalpelChangeVisibilityTool,
@@ -364,14 +365,13 @@ def test_all_four_tools_reexported_from_serena_tools():
 
 def test_apply_methods_invoke_workspace_boundary_guard():
     """v0.2.0-Stage3 — every new facade must call workspace_boundary_guard."""
-    import inspect
     for cls in (
         ScalpelConvertModuleLayoutTool,
         ScalpelChangeVisibilityTool,
         ScalpelTidyStructureTool,
         ScalpelChangeTypeShapeTool,
     ):
-        src = inspect.getsource(cls.apply)
+        src = get_apply_source(cls)
         assert "workspace_boundary_guard(" in src, (
             f"{cls.__name__}.apply must call workspace_boundary_guard()"
         )
