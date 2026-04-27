@@ -1,0 +1,222 @@
+{
+  "ledger": [
+    {
+      "elapsed_s": 0.10835670900996774,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "d9cb8bab28cb4a84be816c4d612783dd",
+      "iteration": 0
+    },
+    {
+      "elapsed_s": 0.042060667008627206,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "e83abda7230d4ec0bb6f9ecb2d022420",
+      "iteration": 1
+    },
+    {
+      "elapsed_s": 0.04473649999999907,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "46c83e769a144d53a66090be6fe34602",
+      "iteration": 2
+    },
+    {
+      "elapsed_s": 0.08660629099176731,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "e707b80cda374d5197ff1f969f366c0e",
+      "iteration": 3
+    },
+    {
+      "elapsed_s": 0.037596500013023615,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "41cba9db978341f8afcbaeb7eaccf101",
+      "iteration": 4
+    },
+    {
+      "elapsed_s": 0.036847666997346096,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "6b176a8b1a4b40b3b33e29a47b1fd342",
+      "iteration": 5
+    },
+    {
+      "elapsed_s": 0.04367233399534598,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "cd21fb847fb64c65bb384d0c3cb18834",
+      "iteration": 6
+    },
+    {
+      "elapsed_s": 0.03947141699609347,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "5a5dc7cc87334c0e8078b18359e7b2a7",
+      "iteration": 7
+    },
+    {
+      "elapsed_s": 0.042983332998119295,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "59e8c872284d48238d8c2f43ad14ee6a",
+      "iteration": 8
+    },
+    {
+      "elapsed_s": 0.039537999997264706,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "ff6e03a455c447a2acf39a12b7c86cbb",
+      "iteration": 9
+    },
+    {
+      "elapsed_s": 0.039326208003330976,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "5f5948f523a340ccbf7e0053d0d4f622",
+      "iteration": 10
+    },
+    {
+      "elapsed_s": 0.05354791699210182,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "03e4bac875524a89a4546d82c6a71506",
+      "iteration": 11
+    },
+    {
+      "elapsed_s": 0.04145691699523013,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "5528b8e7dcb649528c052ca042c63328",
+      "iteration": 12
+    },
+    {
+      "elapsed_s": 0.03851050000230316,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "49da47e887264774b3152cf65cb52beb",
+      "iteration": 13
+    },
+    {
+      "elapsed_s": 0.039770125003997236,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "78d464a14c894c5593def964057be5d0",
+      "iteration": 14
+    },
+    {
+      "elapsed_s": 0.040388709006947465,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "d7b8724c4fd941cea12a9f64a5b00f20",
+      "iteration": 15
+    },
+    {
+      "elapsed_s": 0.037128625001059845,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "6ff2af38ca17411bb6ef7a3d5d47fd53",
+      "iteration": 16
+    },
+    {
+      "elapsed_s": 0.034824834001483396,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "6c1be33b8c6b4e639db2ced8f316e317",
+      "iteration": 17
+    },
+    {
+      "elapsed_s": 0.03800983300607186,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "79eac83f23ad4b9fb36106feffb1056c",
+      "iteration": 18
+    },
+    {
+      "elapsed_s": 0.043457334002596326,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "1fd3db8072474d679b72d6f126352e79",
+      "iteration": 19
+    },
+    {
+      "elapsed_s": 0.037607083999319,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "712e34d2a2204c75aae14832ba5d202d",
+      "iteration": 20
+    },
+    {
+      "elapsed_s": 0.038101124999229796,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "a69374211571449b880e6959f7d87c5b",
+      "iteration": 21
+    },
+    {
+      "elapsed_s": 0.038553209000383504,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "a8b84fe1e8a64cf8952ff26839f24dc3",
+      "iteration": 22
+    },
+    {
+      "elapsed_s": 0.03839283400157001,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "e804681250e3493d8ba3525d05d9db07",
+      "iteration": 23
+    },
+    {
+      "elapsed_s": 0.036172499996609986,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "fa885f68df4447658ffbc5854c21c657",
+      "iteration": 24
+    },
+    {
+      "elapsed_s": 0.0350742909940891,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "91a0a2cf5fc14e36b0c232d53be2c6a2",
+      "iteration": 25
+    },
+    {
+      "elapsed_s": 0.03885587499826215,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "becc30a47b0e42ca8e30a757a66679eb",
+      "iteration": 26
+    },
+    {
+      "elapsed_s": 0.03712962499412242,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "c39e429cfccc47d5a0fe7d9e0169157c",
+      "iteration": 27
+    },
+    {
+      "elapsed_s": 0.03579866699874401,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "3bba3eaa7aac4fc6ba3eff9d9b491712",
+      "iteration": 28
+    },
+    {
+      "elapsed_s": 0.038526791002368554,
+      "applied": true,
+      "failure": null,
+      "checkpoint_id": "5aac047be02b42c482c1640fe8b05220",
+      "iteration": 29
+    }
+  ],
+  "summary": {
+    "total_runs": 30,
+    "applied_runs": 30,
+    "applied_rate": 1.0,
+    "failure_rows": [],
+    "elapsed_p50_s": 0.03870454199932283,
+    "elapsed_p99_s": 0.12336449744252605
+  }
+}
