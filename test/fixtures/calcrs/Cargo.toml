@@ -17,6 +17,7 @@ members = [
     "ra_lifetimes",
     "ra_proc_macros",
     "ra_ssr",
+    "ra_macros",
 ]
 
 [workspace.package]
