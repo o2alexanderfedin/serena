@@ -92,6 +92,8 @@ import json
 import os
 import time
 
+from ._async_check import AWAITED_SERVER_METHODS, assert_servers_async_callable
+
 # Methods broadcast() can dispatch. Each entry maps an LSP wire method
 # name to the SolidLanguageServer facade name that implements it.
 # ``textDocument/rename`` is intentionally NOT broadcast — it goes
@@ -831,7 +833,27 @@ class MultiServerCoordinator:
     from ``test/spikes/conftest.py``. Method shapes are identical.
     """
 
+    # Methods the coordinator awaits on each server. Mirrors the
+    # ``_BROADCAST_DISPATCH`` keys plus ``request_rename_symbol_edit``
+    # (driven by ``merge_rename``). Anything else is invoked via
+    # ``asyncio.to_thread`` and works on sync servers natively.
+    # Canonical definition lives in ``serena.refactoring._async_check``
+    # and is shared with ``_AsyncAdapter._ASYNC_METHODS`` (single source
+    # of truth per CLAUDE.md).
+    _AWAITED_SERVER_METHODS: tuple[str, ...] = AWAITED_SERVER_METHODS
+
     def __init__(self, servers: dict[str, Any]) -> None:
+        # Defensive contract check (v0.2.0 follow-up #03):
+        # raw sync ``SolidLanguageServer`` adapters MUST be wrapped in
+        # ``_AsyncAdapter`` before reaching this constructor. Without
+        # the wrapper, ``await facade(**kwargs)`` inside ``broadcast``
+        # raises ``TypeError: object list can't be used in 'await'
+        # expression`` deep in the fan-out. Surface the contract here
+        # with a pointer to the fix.
+        assert_servers_async_callable(
+            servers,
+            method_names=self._AWAITED_SERVER_METHODS,
+        )
         self._servers = dict(servers)
         self._action_edits: dict[str, dict[str, Any]] = {}
 
