@@ -2209,6 +2209,95 @@ class ScalpelIgnoreDiagnosticTool(Tool):
         )
 
 
+# ---------------------------------------------------------------------------
+# v1.1 Stream 5 / Leaf 07 — Python-only ergonomic facades. Each facade
+# bypasses the code-action dispatcher because it's backed by an
+# in-process helper (AST rewrite / rope import-tools / basedpyright
+# inlay-hint query) rather than a code-action kind. They reuse
+# ``_apply_workspace_edit_to_disk`` + ``record_checkpoint_for_workspace_edit``
+# so the applier path is identical to every other facade.
+# ---------------------------------------------------------------------------
+
+
+class ScalpelConvertToAsyncTool(Tool):
+    """Convert a sync `def` into `async def` and propagate `await` calls."""
+
+    def apply(
+        self,
+        file: str,
+        symbol: str,
+        dry_run: bool = False,
+        preview_token: str | None = None,
+        language: Literal["python"] | None = None,
+        allow_out_of_workspace: bool = False,
+    ) -> str:
+        """Convert a sync `def` into `async def` and propagate `await` calls.
+
+        :param file: Python source file containing the function.
+        :param symbol: name of the function to convert.
+        :param dry_run: preview only.
+        :param preview_token: continuation from a prior dry-run.
+        :param language: 'python' (the only supported language for this facade).
+        :param allow_out_of_workspace: skip workspace-boundary check.
+        :return: JSON RefactorResult.
+        """
+        del preview_token, language
+        project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
+        guard = workspace_boundary_guard(
+            file=file, project_root=project_root,
+            allow_out_of_workspace=allow_out_of_workspace,
+        )
+        if guard is not None:
+            return guard.model_dump_json(indent=2)
+        from serena.refactoring.python_async_conversion import (
+            convert_function_to_async,
+        )
+        t0 = time.monotonic()
+        try:
+            workspace_edit, summary = convert_function_to_async(
+                file=file, symbol=symbol, project_root=project_root,
+            )
+        except FileNotFoundError as exc:
+            return build_failure_result(
+                code=ErrorCode.INVALID_ARGUMENT,
+                stage="scalpel_convert_to_async",
+                reason=str(exc),
+                recoverable=False,
+            ).model_dump_json(indent=2)
+        except ValueError as exc:
+            return build_failure_result(
+                code=ErrorCode.SYMBOL_NOT_FOUND,
+                stage="scalpel_convert_to_async",
+                reason=str(exc),
+            ).model_dump_json(indent=2)
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        if dry_run:
+            return RefactorResult(
+                applied=False, no_op=False,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                preview_token=f"pv_convert_to_async_{int(time.time())}",
+                duration_ms=elapsed_ms,
+                language_options=dict(summary),
+            ).model_dump_json(indent=2)
+        edits_applied = _apply_workspace_edit_to_disk(workspace_edit)
+        cid = record_checkpoint_for_workspace_edit(
+            workspace_edit=workspace_edit, snapshot={},
+        )
+        return RefactorResult(
+            applied=True,
+            diagnostics_delta=_empty_diagnostics_delta(),
+            checkpoint_id=cid,
+            duration_ms=elapsed_ms,
+            language_options=dict(summary),
+            lsp_ops=(LspOpStat(
+                method="ast.async_conversion",
+                server="ast",
+                count=edits_applied,
+                total_ms=elapsed_ms,
+            ),),
+        ).model_dump_json(indent=2)
+
+
 # Dispatch table for commit-time replay. Entries are bound at module load
 # from the facade Tool subclasses; tests patch this dict to inject mocks.
 _FACADE_DISPATCH: dict[str, Any] = {}
@@ -2256,6 +2345,8 @@ def _bind_facade_dispatch_table() -> None:
     _FACADE_DISPATCH["scalpel_auto_import_specialized"] = lambda **kw: ScalpelAutoImportSpecializedTool(none_agent).apply(**kw)
     _FACADE_DISPATCH["scalpel_fix_lints"] = lambda **kw: ScalpelFixLintsTool(none_agent).apply(**kw)
     _FACADE_DISPATCH["scalpel_ignore_diagnostic"] = lambda **kw: ScalpelIgnoreDiagnosticTool(none_agent).apply(**kw)
+    # v1.1 Stream 5 / Leaf 07 — Python-only ergonomic facades.
+    _FACADE_DISPATCH["scalpel_convert_to_async"] = lambda **kw: ScalpelConvertToAsyncTool(none_agent).apply(**kw)
 
 
 class ScalpelTransactionCommitTool(Tool):
@@ -2363,6 +2454,7 @@ __all__ = [
     "ScalpelChangeVisibilityTool",
     "ScalpelCompleteMatchArmsTool",
     "ScalpelConvertModuleLayoutTool",
+    "ScalpelConvertToAsyncTool",
     "ScalpelConvertToMethodObjectTool",
     "ScalpelExpandGlobImportsTool",
     "ScalpelExpandMacroTool",
