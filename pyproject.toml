@@ -307,6 +307,12 @@ max-complexity = 20
 "test/solidlsp/bsl/**" = ["RUF001", "RUF002", "RUF003"]
 
 [tool.pytest.ini_options]
+# Note: the developer-host opt-in plugin ``test.conftest_dev_host`` is
+# auto-loaded via ``pytest_plugins`` in ``vendor/serena/test/conftest.py``
+# rather than via ``addopts`` here, because ``addopts -p`` runs before
+# pytest adds the rootdir to ``sys.path``. The plugin only activates
+# when ``O2_SCALPEL_LOCAL_HOST=1``; CI sees no behaviour change.
+# See ``docs/dev/host-rustc-shim.md``.
 addopts = "--snapshot-patch-pycharm-diff"
 markers = [
   "clojure: language server running for Clojure",
