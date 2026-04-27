@@ -95,13 +95,13 @@ def assert_servers_async_callable(
                 continue
             if not is_async_callable(method):
                 raise TypeError(
-                    f"server {server_id!r} method {method_name!r} is "
-                    f"not async-callable; wrap with _AsyncAdapter "
-                    f"(serena.tools.scalpel_runtime) before constructing "
-                    f"MultiServerCoordinator. Without this wrapper, "
-                    f"`await facade(**kwargs)` inside `broadcast` raises "
-                    f"`TypeError: object <type> can't be used in 'await' "
-                    f"expression`."
+                    f"server {server_id!r} method {method_name!r} is not"
+                    " async-callable; wrap with _AsyncAdapter"
+                    " (serena.tools.scalpel_runtime) before constructing"
+                    " MultiServerCoordinator. Without this wrapper,"
+                    " `await facade(**kwargs)` inside `broadcast` raises"
+                    " `TypeError: object <type> can't be used in 'await'"
+                    " expression`."
                 )
 
 
