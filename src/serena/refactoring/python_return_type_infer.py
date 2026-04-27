@@ -27,12 +27,8 @@ which is delegated to the existing ``MultiServerCoordinator`` (Stage
 from __future__ import annotations
 
 import ast
-import re
 from pathlib import Path
 from typing import Any
-
-
-_DEF_TOKEN_RE = re.compile(r"^(\s*)(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")
 
 
 def annotate_return_type(
