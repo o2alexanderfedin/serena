@@ -16,6 +16,7 @@ members = [
     "ra_pattern_destructuring",
     "ra_lifetimes",
     "ra_proc_macros",
+    "ra_ssr",
 ]
 
 [workspace.package]
