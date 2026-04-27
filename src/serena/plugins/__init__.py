@@ -15,6 +15,7 @@ manifest the parent plugin tree actually contains.
 
 from __future__ import annotations
 
+from serena.plugins.registry import PluginRegistry
 from serena.plugins.reload_report import ReloadReport
 
-__all__ = ["ReloadReport"]
+__all__ = ["PluginRegistry", "ReloadReport"]
