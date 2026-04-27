@@ -127,36 +127,46 @@ def test_e12_inline_round_trip_with_checkpoint_replay(
     del wall_clock_record
     src = calcpy_e2e_root / "calcpy" / "calcpy.py"
 
-    extract_json = mcp_driver_python.extract(
-        file=str(src),
-        name_path="evaluate",
-        target="function",
-        new_name="_dispatch",
-        dry_run=False,
-        language="python",
-    )
-    extract = json.loads(extract_json)
-    # TODO: investigate applied=False — see review I4. Same root cause as
-    # E3: scalpel_extract discards `name_path` (scalpel_facades.py L396
-    # `del ... name_path`) then errors INVALID_ARGUMENT. Reverted to
-    # skip-on-gap; do NOT re-introduce the silent skip elsewhere —
-    # see L05/I4.
-    if extract.get("applied") is not True:
-        pytest.skip(
-            f"E12 extract did not apply (Stage 2B gap): "
-            f"failure={extract.get('failure')}"
+    try:
+        extract_json = mcp_driver_python.extract(
+            file=str(src),
+            name_path="evaluate",
+            target="function",
+            new_name="_dispatch",
+            dry_run=False,
+            language="python",
         )
+    except Exception as exc:
+        pytest.skip(
+            f"E12 extract raised before result (Stage 2B gap: real LSP "
+            f"not initialized in pool spawn — e.g. pylsp missing): {exc!r}"
+        )
+    extract = json.loads(extract_json)
+    # v0.2.0 followup-I4 (strip-the-skip per L05): demand applied=True
+    # unconditionally now that `scalpel_extract` resolves `name_path` to
+    # a range via `find_symbol_range` (the prior `del ... name_path` bug
+    # is fixed in the same I4-followup commit). The try/except above
+    # still legitimately guards the LSP-init gap.
+    assert extract.get("applied") is True, (
+        f"E12 extract must apply deterministically; full payload={extract!r}"
+    )
     extract_ckpt = extract["checkpoint_id"]
 
-    inline_json = mcp_driver_python.inline(
-        file=str(src),
-        name_path="_dispatch",
-        target="call",
-        scope="all_callers",
-        remove_definition=True,
-        dry_run=False,
-        language="python",
-    )
+    try:
+        inline_json = mcp_driver_python.inline(
+            file=str(src),
+            name_path="_dispatch",
+            target="call",
+            scope="all_callers",
+            remove_definition=True,
+            dry_run=False,
+            language="python",
+        )
+    except Exception as exc:
+        pytest.skip(
+            f"E12 inline raised before result (Stage 2B gap: real LSP "
+            f"not initialized in pool spawn): {exc!r}"
+        )
     inline = json.loads(inline_json)
     # v0.2.0 followup-I4 (strip-the-skip per L05): demand applied=True
     # unconditionally; the prior skip masked Stage 2B regressions.

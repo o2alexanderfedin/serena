@@ -68,29 +68,40 @@ def test_e14_rust_change_visibility_cross_module(
     without breaking anything else; cargo test passes post-rewrite."""
     del rust_analyzer_bin, wall_clock_record
     lib_rs = calcrs_e2e_root / "src" / "lib.rs"
+    # Toolchain pre-flight (matches E1 / E10 / E16). When rust-analyzer
+    # cannot index the project (e.g. rustc_driver dylib mismatch on the
+    # host), no code actions surface and the assist looks broken even
+    # though the facade is correct.
+    pre_proc = subprocess.run(
+        [cargo_bin, "test", "--quiet"],
+        cwd=str(calcrs_e2e_root),
+        capture_output=True, text=True, timeout=180,
+    )
+    if pre_proc.returncode != 0:
+        pytest.skip(
+            f"cargo test baseline broken on this host (rc={pre_proc.returncode}); "
+            f"E14 cannot be exercised — likely rustc_driver dylib not loadable."
+        )
     try:
         result_json = mcp_driver_rust.change_visibility(
             file=str(lib_rs),
-            position={"line": 0, "character": 0},
-            target_visibility="pub",
+            # Cursor on the `pub` keyword of `pub fn parse(...)` inside
+            # `pub mod parser { ... }` (0-indexed line 30, char 4 in the
+            # calcrs_e2e baseline). `target_visibility="pub_crate"` is
+            # a real downgrade so the assist surfaces an applicable action.
+            position={"line": 30, "character": 4},
+            target_visibility="pub_crate",
             language="rust",
         )
     except Exception as exc:
         pytest.skip(f"E14 change_visibility raised: {exc!r}")
     payload = json.loads(result_json)
-    # TODO: investigate applied=False — see review I4. The strip-the-skip
-    # pass surfaced a fixture/test position mismatch: position={0,0} (file
-    # start) is not on a symbol that supports change_visibility, so
-    # rust-analyzer reports SYMBOL_NOT_FOUND ("No
-    # refactor.rewrite.change_visibility actions surfaced"). Either the
-    # test should target a real symbol's coords, or the fixture should be
-    # extended. Reverted to skip-on-gap; do NOT re-introduce the silent
-    # skip elsewhere — see L05/I4.
-    if payload.get("applied") is not True:
-        pytest.skip(
-            f"E14 change_visibility did not apply (Stage 3 facade-application gap): "
-            f"failure={payload.get('failure')}"
-        )
+    # v0.2.0 followup-I4 (strip-the-skip per L05): demand applied=True
+    # unconditionally now that the cursor lands on a real `pub` token.
+    assert payload.get("applied") is True, (
+        f"E14 change_visibility must apply deterministically; "
+        f"full payload={payload!r}"
+    )
     proc = subprocess.run(
         [cargo_bin, "test", "--quiet"],
         cwd=str(calcrs_e2e_root),
@@ -149,28 +160,40 @@ def test_e16_rust_complete_match_arms_exhaustiveness(
     """E16: complete_match_arms inserts the missing arms of a match over
     a sealed enum so exhaustiveness checking passes."""
     del rust_analyzer_bin, wall_clock_record
-    lib_rs = calcrs_e2e_root / "src" / "lib.rs"
+    # The calcrs_e2e fixture grew an `ops` module (`src/ops.rs`) with a
+    # sealed `Op` enum and a non-exhaustive `_` placeholder match in
+    # `classify`; the cursor lands on the `match` keyword (0-indexed
+    # line 19, char 4) so rust-analyzer's `add_missing_match_arms`
+    # assist surfaces and expands the placeholder.
+    ops_rs = calcrs_e2e_root / "src" / "ops.rs"
+    # Toolchain pre-flight (matches E1 / E10 / E14). Without a working
+    # cargo + rustc_driver dylib, rust-analyzer cannot index the project
+    # and no assists surface.
+    pre_proc = subprocess.run(
+        [cargo_bin, "test", "--quiet"],
+        cwd=str(calcrs_e2e_root),
+        capture_output=True, text=True, timeout=180,
+    )
+    if pre_proc.returncode != 0:
+        pytest.skip(
+            f"cargo test baseline broken on this host (rc={pre_proc.returncode}); "
+            f"E16 cannot be exercised — likely rustc_driver dylib not loadable."
+        )
     try:
         result_json = mcp_driver_rust.complete_match_arms(
-            file=str(lib_rs), position={"line": 0, "character": 0},
+            file=str(ops_rs), position={"line": 19, "character": 4},
             language="rust",
         )
     except Exception as exc:
         pytest.skip(f"E16 complete_match_arms raised: {exc!r}")
     payload = json.loads(result_json)
-    # TODO: investigate applied=False — see review I4. The strip-the-skip
-    # pass surfaced a fixture/test position mismatch: position={0,0} (file
-    # start) is not on a non-exhaustive match, so rust-analyzer reports
-    # SYMBOL_NOT_FOUND ("No quickfix.add_missing_match_arms actions
-    # surfaced"). Either the test should target a real match's coords, or
-    # the calcrs_e2e fixture should grow a non-exhaustive match. Reverted
-    # to skip-on-gap; do NOT re-introduce the silent skip elsewhere —
-    # see L05/I4.
-    if payload.get("applied") is not True:
-        pytest.skip(
-            f"E16 complete_match_arms did not apply (calcrs fixture has no "
-            f"non-exhaustive match): failure={payload.get('failure')}"
-        )
+    # v0.2.0 followup-I4 (strip-the-skip per L05): demand applied=True
+    # unconditionally now that the cursor lands on a real non-exhaustive
+    # match. The try/except above still legitimately guards LSP-init.
+    assert payload.get("applied") is True, (
+        f"E16 complete_match_arms must apply deterministically; "
+        f"full payload={payload!r}"
+    )
     proc = subprocess.run(
         [cargo_bin, "build", "--quiet"],
         cwd=str(calcrs_e2e_root),

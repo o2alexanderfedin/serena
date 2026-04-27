@@ -393,7 +393,7 @@ class ScalpelExtractTool(Tool):
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
-        del new_name, visibility, similar, global_scope, preview_token, name_path
+        del new_name, visibility, similar, global_scope, preview_token
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -401,7 +401,7 @@ class ScalpelExtractTool(Tool):
         )
         if guard is not None:
             return guard.model_dump_json(indent=2)
-        if range is None:
+        if range is None and name_path is None:
             return build_failure_result(
                 code=ErrorCode.INVALID_ARGUMENT,
                 stage="scalpel_extract",
@@ -425,6 +425,23 @@ class ScalpelExtractTool(Tool):
                 recoverable=False,
             ).model_dump_json(indent=2)
         coord = coordinator_for_facade(language=lang, project_root=project_root)
+        # When the caller passes only ``name_path``, resolve it to a range via
+        # the coordinator's document-symbols walk. The full body span (LSP
+        # ``range``) is required — selection-range alone is insufficient for
+        # ``merge_code_actions`` which needs (start, end) bracketing the code.
+        if range is None and name_path is not None:
+            range = _run_async(coord.find_symbol_range(
+                file=file, name_path=name_path,
+                project_root=str(project_root),
+            ))
+            if range is None:
+                return build_failure_result(
+                    code=ErrorCode.SYMBOL_NOT_FOUND,
+                    stage="scalpel_extract",
+                    reason=f"Symbol {name_path!r} not found in {file!r}.",
+                    recoverable=False,
+                ).model_dump_json(indent=2)
+        assert range is not None  # type-narrowing for the type-checker
         rng = range
         t0 = time.monotonic()
         actions = _run_async(coord.merge_code_actions(

@@ -1276,6 +1276,70 @@ class MultiServerCoordinator:
                     }
         return None
 
+    async def find_symbol_range(
+        self,
+        file: str,
+        name_path: str,
+        project_root: str | None = None,
+    ) -> dict[str, dict[str, int]] | None:
+        """Resolve ``name_path`` to an LSP Range via document symbols.
+
+        Sibling to :meth:`find_symbol_position`. Where ``find_symbol_position``
+        returns the selection-range start (a single position), this returns
+        the symbol's full body span — the LSP ``range`` field — required by
+        facades like ``scalpel_extract`` that need a (start, end) selection.
+
+        Walks ``request_document_symbols`` hierarchically by name_path
+        segments (``::`` for Rust, ``.`` for Python) and falls back to
+        ``request_workspace_symbol`` filtered by ``file`` URI.
+
+        Returns ``{"start": {"line", "character"}, "end": {"line", "character"}}``
+        or ``None`` when no match surfaces across all servers.
+        """
+        if not self._servers:
+            return None
+        segments = _split_name_path(name_path)
+        if not segments:
+            return None
+        rel_path = _to_relative_path(file, project_root)
+        for server in self._servers.values():
+            doc_symbols = await asyncio.to_thread(
+                server.request_document_symbols, rel_path,
+            )
+            rng = _walk_document_symbols_for_range(doc_symbols, segments)
+            if rng is not None:
+                return rng
+        # Document-level walk missed — try workspace_symbol scoped to file.
+        target_uri = Path(file).as_uri()
+        for server in self._servers.values():
+            ws_results = await asyncio.to_thread(
+                server.request_workspace_symbol, segments[-1],
+            )
+            if not ws_results:
+                continue
+            for hit in ws_results:
+                loc = hit.get("location") or {}
+                if loc.get("uri") != target_uri:
+                    continue
+                rng = loc.get("range") or {}
+                start = rng.get("start") or {}
+                end = rng.get("end") or {}
+                if (
+                    "line" in start and "character" in start
+                    and "line" in end and "character" in end
+                ):
+                    return {
+                        "start": {
+                            "line": int(start["line"]),
+                            "character": int(start["character"]),
+                        },
+                        "end": {
+                            "line": int(end["line"]),
+                            "character": int(end["character"]),
+                        },
+                    }
+        return None
+
     def get_action_edit(self, action_id: str) -> dict[str, Any] | None:
         """v0.3.0 — return the resolved WorkspaceEdit for ``action_id``.
 
@@ -1381,6 +1445,51 @@ def _walk_document_symbols(
             return None
         children = node.get("children") or []
         deeper = _walk_document_symbols(children, rest)
+        if deeper is not None:
+            return deeper
+    return None
+
+
+def _walk_document_symbols_for_range(
+    nodes: Any, segments: list[str],
+) -> dict[str, dict[str, int]] | None:
+    """Walk the LSP document-symbol tree, returning the matched node's full ``range``.
+
+    Sibling to :func:`_walk_document_symbols` — same traversal semantics, but
+    returns the symbol's body span (``range``) rather than the selection-range
+    start. Falls back to ``selectionRange`` when ``range`` is absent so the
+    caller still gets a usable span.
+    """
+    if not segments:
+        return None
+    head, rest = segments[0], segments[1:]
+    iterable = nodes if isinstance(nodes, (list, tuple)) else [nodes]
+    for node in iterable:
+        if not isinstance(node, dict):
+            continue
+        if node.get("name") != head:
+            continue
+        if not rest:
+            rng = node.get("range") or node.get("selectionRange") or {}
+            start = rng.get("start") or {}
+            end = rng.get("end") or {}
+            if (
+                "line" in start and "character" in start
+                and "line" in end and "character" in end
+            ):
+                return {
+                    "start": {
+                        "line": int(start["line"]),
+                        "character": int(start["character"]),
+                    },
+                    "end": {
+                        "line": int(end["line"]),
+                        "character": int(end["character"]),
+                    },
+                }
+            return None
+        children = node.get("children") or []
+        deeper = _walk_document_symbols_for_range(children, rest)
         if deeper is not None:
             return deeper
     return None

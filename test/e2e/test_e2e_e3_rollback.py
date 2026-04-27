@@ -41,27 +41,29 @@ def test_e3_rollback_restores_python_tree(
     src = calcpy_e2e_root / "calcpy" / "calcpy.py"
     pre_hash = _tree_hash(calcpy_e2e_root)
 
-    apply_json = mcp_driver_python.extract(
-        file=str(src),
-        name_path="evaluate",
-        target="function",
-        new_name="_helper",
-        dry_run=False,
-        language="python",
-    )
-    apply_payload = json.loads(apply_json)
-    # TODO: investigate applied=False — see review I4. The strip-the-skip
-    # pass surfaced a real facade arg-validation bug: scalpel_extract
-    # discards `name_path` (see scalpel_facades.py L396 `del ... name_path`)
-    # then errors with INVALID_ARGUMENT "One of range= or name_path= is
-    # required". Either the test should pass `range=` or the facade should
-    # honour `name_path`. Reverted to skip-on-gap until the call-site is
-    # fixed; do NOT re-introduce the silent skip elsewhere — see L05/I4.
-    if apply_payload.get("applied") is not True:
-        pytest.skip(
-            f"E3 extract did not apply (Stage 2B gap): "
-            f"failure={apply_payload.get('failure')}"
+    try:
+        apply_json = mcp_driver_python.extract(
+            file=str(src),
+            name_path="evaluate",
+            target="function",
+            new_name="_helper",
+            dry_run=False,
+            language="python",
         )
+    except Exception as exc:
+        pytest.skip(
+            f"E3 extract raised before result (Stage 2B gap: real LSP "
+            f"not initialized in pool spawn — e.g. pylsp missing): {exc!r}"
+        )
+    apply_payload = json.loads(apply_json)
+    # v0.2.0 followup-I4 (strip-the-skip per L05): demand applied=True
+    # unconditionally; the underlying `scalpel_extract` arg-validation bug
+    # (`del ... name_path`) is now fixed and the facade resolves
+    # name_path → range via `find_symbol_range`. The try/except above
+    # still legitimately guards the LSP-init gap.
+    assert apply_payload.get("applied") is True, (
+        f"E3 extract must apply deterministically; full payload={apply_payload!r}"
+    )
     checkpoint_id = apply_payload.get("checkpoint_id")
     assert checkpoint_id is not None
     mid_hash = _tree_hash(calcpy_e2e_root)
