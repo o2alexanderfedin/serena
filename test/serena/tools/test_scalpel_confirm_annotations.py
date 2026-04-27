@@ -1,16 +1,17 @@
-"""v1.1 Stream 5 / Leaf 06 Tasks 2-3 — confirmation-mode tool tests.
+"""v1.1 Stream 5 / Leaf 06 Tasks 2-4 — confirmation-mode tool tests.
 
 Covers the ``ScalpelDryRunComposeTool`` extension (``confirmation_mode='manual'``,
-Task 2) and the ``ScalpelConfirmAnnotationsTool`` apply-only-accepted-groups
-workflow (Task 3). Bypasses the full ``Tool.apply_ex`` lifecycle and calls
+Task 2), the ``ScalpelConfirmAnnotationsTool`` apply-only-accepted-groups
+workflow (Task 3), and the docstring-cite + MCP auto-registration lint
+gates (Task 4). Bypasses the full ``Tool.apply_ex`` lifecycle and calls
 ``apply`` directly, matching the pattern in
-:mod:`test/serena/tools/test_scalpel_reload_plugins`. Task 4 adds the
-docstring-cite + auto-registration lint gates in a follow-up commit.
+:mod:`test/serena/tools/test_scalpel_reload_plugins`.
 """
 
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,8 @@ from serena.tools.scalpel_primitives import (
     ScalpelDryRunComposeTool,
 )
 from serena.tools.scalpel_runtime import ScalpelRuntime
+from serena.tools.tools_base import Tool
+from serena.util.inspection import iter_subclasses
 
 
 # ---------------------------------------------------------------------------
@@ -222,3 +225,41 @@ def test_pending_tx_persists_across_runtime_resets(tmp_path: Path) -> None:
     ScalpelRuntime.reset_for_testing()
     # New runtime, same disk root → pending tx survives.
     assert ScalpelRuntime.instance().pending_tx_store().has_pending(tx_id)
+
+
+# ---------------------------------------------------------------------------
+# Task 4 — Documentation cross-reference (lint gate)
+# ---------------------------------------------------------------------------
+
+
+def test_confirm_tool_class_docstring_cites_q4_line_211() -> None:
+    """R2: cite §6.3 line 211 specifically; the surrounding paragraph rejects D."""
+    doc = ScalpelConfirmAnnotationsTool.__doc__ or ""
+    pattern = re.compile(
+        r"q4-changeannotations-auto-accept\.md\s+§6\.3\s+line\s+211",
+    )
+    assert pattern.search(doc), (
+        "ScalpelConfirmAnnotationsTool docstring must cite "
+        "'q4-changeannotations-auto-accept.md §6.3 line 211' verbatim "
+        "(R2 — line 211 carries the v1.1 endorsement; the paragraph rejects D)."
+    )
+
+
+def test_confirm_tool_appears_in_iter_subclasses() -> None:
+    """Auto-registration via ``iter_subclasses(Tool)`` (Stage 1G mechanism)."""
+    discovered = {cls.get_name_from_cls() for cls in iter_subclasses(Tool)}
+    assert "scalpel_confirm_annotations" in discovered
+
+
+def test_confirm_tool_class_name_resolves_to_snake_cased_form() -> None:
+    assert (
+        ScalpelConfirmAnnotationsTool.get_name_from_cls()
+        == "scalpel_confirm_annotations"
+    )
+
+
+def test_confirm_tool_exported_from_tools_package() -> None:
+    from serena import tools as tools_pkg
+
+    assert hasattr(tools_pkg, "ScalpelConfirmAnnotationsTool")
+    assert tools_pkg.ScalpelConfirmAnnotationsTool is ScalpelConfirmAnnotationsTool
