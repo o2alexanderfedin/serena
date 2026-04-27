@@ -5,6 +5,7 @@ members = [
     "calcrs-core",
     "ra_extractors",
     "ra_inliners",
+    "ra_visibility",
 ]
 
 [workspace.package]
