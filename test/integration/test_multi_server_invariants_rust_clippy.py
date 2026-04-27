@@ -268,3 +268,65 @@ def test_invariant_1_atomicity_rejects_clippy_edit_on_syntactic_failure(
     # gate-then-apply pattern (per multi_server.merge_and_validate_code_actions)
     # never reaches the applier when the gate fails.
     assert rs.read_text() == original
+
+
+# ---------------------------------------------------------------------------
+# Task 3 — Invariant 2 (version mismatch): rejected as a whole.
+# ---------------------------------------------------------------------------
+
+
+def test_invariant_2_version_mismatch_rejects_whole_clippy_edit(
+    tmp_path: Path,
+) -> None:
+    """Per §11.7 invariant 2: any TextDocumentEdit whose textDocument.version
+    does not match the merger-tracked version causes the WHOLE
+    WorkspaceEdit to be rejected — not just the offending sub-edit."""
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    src_dir = workspace / "src"
+    src_dir.mkdir()
+    a = src_dir / "a.rs"
+    a.write_text("pub fn a() {}\n")
+    b = src_dir / "b.rs"
+    b.write_text("pub fn b() {}\n")
+
+    # Edit touches a.rs at version=5 (matches) and b.rs at version=99
+    # (does not match the tracked version=2). The whole edit must reject.
+    edit: dict[str, Any] = {
+        "documentChanges": [
+            {
+                "textDocument": {"uri": a.as_uri(), "version": 5},
+                "edits": [
+                    {
+                        "range": {
+                            "start": {"line": 0, "character": 0},
+                            "end": {"line": 0, "character": 0},
+                        },
+                        "newText": "// a edited\n",
+                    },
+                ],
+            },
+            {
+                "textDocument": {"uri": b.as_uri(), "version": 99},
+                "edits": [
+                    {
+                        "range": {
+                            "start": {"line": 0, "character": 0},
+                            "end": {"line": 0, "character": 0},
+                        },
+                        "newText": "// b edited\n",
+                    },
+                ],
+            },
+        ],
+    }
+    versions = {a.as_uri(): 5, b.as_uri(): 2}
+    ok, reason = _check_apply_clean(edit, versions)
+    assert ok is False
+    assert reason is not None
+    assert "STALE_VERSION" in reason
+    assert b.as_uri() in reason
+    # The first sub-edit's version was correct; we still reject the WHOLE
+    # edit (atomicity per §11.8).
+    assert a.read_text() == "pub fn a() {}\n"
+    assert b.read_text() == "pub fn b() {}\n"
