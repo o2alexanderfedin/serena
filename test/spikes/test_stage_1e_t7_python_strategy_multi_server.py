@@ -41,11 +41,19 @@ def test_build_servers_returns_three_entries_no_mypy() -> None:
 
 
 def test_coordinator_factory_returns_multi_server_coordinator() -> None:
+    from serena.refactoring._async_check import AWAITED_SERVER_METHODS
     from serena.refactoring.multi_server import MultiServerCoordinator
     from serena.refactoring.python_strategy import PythonStrategy
 
+    def _marked_server(name: str) -> MagicMock:
+        """Mocks must opt-in to the async-callable gate via the marker."""
+        m = MagicMock(name=name)
+        for method_name in AWAITED_SERVER_METHODS:
+            getattr(m, method_name)._o2_async_callable = True
+        return m
+
     pool = MagicMock()
-    pool.acquire.side_effect = lambda key: MagicMock(name=f"server-{key.language}")
+    pool.acquire.side_effect = lambda key: _marked_server(f"server-{key.language}")
     s = PythonStrategy(pool=pool)
     coord = s.coordinator(Path("/tmp/proj"))
 

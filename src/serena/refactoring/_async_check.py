@@ -50,12 +50,14 @@ def is_async_callable(obj: Any) -> bool:
     * Awaitable instance (already-running coroutine) → ``True``.
     * Callable object whose ``__call__`` is a coroutine function
       (e.g. the ``_AsyncAdapter._async_call`` closure) → ``True``.
-    * ``unittest.mock.Mock`` instance → ``True``.
-      ``MagicMock``-based test doubles cannot be introspected for
-      async-ness; rejecting them would break pre-existing v0.2.0-C
-      ``find_symbol_position`` unit tests that wire ``MagicMock``
-      servers. The owning test takes responsibility for behaviour.
-    * Callable but not coroutine-function and not Mock → ``False``
+    * ``unittest.mock.Mock`` instance carrying the explicit marker
+      attribute ``_o2_async_callable=True`` → ``True``. The marker is
+      an opt-in carve-out for tests that wire ``MagicMock`` servers
+      into ``MultiServerCoordinator``; the test owns correctness for
+      the marked attribute. Unmarked Mocks fall through to the
+      ``callable`` branch and are rejected — preserving the loud
+      TypeError guarantee for accidental Mock misuse in production.
+    * Callable but not coroutine-function and not marked → ``False``
       (the only failure mode that warrants the loud TypeError).
     * Non-callable → ``False`` (treated as misuse).
     """
@@ -63,10 +65,13 @@ def is_async_callable(obj: Any) -> bool:
         return True
     if inspect.isawaitable(obj):
         return True
-    # ``Mock`` instances cannot be reliably introspected — they auto-create
-    # attributes on access. Treat them as opaque async-callable so that
-    # MagicMock-based unit tests keep working; the test owns correctness.
-    if isinstance(obj, Mock):
+    # Mocks are opaque to introspection. Require explicit opt-in via the
+    # ``_o2_async_callable=True`` marker attribute so that an accidental
+    # Mock in production code still trips the loud TypeError gate. We
+    # check ``__dict__`` directly because ``getattr`` on a ``MagicMock``
+    # auto-creates a (truthy) child Mock for any missing attribute,
+    # which would defeat the gate.
+    if isinstance(obj, Mock) and obj.__dict__.get("_o2_async_callable") is True:
         return True
     if callable(obj):
         # Some callable objects implement ``__call__`` as ``async def``.
