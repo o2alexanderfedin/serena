@@ -454,3 +454,33 @@ def test_invariant_4_clippy_annotations_round_trip_with_needs_confirmation(
     # The description carries the human-readable message so the LLM /
     # confirmation surface can show it verbatim.
     assert entry["description"] == "useless use of `vec!`"
+
+
+# ---------------------------------------------------------------------------
+# Task 6 — Wire into RustStrategy.execute_command_whitelist (feature-flagged).
+# ---------------------------------------------------------------------------
+
+
+def test_rust_strategy_clippy_execute_command_gated_by_feature_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``RustStrategy.execute_command_whitelist`` extends the default
+    rust-analyzer verbs with ``cargo.clippy.applyFix`` ONLY when the
+    ``O2_SCALPEL_CLIPPY_MULTI_SERVER`` env var is set. Default OFF
+    keeps the sharp tool out of the LLM's default surface."""
+    from serena.refactoring.rust_strategy import RustStrategy
+
+    monkeypatch.delenv("O2_SCALPEL_CLIPPY_MULTI_SERVER", raising=False)
+    default_whitelist = RustStrategy.execute_command_whitelist()
+    assert "cargo.clippy.applyFix" not in default_whitelist, (
+        "feature flag default must be OFF — clippy fix is opt-in"
+    )
+
+    monkeypatch.setenv("O2_SCALPEL_CLIPPY_MULTI_SERVER", "1")
+    extended_whitelist = RustStrategy.execute_command_whitelist()
+    assert "cargo.clippy.applyFix" in extended_whitelist, (
+        "with feature flag ON, clippy.applyFix must be reachable"
+    )
+    # The default rust-analyzer verbs must remain in the extended set —
+    # the feature flag is additive, not replacing.
+    assert "rust-analyzer.runFlycheck" in extended_whitelist
