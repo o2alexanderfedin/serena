@@ -40,8 +40,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 
 def _make_text_doc_edit(uri: str) -> dict[str, Any]:
     """Build a minimal documentChanges TextDocumentEdit entry."""
