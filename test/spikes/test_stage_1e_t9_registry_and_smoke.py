@@ -51,6 +51,7 @@ def test_end_to_end_python_strategy_boots_three_servers(tmp_path: Path) -> None:
     """Smoke: PythonStrategy.coordinator builds a working 3-server set."""
     from serena.refactoring import PythonStrategy
     from serena.refactoring.lsp_pool import LspPool, LspPoolKey
+    from serena.tools.scalpel_runtime import _AsyncAdapter
     from solidlsp.language_servers.basedpyright_server import BasedpyrightServer
     from solidlsp.language_servers.pylsp_server import PylspServer
     from solidlsp.language_servers.ruff_server import RuffServer
@@ -68,7 +69,9 @@ def test_end_to_end_python_strategy_boots_three_servers(tmp_path: Path) -> None:
     def spawn(key: LspPoolKey):
         cls = role[key.language]
         cfg = LanguageServerConfig(code_language=Language.PYTHON)
-        return cls(cfg, key.project_root, SolidLSPSettings())
+        # MultiServerCoordinator (Leaf 03) rejects raw sync servers at
+        # __init__; wrap each adapter so the gate is satisfied.
+        return _AsyncAdapter(cls(cfg, key.project_root, SolidLSPSettings()))
 
     pool = LspPool(spawn_fn=spawn, idle_shutdown_seconds=600.0,
                    ram_ceiling_mb=8192.0, reaper_enabled=False)
