@@ -589,9 +589,12 @@ class ScalpelWorkspaceHealthTool(Tool):
             else Path(self.get_project_root()).expanduser().resolve(strict=False)
         )
         languages: dict[str, LanguageHealth] = {}
+        registry = ScalpelRuntime.instance().dynamic_capability_registry()
         for lang in (Language.PYTHON, Language.RUST):
             try:
-                languages[lang.value] = _build_language_health(lang, root)
+                languages[lang.value] = _build_language_health(
+                    lang, root, dynamic_registry=registry,
+                )
             except Exception as exc:  # noqa: BLE001 — surface as failed
                 languages[lang.value] = LanguageHealth(
                     language=lang.value,

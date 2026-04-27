@@ -21,7 +21,7 @@ import logging
 import os
 import pathlib
 import sys
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 from overrides import override
 
@@ -39,6 +39,8 @@ log = logging.getLogger(__name__)
 # and basedpyright/ruff have meaningfully different capability sets.
 class PylspServer(SolidLanguageServer):
     """python-lsp-server adapter (with pylsp-rope plugin auto-discovered)."""
+
+    server_id: ClassVar[str] = "pylsp-base"
 
     def __init__(
         self,

@@ -37,6 +37,7 @@ from serena.refactoring import (
     TransactionStore,
 )
 from serena.refactoring.capabilities import CapabilityCatalog, build_capability_catalog
+from solidlsp.dynamic_capabilities import DynamicCapabilityRegistry
 
 if TYPE_CHECKING:
     from solidlsp.ls_config import Language
@@ -211,6 +212,7 @@ class ScalpelRuntime:
         self._catalog: CapabilityCatalog | None = None
         self._pools: dict[tuple[str, Path], LspPool] = {}
         self._coordinators: dict[tuple[str, Path], MultiServerCoordinator] = {}
+        self._dynamic_capability_registry: DynamicCapabilityRegistry | None = None
 
     # --- singleton accessors -----------------------------------------
 
@@ -264,6 +266,17 @@ class ScalpelRuntime:
                     STRATEGY_REGISTRY, project_root=None,
                 )
             return self._catalog
+
+    def dynamic_capability_registry(self) -> DynamicCapabilityRegistry:
+        """Process-global registry of LSP ``client/registerCapability``
+        events, populated by ``SolidLanguageServer._handle_register_capability``
+        and surfaced by ``workspace_health``. Lazy; reset by
+        ``reset_for_testing()``.
+        """
+        with self._lock:
+            if self._dynamic_capability_registry is None:
+                self._dynamic_capability_registry = DynamicCapabilityRegistry()
+            return self._dynamic_capability_registry
 
     def pool_for(self, language: "Language", project_root: Path) -> LspPool:
         canon_root = project_root.expanduser().resolve(strict=False)

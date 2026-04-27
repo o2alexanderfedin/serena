@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 import os
 import pathlib
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 from overrides import override
 
@@ -33,6 +33,8 @@ BASEDPYRIGHT_VERSION_PIN: str = "1.39.3"  # Phase 0 Q3.
 
 class BasedpyrightServer(SolidLanguageServer):
     """basedpyright-langserver adapter — pull-mode diagnostics."""
+
+    server_id: ClassVar[str] = "basedpyright"
 
     def __init__(
         self,
