@@ -18,6 +18,7 @@ members = [
     "ra_proc_macros",
     "ra_ssr",
     "ra_macros",
+    "ra_module_layouts",
 ]
 
 [workspace.package]

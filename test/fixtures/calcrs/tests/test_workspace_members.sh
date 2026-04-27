@@ -20,6 +20,7 @@ expected_crates=(
     "ra_proc_macros"
     "ra_ssr"
     "ra_macros"
+    "ra_module_layouts"
 )
 
 actual=$(CARGO_BUILD_RUSTC=rustc cargo metadata --format-version 1 --no-deps \
