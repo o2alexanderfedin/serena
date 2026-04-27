@@ -58,16 +58,19 @@ def test_ruff_offers_fix_all(
     calcpy_workspace: Path,
 ) -> None:
     """ruff must surface ``source.fixAll[.ruff]`` on the dirty file."""
+    from solidlsp.util.file_range import compute_file_range
+
     src = calcpy_workspace / "calcpy" / "calcpy.py"
     original = src.read_text()
     try:
         src.write_text(original + _LINT_SENTINEL)
+        file_start, file_end = compute_file_range(str(src))
         with ruff_lsp.open_file(_REL):
             time.sleep(0.5)
             actions = ruff_lsp.request_code_actions(
                 str(src),
-                start={"line": 0, "character": 0},
-                end={"line": len(src.read_text().splitlines()), "character": 0},
+                start=file_start,
+                end=file_end,
                 only=["source.fixAll"],
                 diagnostics=[],
             )
