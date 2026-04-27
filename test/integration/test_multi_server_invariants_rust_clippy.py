@@ -38,7 +38,10 @@ from serena.refactoring.clippy_adapter import (
     ClippyAdapter,
     clippy_json_to_workspace_edit,
 )
-from serena.refactoring.multi_server import _check_apply_clean
+from serena.refactoring.multi_server import (
+    _check_apply_clean,
+    _check_workspace_boundary,
+)
 
 
 HERE = Path(__file__).resolve().parent
@@ -46,6 +49,7 @@ FIXTURES_ROOT = HERE.parent / "fixtures" / "rust"
 
 CLIPPY_A = FIXTURES_ROOT / "clippy_a"
 CLIPPY_COLLISION = FIXTURES_ROOT / "clippy_collision"
+CLIPPY_OUT_OF_WORKSPACE = FIXTURES_ROOT / "clippy_out_of_workspace"
 
 
 # ---------------------------------------------------------------------------
@@ -106,6 +110,18 @@ def clippy_collision_workspace(tmp_path: Path) -> Path:
     if not (CLIPPY_COLLISION / "Cargo.toml").exists():
         pytest.skip(f"clippy_collision fixture missing at {CLIPPY_COLLISION}")
     return _copy_fixture(CLIPPY_COLLISION, tmp_path / "clippy_collision")
+
+
+@pytest.fixture
+def clippy_out_of_workspace_workspace(tmp_path: Path) -> Path:
+    if not (CLIPPY_OUT_OF_WORKSPACE / "Cargo.toml").exists():
+        pytest.skip(
+            f"clippy_out_of_workspace fixture missing at "
+            f"{CLIPPY_OUT_OF_WORKSPACE}"
+        )
+    return _copy_fixture(
+        CLIPPY_OUT_OF_WORKSPACE, tmp_path / "clippy_out_of_workspace",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -330,3 +346,61 @@ def test_invariant_2_version_mismatch_rejects_whole_clippy_edit(
     # edit (atomicity per §11.8).
     assert a.read_text() == "pub fn a() {}\n"
     assert b.read_text() == "pub fn b() {}\n"
+
+
+# ---------------------------------------------------------------------------
+# Task 4 — Invariant 3 (path-filter workspace boundary).
+# ---------------------------------------------------------------------------
+
+
+def test_invariant_3_path_filter_rejects_clippy_fix_outside_workspace(
+    clippy_out_of_workspace_workspace: Path,
+) -> None:
+    """The fixture is a *driver*: it carries a ``.scalpel-target`` file
+    whose contents are the offending out-of-workspace path. The test
+    reads that target, builds a clippy-shape WorkspaceEdit pointing at
+    it, and asserts ``_check_workspace_boundary`` rejects the WHOLE edit
+    with the canonical OUT_OF_WORKSPACE_EDIT_BLOCKED reason."""
+    target_text = (
+        clippy_out_of_workspace_workspace / ".scalpel-target"
+    ).read_text().strip()
+    target_path = Path(target_text)
+
+    edit = _synthetic_clippy_edit(
+        target_path.as_uri(),
+        new_text="// pwned via clippy fix\n",
+    )
+    workspace_folders = [str(clippy_out_of_workspace_workspace)]
+    ok, reason = _check_workspace_boundary(
+        edit=edit,
+        workspace_folders=workspace_folders,
+        extra_paths=(),
+    )
+    assert ok is False, (
+        f"out-of-workspace clippy edit must be rejected; got ok={ok} "
+        f"reason={reason!r}"
+    )
+    assert reason is not None
+    assert "OUT_OF_WORKSPACE_EDIT_BLOCKED" in reason
+    assert str(target_path) in reason
+
+
+def test_invariant_3_path_filter_accepts_in_workspace_clippy_fix(
+    clippy_a_workspace: Path,
+) -> None:
+    """Counter-example: a clippy edit targeting a file inside the
+    workspace passes the boundary check. Pairs with the rejection test
+    above so any change to ``_check_workspace_boundary`` that breaks
+    the happy-path is caught by this suite."""
+    src = clippy_a_workspace / "src" / "lib.rs"
+    edit = _synthetic_clippy_edit(src.as_uri())
+    ok, reason = _check_workspace_boundary(
+        edit=edit,
+        workspace_folders=[str(clippy_a_workspace)],
+        extra_paths=(),
+    )
+    assert ok is True, (
+        f"in-workspace clippy edit must pass boundary check; got "
+        f"ok={ok} reason={reason!r}"
+    )
+    assert reason is None
