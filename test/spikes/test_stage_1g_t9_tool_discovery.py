@@ -57,9 +57,13 @@ _STAGE_3_NAMES: frozenset[str] = frozenset({
     "scalpel_ignore_diagnostic",
 })
 
-# v1.1 Stream 5 — additional always-on primitives.
+# v1.1 Stream 5 — additional always-on primitives + facades.
 _V11_NAMES: frozenset[str] = frozenset({
     "scalpel_reload_plugins",  # Leaf 03 — Q10 explicit-refresh
+    "scalpel_confirm_annotations",  # Leaf 06 — ChangeAnnotation review gate
+    "scalpel_convert_to_async",  # Leaf 07 — AST-based async conversion
+    "scalpel_annotate_return_type",  # Leaf 07 — basedpyright inlay-hint inference
+    "scalpel_convert_from_relative_imports",  # Leaf 07 — rope relatives_to_absolutes
 })
 
 EXPECTED_NAMES: frozenset[str] = (
