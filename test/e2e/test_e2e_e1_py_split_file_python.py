@@ -67,28 +67,32 @@ def test_e1_py_4way_split_byte_identical(
     )
     payload = json.loads(result_json)
 
-    if payload.get("applied") is True:
-        assert payload.get("checkpoint_id"), (
-            f"applied=true but no checkpoint_id: {payload}"
-        )
-        # __all__ preservation check (load-bearing for E10-py too).
-        init_text = init.read_text(encoding="utf-8")
-        for name in ("CalcError", "DivisionByZero", "Expr", "evaluate", "parse"):
-            assert name in init_text, f"__all__ lost {name!r} after split"
+    # v0.2.0 followup-05: this used to fall back to ``pytest.skip`` when
+    # ``applied`` came back False, masking the Stage 2B flake. Leaf 05's
+    # 30-run diagnostic harness (test/e2e/_e1_py_diagnostic.py) recorded
+    # 30/30 successful applies on this host, so the skip path is dead
+    # weight. Demand applied=True unconditionally so any future regression
+    # fails loudly; the dedicated determinism guard lives in
+    # test_e2e_e1_py_determinism.py.
+    assert payload.get("applied") is True, (
+        f"E1-py split must apply deterministically; got payload={payload!r}"
+    )
+    assert payload.get("checkpoint_id"), (
+        f"applied=true but no checkpoint_id: {payload}"
+    )
+    # __all__ preservation check (load-bearing for E10-py too).
+    init_text = init.read_text(encoding="utf-8")
+    for name in ("CalcError", "DivisionByZero", "Expr", "evaluate", "parse"):
+        assert name in init_text, f"__all__ lost {name!r} after split"
 
-        post_rc, post_stdout = _run_pytest_q(calcpy_e2e_root, python_bin)
-        assert post_rc == 0, (
-            f"post-split pytest failed: rc={post_rc}\n{post_stdout}"
-        )
-        assert post_stdout == pre_stdout, (
-            f"pytest -q stdout drifted across split:\n"
-            f"--- pre ---\n{pre_stdout}\n--- post ---\n{post_stdout}"
-        )
-    else:
-        pytest.skip(
-            f"E1-py split did not apply (Stage 2B observed gap): "
-            f"failure={payload.get('failure')}"
-        )
+    post_rc, post_stdout = _run_pytest_q(calcpy_e2e_root, python_bin)
+    assert post_rc == 0, (
+        f"post-split pytest failed: rc={post_rc}\n{post_stdout}"
+    )
+    assert post_stdout == pre_stdout, (
+        f"pytest -q stdout drifted across split:\n"
+        f"--- pre ---\n{pre_stdout}\n--- post ---\n{post_stdout}"
+    )
 
 
 @pytest.mark.e2e
