@@ -38,12 +38,14 @@ from serena.refactoring.clippy_adapter import (
     ClippyAdapter,
     clippy_json_to_workspace_edit,
 )
+from serena.refactoring.multi_server import _check_apply_clean
 
 
 HERE = Path(__file__).resolve().parent
 FIXTURES_ROOT = HERE.parent / "fixtures" / "rust"
 
 CLIPPY_A = FIXTURES_ROOT / "clippy_a"
+CLIPPY_COLLISION = FIXTURES_ROOT / "clippy_collision"
 
 
 # ---------------------------------------------------------------------------
@@ -97,6 +99,56 @@ def clippy_a_workspace(tmp_path: Path) -> Path:
     if not (CLIPPY_A / "Cargo.toml").exists():
         pytest.skip(f"clippy_a fixture missing at {CLIPPY_A}")
     return _copy_fixture(CLIPPY_A, tmp_path / "clippy_a")
+
+
+@pytest.fixture
+def clippy_collision_workspace(tmp_path: Path) -> Path:
+    if not (CLIPPY_COLLISION / "Cargo.toml").exists():
+        pytest.skip(f"clippy_collision fixture missing at {CLIPPY_COLLISION}")
+    return _copy_fixture(CLIPPY_COLLISION, tmp_path / "clippy_collision")
+
+
+# ---------------------------------------------------------------------------
+# Synthetic payload helpers — identical shape to ClippyAdapter output.
+# ---------------------------------------------------------------------------
+
+
+def _synthetic_clippy_edit(
+    file_uri: str,
+    *,
+    new_text: str = "",
+    line: int = 0,
+    column: int = 0,
+    end_line: int = 0,
+    end_column: int = 0,
+    version: int | None = None,
+    lint: str = "clippy::useless_vec",
+) -> dict[str, Any]:
+    """Build a WorkspaceEdit dict structurally identical to what
+    ``clippy_json_to_workspace_edit`` produces for one suggestion."""
+    return {
+        "documentChanges": [
+            {
+                "textDocument": {"uri": file_uri, "version": version},
+                "edits": [
+                    {
+                        "range": {
+                            "start": {"line": line, "character": column},
+                            "end": {"line": end_line, "character": end_column},
+                        },
+                        "newText": new_text,
+                    },
+                ],
+            },
+        ],
+        "changeAnnotations": {
+            lint: {
+                "label": lint,
+                "needsConfirmation": True,
+                "description": "synthetic clippy suggestion",
+            },
+        },
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -169,3 +221,50 @@ def test_clippy_adapter_runs_on_clippy_a(
     # If clippy didn't surface any actionable suggestions on this host
     # (e.g. lints disabled by toolchain) the test still passes — what
     # matters is the projection itself doesn't raise.
+
+
+# ---------------------------------------------------------------------------
+# Task 2 — Invariant 1 (atomicity): merger rejects WHOLE edit on bad span.
+# ---------------------------------------------------------------------------
+
+
+def test_invariant_1_atomicity_rejects_clippy_edit_on_syntactic_failure(
+    tmp_path: Path,
+) -> None:
+    """A clippy-shape WorkspaceEdit whose declared version doesn't match
+    the merger-tracked version must be rejected by ``_check_apply_clean``,
+    AND the file on disk must remain unchanged. The structural contract:
+    when ANY invariant fails, the merger returns ``ok=False`` and the
+    applier never runs — so the rust+clippy payload shape demonstrates
+    the same atomic-rollback path the Python multi-LSP suite already
+    exercises (see ``test_multi_server_apply_cleanly.py``)."""
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    src_dir = workspace / "src"
+    src_dir.mkdir()
+    rs = src_dir / "lib.rs"
+    rs.write_text("pub fn it_works() -> i32 { 1 + 1 }\n")
+    original = rs.read_text()
+
+    # Synthesize a clippy edit pinned at version=42; merger tracks
+    # version=7. _check_apply_clean must reject and the applier must
+    # never see the edit (atomicity).
+    edit = _synthetic_clippy_edit(
+        rs.as_uri(),
+        new_text="pub fn it_works() -> i32 { 4 }\n",
+        line=0,
+        column=0,
+        end_line=1,
+        end_column=0,
+        version=42,
+    )
+    document_versions = {rs.as_uri(): 7}
+
+    ok, reason = _check_apply_clean(edit, document_versions)
+    assert ok is False
+    assert reason is not None and "STALE_VERSION" in reason
+
+    # Atomicity: file on disk MUST be unchanged because the merger's
+    # gate-then-apply pattern (per multi_server.merge_and_validate_code_actions)
+    # never reaches the applier when the gate fails.
+    assert rs.read_text() == original
