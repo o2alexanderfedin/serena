@@ -1,0 +1,12 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "calcpy-circular-fixture"
+version = "0.0.0"
+requires-python = ">=3.11"
+description = "Stage 1H sub-fixture for circular-import-trap detection."
+
+[tool.hatch.build.targets.wheel]
+packages = ["calcpy_circular"]
