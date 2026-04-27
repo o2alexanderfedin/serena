@@ -100,24 +100,29 @@ def test_extract_type_alias_round_trip(
     src = calcrs_workspace / "ra_extractors" / "src" / "lib.rs"
     text = src.read_text()
     line_idx = _line_index(text, "Result<Vec<(String, i64)>")
-    actions = _fetch_actions(
-        ra_lsp,
-        str(src),
-        start={"line": line_idx, "character": 27},
-        end={"line": line_idx, "character": 70},
-    )
-    extract_alias = next(
-        (a for a in actions if "Extract" in a.get("title", "") and "type" in a.get("title", "").lower()),
-        None,
-    )
-    if extract_alias is None:
-        titles = [a.get("title", "") for a in actions]
-        pytest.skip(f"rust-analyzer did not offer extract_type_alias here; titles={titles}")
-    edit = extract_alias.get("edit")
-    if edit is None:
-        # rust-analyzer is deferred-resolution; try resolving once.
-        resolved = ra_lsp.resolve_code_action(extract_alias)
-        edit = resolved.get("edit") if isinstance(resolved, dict) else None
+    # Stay inside open_file() while we resolve so rust-analyzer's
+    # action-id stays live (it expires the moment didClose fires).
+    with ra_lsp.open_file(_REL):
+        time.sleep(1.0)
+        raw = ra_lsp.request_code_actions(
+            str(src),
+            start={"line": line_idx, "character": 27},
+            end={"line": line_idx, "character": 70},
+            diagnostics=[],
+        )
+        actions = [a for a in raw if isinstance(a, dict)]
+        extract_alias = next(
+            (a for a in actions if "Extract" in a.get("title", "") and "type" in a.get("title", "").lower()),
+            None,
+        )
+        if extract_alias is None:
+            titles = [a.get("title", "") for a in actions]
+            pytest.skip(f"rust-analyzer did not offer extract_type_alias here; titles={titles}")
+        edit = extract_alias.get("edit")
+        if edit is None:
+            # rust-analyzer is deferred-resolution; resolve while still open.
+            resolved = ra_lsp.resolve_code_action(extract_alias)
+            edit = resolved.get("edit") if isinstance(resolved, dict) else None
     if edit is None:
         pytest.skip("extract_type_alias action carried no edit even after resolve")
     # Restore file after applying so subsequent sub-tests / runs stay deterministic.
