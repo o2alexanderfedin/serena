@@ -23,6 +23,11 @@ def test_calcpy_min_module_imports_present() -> None:
 
 
 def test_baseline_notebook_hash() -> None:
-    """Captured at fixture freeze; integration test re-checks post-flow."""
+    """Frozen byte-stable hash; integration test re-checks post-flow.
+
+    If this assertion fails after a notebook edit, recapture via:
+        shasum -a 256 notebooks/explore.ipynb
+    and update the literal below + the leaf 04 baseline.
+    """
     h = hashlib.sha256((ROOT / "notebooks" / "explore.ipynb").read_bytes()).hexdigest()
-    assert len(h) == 64  # sentinel - leaf 04 captures the actual hash
+    assert h == "ba2761908372950797c3f6520e627bf8d9df99ae0f01fac030757957d650dbc1"

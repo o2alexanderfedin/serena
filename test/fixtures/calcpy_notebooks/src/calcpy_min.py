@@ -9,11 +9,13 @@ from __future__ import annotations
 
 # Deliberately ugly: typing import before stdlib, plus an unused stdlib
 # import (os) and unused symbol (Optional) so ruff F401 fires and
-# source.organizeImports has something to reorder.
-from typing import Optional  # noqa: F401  - intentional unused, drives F401
+# source.organizeImports has something to reorder. Pyright is silenced
+# per-line because the static "unused" finding is the fixture's purpose,
+# not a defect — ruff F401 must still fire for the integration test.
+from typing import Optional  # pyright: ignore[reportUnusedImport]
 
 import math
-import os  # noqa: F401  - intentional unused, drives F401
+import os  # pyright: ignore[reportUnusedImport]
 
 
 PI = math.pi
