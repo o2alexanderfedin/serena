@@ -1,10 +1,11 @@
-"""v1.1 Stream 5 / Leaf 06 Task 2 — confirmation-mode dry-run tests.
+"""v1.1 Stream 5 / Leaf 06 Tasks 2-3 — confirmation-mode tool tests.
 
-Covers the ``ScalpelDryRunComposeTool`` extension (``confirmation_mode='manual'``).
-Bypasses the full ``Tool.apply_ex`` lifecycle and calls ``apply`` directly,
-matching the pattern in :mod:`test/serena/tools/test_scalpel_reload_plugins`.
-Task 3 adds the ``ScalpelConfirmAnnotationsTool`` tests; Task 4 adds the
-docstring-cite + auto-registration lint gates in subsequent commits.
+Covers the ``ScalpelDryRunComposeTool`` extension (``confirmation_mode='manual'``,
+Task 2) and the ``ScalpelConfirmAnnotationsTool`` apply-only-accepted-groups
+workflow (Task 3). Bypasses the full ``Tool.apply_ex`` lifecycle and calls
+``apply`` directly, matching the pattern in
+:mod:`test/serena/tools/test_scalpel_reload_plugins`. Task 4 adds the
+docstring-cite + auto-registration lint gates in a follow-up commit.
 """
 
 from __future__ import annotations
@@ -17,7 +18,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from serena.tools.scalpel_primitives import ScalpelDryRunComposeTool
+from serena.tools.scalpel_primitives import (
+    ScalpelConfirmAnnotationsTool,
+    ScalpelDryRunComposeTool,
+)
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
 
@@ -42,6 +46,14 @@ def _build_dry_run_tool(tmp_path: Path) -> ScalpelDryRunComposeTool:
     agent.get_project_root.return_value = str(tmp_path)
     tool = ScalpelDryRunComposeTool(agent=agent)
     # ``Tool.get_project_root`` is implemented on the agent; pin it via the mock.
+    object.__setattr__(tool, "get_project_root", lambda: str(tmp_path))
+    return tool
+
+
+def _build_confirm_tool(tmp_path: Path) -> ScalpelConfirmAnnotationsTool:
+    agent = MagicMock(name="SerenaAgent")
+    agent.get_project_root.return_value = str(tmp_path)
+    tool = ScalpelConfirmAnnotationsTool(agent=agent)
     object.__setattr__(tool, "get_project_root", lambda: str(tmp_path))
     return tool
 
@@ -138,3 +150,75 @@ def test_dry_run_compose_manual_mode_no_annotations_still_persists(
     )
     assert pending is not None
     assert pending.groups == ()
+
+
+# ---------------------------------------------------------------------------
+# Task 3 — ScalpelConfirmAnnotationsTool
+# ---------------------------------------------------------------------------
+
+
+def test_confirm_applies_only_accepted_groups(tmp_path: Path) -> None:
+    """Accepting only 'rename' applies that file's edit and skips 'extract'."""
+    file_a = tmp_path / "a.py"
+    file_b = tmp_path / "b.py"
+    edit = _make_workspace_edit_with_two_groups(file_a, file_b)
+    dry = _build_dry_run_tool(tmp_path)
+    out_dry = json.loads(
+        dry.apply(steps=[], confirmation_mode="manual", workspace_edit=edit),
+    )
+    tx_id = out_dry["transaction_id"]
+
+    confirm = _build_confirm_tool(tmp_path)
+    out = json.loads(confirm.apply(transaction_id=tx_id, accept=["rename"]))
+
+    assert out["applied_groups"] == ["rename"]
+    assert out["rejected_groups"] == ["extract"]
+    # rename group's edit landed; extract group's edit did NOT.
+    assert file_a.read_text(encoding="utf-8") == "XAAA\n"
+    assert file_b.read_text(encoding="utf-8") == "BBB\n"
+    # Pending tx is consumed once confirmation lands.
+    assert ScalpelRuntime.instance().pending_tx_store().has_pending(tx_id) is False
+
+
+def test_confirm_rejects_unknown_transaction_id(tmp_path: Path) -> None:
+    """Unknown id returns structured UNKNOWN_TRANSACTION error, not exception."""
+    confirm = _build_confirm_tool(tmp_path)
+    out = json.loads(confirm.apply(transaction_id="ghost", accept=[]))
+    assert out["error_code"] == "UNKNOWN_TRANSACTION"
+    assert out["transaction_id"] == "ghost"
+
+
+def test_confirm_with_empty_accept_rejects_all_groups(tmp_path: Path) -> None:
+    """An empty ``accept`` list applies nothing and marks all groups rejected."""
+    file_a = tmp_path / "a.py"
+    file_b = tmp_path / "b.py"
+    edit = _make_workspace_edit_with_two_groups(file_a, file_b)
+    dry = _build_dry_run_tool(tmp_path)
+    tx_id = json.loads(
+        dry.apply(steps=[], confirmation_mode="manual", workspace_edit=edit),
+    )["transaction_id"]
+
+    confirm = _build_confirm_tool(tmp_path)
+    out = json.loads(confirm.apply(transaction_id=tx_id, accept=[]))
+
+    assert out["applied_groups"] == []
+    assert sorted(out["rejected_groups"]) == ["extract", "rename"]
+    assert file_a.read_text(encoding="utf-8") == "AAA\n"
+    assert file_b.read_text(encoding="utf-8") == "BBB\n"
+    # Tx is still consumed — abandon path.
+    assert ScalpelRuntime.instance().pending_tx_store().has_pending(tx_id) is False
+
+
+def test_pending_tx_persists_across_runtime_resets(tmp_path: Path) -> None:
+    """Disk-backed: second runtime instance sees the pending tx (Leaf 02)."""
+    file_a = tmp_path / "a.py"
+    file_b = tmp_path / "b.py"
+    edit = _make_workspace_edit_with_two_groups(file_a, file_b)
+    dry = _build_dry_run_tool(tmp_path)
+    tx_id = json.loads(
+        dry.apply(steps=[], confirmation_mode="manual", workspace_edit=edit),
+    )["transaction_id"]
+
+    ScalpelRuntime.reset_for_testing()
+    # New runtime, same disk root → pending tx survives.
+    assert ScalpelRuntime.instance().pending_tx_store().has_pending(tx_id)
