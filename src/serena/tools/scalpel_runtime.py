@@ -40,6 +40,7 @@ from serena.plugins.registry import PluginRegistry
 from serena.refactoring._async_check import AWAITED_SERVER_METHODS
 from serena.refactoring.capabilities import CapabilityCatalog, build_capability_catalog
 from serena.refactoring.checkpoint_default_root import default_checkpoint_disk_root
+from serena.refactoring.pending_tx import DiskPendingTxStore
 from solidlsp.dynamic_capabilities import DynamicCapabilityRegistry
 
 if TYPE_CHECKING:
@@ -212,6 +213,7 @@ class ScalpelRuntime:
         self._coordinators: dict[tuple[str, Path], MultiServerCoordinator] = {}
         self._dynamic_capability_registry: DynamicCapabilityRegistry | None = None
         self._plugin_registry: PluginRegistry | None = None
+        self._pending_tx_store: DiskPendingTxStore | None = None
         # v1.1 Stream 5 / Leaf 05 — resolve the engine knob at runtime
         # construction so an unknown ``O2_SCALPEL_ENGINE`` value fails
         # fast (Settings validator raises ValidationError) rather than
@@ -285,6 +287,23 @@ class ScalpelRuntime:
                     STRATEGY_REGISTRY, project_root=None,
                 )
             return self._catalog
+
+    def pending_tx_store(self) -> DiskPendingTxStore:
+        """Lazy-build the singleton pending-tx store (Leaf 06).
+
+        Backs ``confirmation_mode='manual'`` for ``scalpel_dry_run_compose``
+        and the new ``scalpel_confirm_annotations`` MCP tool. The on-disk
+        root is a sibling of the checkpoint root (``<cache>/pending_tx``)
+        so the two stores cannot accidentally collide on ids while still
+        sharing the ``O2_SCALPEL_CACHE`` env override.
+        """
+        with self._lock:
+            if self._pending_tx_store is None:
+                ckpt_root = default_checkpoint_disk_root()
+                self._pending_tx_store = DiskPendingTxStore(
+                    root=ckpt_root.parent / "pending_tx",
+                )
+            return self._pending_tx_store
 
     def plugin_registry(self) -> PluginRegistry:
         """Lazy-build the singleton plugin registry.
