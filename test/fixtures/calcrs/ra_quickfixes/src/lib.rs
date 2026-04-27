@@ -5,7 +5,6 @@
 //! `let_else` candidate, `Option::unwrap()` candidate.
 #![allow(dead_code)]
 #![allow(non_snake_case)]
-#![allow(non_camel_case_types)]
 #![allow(clippy::let_and_return)]
 
 // Cluster 1: missing-semicolon candidate. Tests remove the trailing `;`
@@ -40,6 +39,7 @@ pub fn nonSnakeCase_function() -> i64 {
     1
 }
 
+#[allow(non_camel_case_types)]
 pub struct nonSnakeCaseStruct {
     pub innerField: i64,
 }

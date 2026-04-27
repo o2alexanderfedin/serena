@@ -1,9 +1,9 @@
 //! Family D: import assists. Refactor targets for `remove_unused_imports`,
 //! `merge_imports`, `qualify_path`, `split_imports`, `normalize_imports`.
 #![allow(dead_code)]
-#![allow(unused_imports)]
 
 // Unused import — `remove_unused_imports` candidate.
+#[allow(unused_imports)]
 use std::collections::HashMap;
 
 // Mergeable imports — `merge_imports` candidate.

@@ -5,7 +5,6 @@
 //! (`#[deprecated]` empty file), changeAnnotations candidate (renameable
 //! item).
 #![allow(dead_code)]
-#![allow(deprecated)]
 
 // TextDocumentEdit-only target — plain rename target with no
 // cross-file ripple.
