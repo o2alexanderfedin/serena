@@ -32,7 +32,8 @@ Critical implementation notes
    at session end.
 7. ``CARGO_BUILD_RUSTC=rustc`` is exported into the rust-analyzer
    environment by the **opt-in** ``test.conftest_dev_host`` pytest
-   plugin (auto-loaded via ``addopts`` in ``pyproject.toml``) when
+   plugin (auto-loaded via ``pytest_plugins`` in
+   ``vendor/serena/test/conftest.py``) when
    ``O2_SCALPEL_LOCAL_HOST=1`` is set. CI does not set the flag and
    inherits a clean environment. See
    ``docs/dev/host-rustc-shim.md`` for the full context.

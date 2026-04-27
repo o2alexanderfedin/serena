@@ -25,9 +25,12 @@ def _run_pytest(
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
     """Run a child pytest that records the value of ``CARGO_BUILD_RUSTC``.
 
-    The child process auto-loads the ``test.conftest_dev_host`` plugin
-    (registered as the default ``addopts`` in this project's
-    ``pyproject.toml``). The fixture file simply writes the live
+    The child process loads the ``test.conftest_dev_host`` plugin
+    explicitly via ``-p test.conftest_dev_host`` (in the parent test
+    suite the same plugin is auto-loaded via ``pytest_plugins`` in this
+    project's root ``conftest.py``; the child runs in an isolated
+    ``tmp_path`` with no conftest of its own, so it must register the
+    plugin by hand). The fixture file simply writes the live
     environment value to ``_O2_OUT`` for the parent to assert on.
     """
     test_file = tmp_path / "test_dummy.py"
@@ -49,9 +52,11 @@ def _run_pytest(
     if "O2_SCALPEL_LOCAL_HOST" not in env_overrides:
         env.pop("O2_SCALPEL_LOCAL_HOST", None)
     # Run with the serena package directory on sys.path so the
-    # ``test.conftest_dev_host`` plugin is importable. We deliberately
-    # do NOT inherit the parent project's ``addopts`` (the child has
-    # its own cwd); instead we register the plugin explicitly via -p.
+    # ``test.conftest_dev_host`` plugin is importable. The child runs
+    # in an isolated ``tmp_path`` cwd with no ``conftest.py`` of its
+    # own, so the parent project's ``pytest_plugins`` declaration is
+    # NOT inherited — we register the plugin explicitly via ``-p`` so
+    # the child loads the same code path under test.
     serena_root = Path(__file__).resolve().parents[1]
     child_env = {**env, "PYTHONPATH": str(serena_root)}
     proc = subprocess.run(
