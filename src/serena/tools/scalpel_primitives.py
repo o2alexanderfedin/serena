@@ -761,12 +761,34 @@ class ScalpelExecuteCommandTool(Tool):
         return result.model_dump_json(indent=2)
 
 
+# ---------------------------------------------------------------------------
+# v1.1 Stream 5 / Leaf 03 — ScalpelReloadPluginsTool
+# ---------------------------------------------------------------------------
+
+
+class ScalpelReloadPluginsTool(Tool):
+    """Reload plugin/capability registry from disk (no server restart)."""
+
+    def apply(self) -> str:
+        """Reload plugin/capability registry from disk. Use after generating
+        a new plugin or editing a manifest. No server restart needed.
+
+        :return: JSON ReloadReport (added/removed/unchanged ids, per-plugin
+            errors, is_clean computed flag).
+        """
+        runtime = ScalpelRuntime.instance()
+        registry = runtime.plugin_registry()
+        report = registry.reload()
+        return report.model_dump_json(indent=2)
+
+
 __all__ = [
     "ScalpelApplyCapabilityTool",
     "ScalpelCapabilitiesListTool",
     "ScalpelCapabilityDescribeTool",
     "ScalpelDryRunComposeTool",
     "ScalpelExecuteCommandTool",
+    "ScalpelReloadPluginsTool",
     "ScalpelRollbackTool",
     "ScalpelTransactionRollbackTool",
     "ScalpelWorkspaceHealthTool",
