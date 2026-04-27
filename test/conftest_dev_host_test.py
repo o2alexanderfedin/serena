@@ -18,6 +18,8 @@ import sys
 import textwrap
 from pathlib import Path
 
+import pytest
+
 
 def _run_pytest(
     tmp_path: Path,
@@ -90,3 +92,49 @@ def test_plugin_active_when_local_host_flag_set(tmp_path: Path) -> None:
     proc, out = _run_pytest(tmp_path, env_overrides={"O2_SCALPEL_LOCAL_HOST": "1"})
     assert proc.returncode == 0, f"pytest failed:\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}"
     assert out.read_text() == "rustc"
+
+
+# ---------------------------------------------------------------------------
+# stage-v0.2.0-review-m12 — pin the truthy-value contract.
+#
+# The plugin's activation predicate is the *exact* string ``"1"`` — no
+# generic "truthy" interpretation. The two tests above cover the
+# happy-path (``"1"``) and the unset case; this parametrized matrix pins
+# that NO other plausible "yes-flavoured" value activates the plugin.
+#
+# If a future refactor relaxes the predicate to ``bool`` or ``int`` or a
+# python truthy check (which would let ``"true"``, ``"yes"``, etc. through)
+# this matrix fails loudly. The contract was chosen deliberately:
+# string-equality is explicit, ASCII-stable across shells, and matches
+# how the rest of the codebase treats opt-in env flags.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "flag_value",
+    [
+        pytest.param("true", id="lowercase-true"),
+        pytest.param("yes", id="lowercase-yes"),
+        pytest.param("0", id="zero"),
+        pytest.param("", id="empty-string"),
+        pytest.param("anything-else", id="arbitrary-string"),
+    ],
+)
+def test_plugin_inactive_for_non_one_values(tmp_path: Path, flag_value: str) -> None:
+    """ONLY exact ``"1"`` activates the plugin — no truthy-string interpretation.
+
+    Regression cordon: a refactor that swaps the ``== "1"`` check for
+    ``in {"1", "true", "yes"}`` or ``bool(value)`` would let any of these
+    values through. This test fails first if that happens.
+    """
+    proc, out = _run_pytest(
+        tmp_path, env_overrides={"O2_SCALPEL_LOCAL_HOST": flag_value}
+    )
+    assert proc.returncode == 0, (
+        f"pytest failed for O2_SCALPEL_LOCAL_HOST={flag_value!r}:\n"
+        f"STDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}"
+    )
+    assert out.read_text() == "__unset__", (
+        f"plugin incorrectly activated for O2_SCALPEL_LOCAL_HOST={flag_value!r}; "
+        f"only the literal string '1' must activate the shim"
+    )
