@@ -68,6 +68,8 @@ FIXTURES_ROOT = SERENA_ROOT / "test" / "fixtures"
 
 CALCRS_FIXTURE = FIXTURES_ROOT / "calcrs"
 CALCPY_FIXTURE = FIXTURES_ROOT / "calcpy"
+CALCPY_DATACLASSES_FIXTURE = FIXTURES_ROOT / "calcpy_dataclasses"
+CALCPY_NOTEBOOKS_FIXTURE = FIXTURES_ROOT / "calcpy_notebooks"
 
 
 @pytest.fixture(scope="session")
@@ -88,6 +90,43 @@ def calcpy_workspace() -> Path:
         f"T3-min should have created it."
     )
     return CALCPY_FIXTURE.resolve(strict=False)
+
+
+@pytest.fixture(scope="session")
+def calcpy_dataclasses_workspace() -> Path:
+    """Absolute path to the calcpy_dataclasses sub-fixture root.
+
+    Stage 1H Leaf 02 — drives inline-flow integration tests against the
+    five-@dataclass shape in ``calcpy_dataclasses/models.py`` plus the
+    pre-extracted ``calcpy_dataclasses/sub/extracted.py``. Skip cleanly
+    if the fixture pyproject.toml is missing rather than fail collection.
+    """
+    pyproject = CALCPY_DATACLASSES_FIXTURE / "pyproject.toml"
+    if not pyproject.exists():
+        pytest.skip(
+            f"calcpy_dataclasses fixture missing pyproject.toml at {pyproject}; "
+            f"Stage 1H Leaf 02 should have created it."
+        )
+    return CALCPY_DATACLASSES_FIXTURE.resolve(strict=False)
+
+
+@pytest.fixture(scope="session")
+def calcpy_notebooks_workspace() -> Path:
+    """Absolute path to the calcpy_notebooks sub-fixture root.
+
+    Stage 1H Leaf 02 — drives the organize-imports + .ipynb-byte-stability
+    integration tests. The fixture intentionally ships an out-of-canonical-
+    order import block in ``src/calcpy_min.py`` so ruff's
+    ``source.organizeImports.ruff`` and pylsp-rope's ``source.organize_import``
+    both have something to reorder.
+    """
+    pyproject = CALCPY_NOTEBOOKS_FIXTURE / "pyproject.toml"
+    if not pyproject.exists():
+        pytest.skip(
+            f"calcpy_notebooks fixture missing pyproject.toml at {pyproject}; "
+            f"Stage 1H Leaf 02 should have created it."
+        )
+    return CALCPY_NOTEBOOKS_FIXTURE.resolve(strict=False)
 
 
 # ---------------------------------------------------------------------------
@@ -254,6 +293,46 @@ def assert_workspace_edit_round_trip():
         return applied_count
 
     return _check
+
+
+# ---------------------------------------------------------------------------
+# Stage 1H T10 — 3-server Python MultiServerCoordinator
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def python_coordinator(
+    pylsp_lsp: Any,
+    basedpyright_lsp: Any,
+    ruff_lsp: Any,
+) -> Any:
+    """3-server Python ``MultiServerCoordinator`` for merge-priority assertions.
+
+    Wraps the three session-scoped sync ``SolidLanguageServer`` adapters in
+    ``_AsyncAdapter`` (per v0.2.0 follow-up #03 contract — see
+    ``serena.refactoring._async_check.assert_servers_async_callable``) and
+    constructs a ``MultiServerCoordinator`` keyed by the three canonical
+    Python provenance ids: ``pylsp-rope`` / ``basedpyright`` / ``ruff``.
+
+    Skip cleanly with a clear message if construction fails so suites that
+    depend on this fixture (organize-imports merge-priority, etc.) don't
+    wedge collection on partial dev hosts.
+    """
+    try:
+        from serena.refactoring.multi_server import MultiServerCoordinator
+        from serena.tools.scalpel_runtime import _AsyncAdapter
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"python_coordinator unavailable (import error): {exc!r}")
+
+    try:
+        servers: dict[str, Any] = {
+            "pylsp-rope": _AsyncAdapter(pylsp_lsp),
+            "basedpyright": _AsyncAdapter(basedpyright_lsp),
+            "ruff": _AsyncAdapter(ruff_lsp),
+        }
+        return MultiServerCoordinator(servers)
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"python_coordinator unavailable (construct error): {exc!r}")
 
 
 # ---------------------------------------------------------------------------
