@@ -10,16 +10,16 @@ and `"codeAction/resolve"` because no facade existed. Post Stage 1A T6/T7, the p
 
 from __future__ import annotations
 
-import os
 import time
 from pathlib import Path
 from typing import Any
 
-os.environ.setdefault("CARGO_BUILD_RUSTC", "rustc")  # neutralize rust-fv-driver alias
+# Developer-host CARGO_BUILD_RUSTC shim moved to opt-in pytest plugin
+# ``test.conftest_dev_host`` (activated by ``O2_SCALPEL_LOCAL_HOST=1``).
+# See ``docs/dev/host-rustc-shim.md``.
+from solidlsp.ls import SolidLanguageServer
 
-from solidlsp.ls import SolidLanguageServer  # noqa: E402
-
-from .conftest import write_spike_result  # noqa: E402
+from .conftest import write_spike_result
 
 # Pollutant references HashMap without an import; rust-analyzer should surface
 # an "Import HashMap" quickfix on the HashMap token.
