@@ -7,6 +7,7 @@ members = [
     "ra_inliners",
     "ra_visibility",
     "ra_imports",
+    "ra_glob_imports",
 ]
 
 [workspace.package]
