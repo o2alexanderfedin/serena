@@ -168,11 +168,49 @@ def coordinator_for_facade(
     return ScalpelRuntime.instance().coordinator_for(lang_enum, project_root)
 
 
+def attach_apply_source(cls: type) -> None:
+    """Capture ``inspect.getsource(cls.apply)`` once and stash it as
+    ``__wrapped_source__`` so downstream introspection is independent of
+    ``linecache``. Idempotent. No-op when ``cls`` has no ``apply`` or when
+    ``inspect.getsource`` raises (frozen / built-in / pyc-only)."""
+    import inspect as _inspect
+    fn = cls.__dict__.get("apply") or getattr(cls, "apply", None)
+    if fn is None:
+        return
+    try:
+        src = _inspect.getsource(fn)
+    except (OSError, TypeError):
+        return
+    try:
+        fn.__wrapped_source__ = src  # type: ignore[attr-defined]
+    except (AttributeError, TypeError):
+        return
+
+
+def get_apply_source(cls: type) -> str:
+    """Deterministic source for ``cls.apply``. Prefers the
+    ``__wrapped_source__`` attribute attached by :func:`attach_apply_source`;
+    falls back to ``inspect.getsource``. Returns ``""`` on failure."""
+    import inspect as _inspect
+    fn = getattr(cls, "apply", None)
+    if fn is None:
+        return ""
+    captured = getattr(fn, "__wrapped_source__", None)
+    if isinstance(captured, str) and captured:
+        return captured
+    try:
+        return _inspect.getsource(fn)
+    except (OSError, TypeError):
+        return ""
+
+
 __all__ = [
     "FACADE_TO_CAPABILITY_ID",
     "apply_workspace_edit_via_editor",
+    "attach_apply_source",
     "build_failure_result",
     "coordinator_for_facade",
+    "get_apply_source",
     "record_checkpoint_for_workspace_edit",
     "resolve_capability_for_facade",
     "workspace_boundary_guard",
