@@ -21,6 +21,7 @@ members = [
     "ra_module_layouts",
     "ra_quickfixes",
     "ra_workspace_edit_shapes",
+    "ra_term_search",
 ]
 
 [workspace.package]
