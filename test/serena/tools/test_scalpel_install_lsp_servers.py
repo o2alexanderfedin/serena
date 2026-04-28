@@ -262,3 +262,163 @@ def test_make_mcp_tool_succeeds() -> None:
     mcp_tool = SerenaMCPFactory.make_mcp_tool(tool, openai_tool_compatible=False)
     assert mcp_tool.name == "scalpel_install_lsp_servers"
     assert mcp_tool.description
+
+
+# -----------------------------------------------------------------------------
+# v1.2 Leaf A — registry covers all 6 LSP servers (markdown + 5 back-ports)
+# -----------------------------------------------------------------------------
+
+
+def _patched_run(argv: list[str] | tuple[str, ...], **_kw: Any) -> MagicMock:
+    """Default fake subprocess.run for registry-wide dry-run sweeps.
+
+    Returns success for any --version probe (so detect_installed sees a
+    version string when a binary is mocked-present) and an empty pipx
+    list payload otherwise so latest_available falls through to None.
+    """
+    completed = MagicMock()
+    completed.returncode = 0
+    argv_t = tuple(argv)
+    if "--version" in argv_t:
+        completed.stdout = "stub-version\n"
+    elif "list" in argv_t and "--json" in argv_t:
+        completed.stdout = json.dumps({"venvs": {}})
+    else:
+        completed.stdout = ""
+    completed.stderr = ""
+    return completed
+
+
+def test_apply_default_languages_covers_all_six_installers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """v1.2 registry surfaces markdown + 5 back-port slots — six entries total."""
+    monkeypatch.setattr(platform, "system", lambda: "Darwin")
+    # Patch every installer's subprocess.run so the sweep stays in dry-run land.
+    import serena.installer.basedpyright_installer as bpr_mod
+    import serena.installer.clippy_installer as clp_mod
+    import serena.installer.installer as installer_mod
+    import serena.installer.marksman_installer as mks_mod
+    import serena.installer.pylsp_installer as pylsp_mod
+    import serena.installer.ruff_installer as ruff_mod
+    import serena.installer.rust_analyzer_installer as ra_mod
+
+    for mod in (installer_mod, mks_mod, ra_mod, pylsp_mod, bpr_mod, ruff_mod, clp_mod):
+        monkeypatch.setattr(mod.subprocess, "run", _patched_run)
+
+    payload = json.loads(_make_tool().apply())
+    expected_keys = {
+        "markdown",
+        "rust",
+        "python",
+        "python-basedpyright",
+        "python-ruff",
+        "rust-clippy",
+    }
+    assert set(payload.keys()) == expected_keys
+    for lang in expected_keys:
+        entry = payload[lang]
+        # Every entry has a planned argv tuple and is in safe dry-run mode.
+        assert entry["dry_run"] is True
+        assert isinstance(entry["command"], list)
+        assert entry["command"]  # non-empty
+        assert entry["action"] in {"install", "update", "noop"}
+
+
+def test_apply_filter_to_rust_only_returns_rust_analyzer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``languages=['rust']`` filters down to RustAnalyzerInstaller alone."""
+    monkeypatch.setattr(platform, "system", lambda: "Darwin")
+    import serena.installer.installer as installer_mod
+    import serena.installer.rust_analyzer_installer as ra_mod
+
+    monkeypatch.setattr(installer_mod.subprocess, "run", _patched_run)
+    monkeypatch.setattr(ra_mod.subprocess, "run", _patched_run)
+    payload = json.loads(_make_tool().apply(languages=["rust"]))
+    assert set(payload.keys()) == {"rust"}
+    assert payload["rust"]["command"] == [
+        "rustup", "component", "add", "rust-analyzer",
+    ]
+    assert payload["rust"]["dry_run"] is True
+
+
+def test_apply_filter_to_python_basedpyright_returns_basedpyright(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``python-basedpyright`` slot resolves to BasedpyrightInstaller (secondary Python LSP)."""
+    monkeypatch.setattr(platform, "system", lambda: "Darwin")
+    import serena.installer.basedpyright_installer as bpr_mod
+    import serena.installer.installer as installer_mod
+
+    monkeypatch.setattr(installer_mod.subprocess, "run", _patched_run)
+    monkeypatch.setattr(bpr_mod.subprocess, "run", _patched_run)
+    payload = json.loads(_make_tool().apply(languages=["python-basedpyright"]))
+    assert set(payload.keys()) == {"python-basedpyright"}
+    assert payload["python-basedpyright"]["command"] == [
+        "pipx", "install", "basedpyright",
+    ]
+
+
+def test_apply_filter_to_python_ruff_returns_ruff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(platform, "system", lambda: "Darwin")
+    import serena.installer.installer as installer_mod
+    import serena.installer.ruff_installer as ruff_mod
+
+    monkeypatch.setattr(installer_mod.subprocess, "run", _patched_run)
+    monkeypatch.setattr(ruff_mod.subprocess, "run", _patched_run)
+    payload = json.loads(_make_tool().apply(languages=["python-ruff"]))
+    assert payload["python-ruff"]["command"] == ["pipx", "install", "ruff"]
+
+
+def test_apply_filter_to_python_returns_pylsp(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The primary ``python`` slot resolves to PylspInstaller, not basedpyright/ruff."""
+    monkeypatch.setattr(platform, "system", lambda: "Darwin")
+    import serena.installer.installer as installer_mod
+    import serena.installer.pylsp_installer as pylsp_mod
+
+    monkeypatch.setattr(installer_mod.subprocess, "run", _patched_run)
+    monkeypatch.setattr(pylsp_mod.subprocess, "run", _patched_run)
+    payload = json.loads(_make_tool().apply(languages=["python"]))
+    assert payload["python"]["command"] == ["pipx", "install", "python-lsp-server"]
+
+
+def test_apply_filter_to_rust_clippy_returns_clippy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(platform, "system", lambda: "Darwin")
+    import serena.installer.clippy_installer as clp_mod
+    import serena.installer.installer as installer_mod
+
+    monkeypatch.setattr(installer_mod.subprocess, "run", _patched_run)
+    monkeypatch.setattr(clp_mod.subprocess, "run", _patched_run)
+    payload = json.loads(_make_tool().apply(languages=["rust-clippy"]))
+    assert payload["rust-clippy"]["command"] == [
+        "rustup", "component", "add", "clippy",
+    ]
+
+
+def test_installer_registry_has_six_entries() -> None:
+    """Direct check on the registry helper — v1.2 ships exactly 6 installer slots."""
+    from serena.tools.scalpel_primitives import _installer_registry
+
+    registry = _installer_registry()
+    assert set(registry.keys()) == {
+        "markdown",
+        "rust",
+        "python",
+        "python-basedpyright",
+        "python-ruff",
+        "rust-clippy",
+    }
+    # Each value is a concrete LspInstaller subclass.
+    from serena.installer.installer import LspInstaller
+
+    for cls in registry.values():
+        assert issubclass(cls, LspInstaller)
+        # Class can be instantiated (concrete, not abstract).
+        cls()
