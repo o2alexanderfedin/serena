@@ -35,11 +35,13 @@ from serena.marketplace.schema import (
 )
 
 # Top-level marketplace identity. Mirrors the constants used by the per-plugin
-# generator (``serena.refactoring.plugin_generator._AUTHOR`` etc) — kept here
+# generator (``serena.refactoring.plugin_generator._AUTHOR_*``) — kept here
 # rather than imported across the layering boundary so this module stays a
 # strict-leaf publication surface.
 _MARKETPLACE_NAME = "o2-scalpel"
-_AUTHOR = "AI Hive(R)"
+_AUTHOR_NAME = "Alex Fedin & AI Hive®"
+_AUTHOR_EMAIL = "af@O2.services"
+_AUTHOR_URL = "https://O2.services"
 _LICENSE = "MIT"
 _REPO = "https://github.com/o2alexanderfedin/o2-scalpel"
 _VERSION = "1.0.0"
@@ -77,9 +79,9 @@ def _author_from(payload: dict[str, Any]) -> AuthorInfo:
     if isinstance(raw, str):
         return AuthorInfo(name=raw)
     return AuthorInfo(
-        name=str(raw.get("name") or _AUTHOR),
-        email=raw.get("email"),
-        url=raw.get("url"),
+        name=str(raw.get("name") or _AUTHOR_NAME),
+        email=raw.get("email") or _AUTHOR_EMAIL,
+        url=raw.get("url") or _AUTHOR_URL,
     )
 
 
@@ -139,7 +141,7 @@ def build_manifest(repo_root: Path, *, generator_sha: str = "unknown") -> Market
             repository=_REPO,
             homepage=_REPO,
         ),
-        owner=OwnerInfo(name=_AUTHOR),
+        owner=OwnerInfo(name=_AUTHOR_NAME, email=_AUTHOR_EMAIL, url=_AUTHOR_URL),
         plugins=tuple(sorted(entries, key=lambda e: e.name)),
     )
 
