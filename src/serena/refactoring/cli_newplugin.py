@@ -106,6 +106,53 @@ _LANGUAGE_METADATA: dict[str, _StrategyView] = {
             ),
         ),
     ),
+    "markdown": _StrategyView(
+        # v1.1.1 Leaf 01: marksman ``server`` subcommand drives the LSP over
+        # stdio. The four facades below are the contract Leaf 02 will
+        # implement (``ScalpelRenameHeadingTool``, ``ScalpelSplitDocTool``,
+        # ``ScalpelExtractSectionTool``, ``ScalpelOrganizeLinksTool``); this
+        # row only declares them so the plugin generator can render the
+        # marketplace + skill trees ahead of facade-class wiring.
+        language="markdown",
+        display_name="Markdown",
+        file_extensions=(".md", ".markdown", ".mdx"),
+        lsp_server_cmd=("marksman", "server"),
+        facades=(
+            _Facade(
+                name="rename_heading",
+                summary="Rename a heading and update all cross-file wiki-links",
+                trigger_phrases=("rename heading", "refactor heading"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="split_doc",
+                summary="Split a long markdown doc along H1/H2 boundaries into linked sub-docs",
+                trigger_phrases=("split this doc", "split markdown"),
+                primitive_chain=(
+                    "textDocument/documentSymbol",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="extract_section",
+                summary="Extract a section into a new file with a back-link",
+                trigger_phrases=("extract section", "extract heading"),
+                primitive_chain=(
+                    "textDocument/documentSymbol",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="organize_links",
+                summary="Sort and normalize markdown links/wiki-links",
+                trigger_phrases=("organize links", "sort links"),
+                primitive_chain=(
+                    "textDocument/documentLink",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
 }
 
 

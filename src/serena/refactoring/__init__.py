@@ -31,6 +31,7 @@ from .multi_server import (
     ServerTimeoutWarning,
     SuppressedAlternative,
 )
+from .markdown_strategy import MarkdownStrategy
 from .python_strategy import (
     ChangeSignatureSpec,
     PythonInterpreterNotFound,
@@ -48,6 +49,7 @@ def _build_strategy_registry() -> dict:
     return {
         Language.PYTHON: PythonStrategy,
         Language.RUST: RustStrategy,
+        Language.MARKDOWN: MarkdownStrategy,
     }
 
 
@@ -64,6 +66,7 @@ __all__ = [
     "LanguageStrategy",
     "LspPool",
     "LspPoolKey",
+    "MarkdownStrategy",
     "MergedCodeAction",
     "MultiServerBroadcastResult",
     "MultiServerCoordinator",
