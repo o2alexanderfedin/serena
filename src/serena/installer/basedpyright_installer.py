@@ -84,7 +84,7 @@ class BasedpyrightInstaller(LspInstaller):
             return None
         return _extract_pipx_package_version(completed.stdout, "basedpyright")
 
-    def install_command(self) -> tuple[str, ...]:
+    def _install_command(self) -> tuple[str, ...]:
         """Return ``pipx install basedpyright`` (preferred path).
 
         Cross-platform; pipx is the recommended Python user-binary

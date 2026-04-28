@@ -77,11 +77,11 @@ class PylspInstaller(LspInstaller):
             return None
         return _extract_pipx_package_version(completed.stdout, "python-lsp-server")
 
-    def install_command(self) -> tuple[str, ...]:
+    def _install_command(self) -> tuple[str, ...]:
         """Return ``pipx install python-lsp-server``.
 
         The pylsp-rope plugin injection runs as a separate post-step
-        inside :meth:`install` / :meth:`update`. ``install_command``
+        inside :meth:`install` / :meth:`update`. ``_install_command``
         only exposes the primary install argv so the dry-run preview
         stays focused on the headline action; the inject argv lives in
         :attr:`inject_command` and is surfaced explicitly by callers

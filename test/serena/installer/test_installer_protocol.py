@@ -3,7 +3,7 @@
 These tests pin the schema for the two pydantic boundary models AND the
 ABC contract: an installer subclass MUST declare ``language``,
 ``binary_name``, and implement ``detect_installed`` / ``latest_available``
-/ ``install_command`` / ``install`` / ``update``. The safety gate
+/ ``_install_command`` / ``install`` / ``update``. The safety gate
 (``allow_install`` / ``allow_update`` defaulting to ``False``) is
 enforced by the base class — subclasses that opt to actually invoke
 ``subprocess.run`` get the gate for free.
@@ -104,7 +104,7 @@ def test_concrete_subclass_can_instantiate_and_exposes_class_attributes() -> Non
         def latest_available(self) -> str | None:
             return None
 
-        def install_command(self) -> tuple[str, ...]:
+        def _install_command(self) -> tuple[str, ...]:
             return ("echo", "stub")
 
     inst = _Stub()
@@ -138,7 +138,7 @@ def test_install_default_safety_gate_returns_dry_run_without_subprocess(
         def latest_available(self) -> str | None:
             return None
 
-        def install_command(self) -> tuple[str, ...]:
+        def _install_command(self) -> tuple[str, ...]:
             return ("brew", "install", "stub-lsp")
 
     result = _Stub().install(allow_install=False)
@@ -168,7 +168,7 @@ def test_update_default_safety_gate_returns_dry_run_without_subprocess(
         def latest_available(self) -> str | None:
             return "2.0"
 
-        def install_command(self) -> tuple[str, ...]:
+        def _install_command(self) -> tuple[str, ...]:
             return ("brew", "upgrade", "stub-lsp")
 
     result = _Stub().update(allow_update=False)
