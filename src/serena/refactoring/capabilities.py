@@ -37,6 +37,7 @@ _DEFAULT_SOURCE_SERVER_BY_LANGUAGE: dict[str, ProvenanceLiteral] = {
     "python": "pylsp-rope",
     "rust": "rust-analyzer",
     "markdown": "marksman",
+    "typescript": "vtsls",
 }
 
 
@@ -162,11 +163,13 @@ def _adapter_map() -> dict[ProvenanceLiteral, type]:
     from solidlsp.language_servers.pylsp_server import PylspServer
     from solidlsp.language_servers.ruff_server import RuffServer
     from solidlsp.language_servers.rust_analyzer import RustAnalyzer
+    from solidlsp.language_servers.vtsls_server import VtslsServer
     return {
         "pylsp-rope": PylspServer,
         "basedpyright": BasedpyrightServer,
         "ruff": RuffServer,
         "rust-analyzer": RustAnalyzer,
+        "vtsls": VtslsServer,
     }
 
 
@@ -177,6 +180,7 @@ def _adapter_map() -> dict[ProvenanceLiteral, type]:
 _ADAPTER_ATTRIBUTION_ORDER: dict[str, tuple[ProvenanceLiteral, ...]] = {
     "python": ("ruff", "pylsp-rope", "basedpyright"),
     "rust": ("rust-analyzer",),
+    "typescript": ("vtsls",),
 }
 
 

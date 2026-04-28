@@ -31,6 +31,8 @@ def test_smoke_build_catalog_via_top_level_import() -> None:
     from serena.refactoring import STRATEGY_REGISTRY, build_capability_catalog
 
     cat = build_capability_catalog(STRATEGY_REGISTRY)
-    assert len(cat.records) == 13  # 7 python + 6 rust per Stage 1E
+    # 7 python + 6 rust + 13 typescript (Stream 6 / Leaf A); markdown has 0
+    # code-action rows (marksman exposes no codeAction provider).
+    assert len(cat.records) == 26
     languages = sorted({r.language for r in cat.records})
-    assert languages == ["python", "rust"]
+    assert languages == ["python", "rust", "typescript"]

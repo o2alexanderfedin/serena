@@ -289,10 +289,10 @@ def _patched_run(argv: list[str] | tuple[str, ...], **_kw: Any) -> MagicMock:
     return completed
 
 
-def test_apply_default_languages_covers_all_six_installers(
+def test_apply_default_languages_covers_all_installers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """v1.2 registry surfaces markdown + 5 back-port slots — six entries total."""
+    """Stream 6 registry surfaces markdown + 5 back-port slots + typescript — seven entries total."""
     monkeypatch.setattr(platform, "system", lambda: "Darwin")
     # Patch every installer's subprocess.run so the sweep stays in dry-run land.
     import serena.installer.basedpyright_installer as bpr_mod
@@ -302,8 +302,9 @@ def test_apply_default_languages_covers_all_six_installers(
     import serena.installer.pylsp_installer as pylsp_mod
     import serena.installer.ruff_installer as ruff_mod
     import serena.installer.rust_analyzer_installer as ra_mod
+    import serena.installer.vtsls_installer as vts_mod
 
-    for mod in (installer_mod, mks_mod, ra_mod, pylsp_mod, bpr_mod, ruff_mod, clp_mod):
+    for mod in (installer_mod, mks_mod, ra_mod, pylsp_mod, bpr_mod, ruff_mod, clp_mod, vts_mod):
         monkeypatch.setattr(mod.subprocess, "run", _patched_run)
 
     payload = json.loads(_make_tool().apply())
@@ -314,6 +315,7 @@ def test_apply_default_languages_covers_all_six_installers(
         "python-basedpyright",
         "python-ruff",
         "rust-clippy",
+        "typescript",
     }
     assert set(payload.keys()) == expected_keys
     for lang in expected_keys:
@@ -402,8 +404,8 @@ def test_apply_filter_to_rust_clippy_returns_clippy(
     ]
 
 
-def test_installer_registry_has_six_entries() -> None:
-    """Direct check on the registry helper — v1.2 ships exactly 6 installer slots."""
+def test_installer_registry_has_seven_entries() -> None:
+    """Stream 6 registry ships 7 installer slots (v1.2 six + typescript)."""
     from serena.tools.scalpel_primitives import _installer_registry
 
     registry = _installer_registry()
@@ -414,6 +416,7 @@ def test_installer_registry_has_six_entries() -> None:
         "python-basedpyright",
         "python-ruff",
         "rust-clippy",
+        "typescript",
     }
     # Each value is a concrete LspInstaller subclass.
     from serena.installer.installer import LspInstaller

@@ -40,6 +40,7 @@ from .python_strategy import (
 )
 from .rust_strategy import RustStrategy
 from .transactions import TransactionStore
+from .typescript_strategy import TypescriptStrategy
 
 
 # Lazy-import the Language enum to keep refactoring/__init__.py free of
@@ -50,6 +51,7 @@ def _build_strategy_registry() -> dict:
         Language.PYTHON: PythonStrategy,
         Language.RUST: RustStrategy,
         Language.MARKDOWN: MarkdownStrategy,
+        Language.TYPESCRIPT: TypescriptStrategy,
     }
 
 
@@ -84,6 +86,7 @@ __all__ = [
     "ServerTimeoutWarning",
     "SuppressedAlternative",
     "TransactionStore",
+    "TypescriptStrategy",
     "WaitingForLspBudget",
     "build_capability_catalog",
     "default_cache_root",
