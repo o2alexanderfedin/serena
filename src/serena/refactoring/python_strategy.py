@@ -129,7 +129,15 @@ class PythonStrategy(LanguageStrategy, PythonStrategyExtensions):
                         bp.configure_python_path(str(resolved.path))
                     except Exception as exc:  # noqa: BLE001 — best-effort
                         log.debug("configure_python_path skipped: %s", exc)
-        return MultiServerCoordinator(servers=servers)
+        # Pass runtime dependencies explicitly to make the dependency graph
+        # visible at construction (spec § 4.4.0).
+        from serena.tools.scalpel_runtime import ScalpelRuntime
+        rt = ScalpelRuntime.instance()
+        return MultiServerCoordinator(
+            servers=servers,
+            dynamic_registry=rt.dynamic_capability_registry(),
+            catalog=rt.catalog(),
+        )
 
 
 # ---------------------------------------------------------------------------
