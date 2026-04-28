@@ -218,12 +218,12 @@ def _refresh_marketplace_surface(repo_root: Path) -> None:
     """
 
     from serena.marketplace.build import (
-        _resolve_engine_sha,
         build_manifest,
+        resolve_engine_sha,
         write_manifest,
     )
 
-    manifest = build_manifest(repo_root, generator_sha=_resolve_engine_sha())
+    manifest = build_manifest(repo_root, generator_sha=resolve_engine_sha())
     write_manifest(repo_root, manifest)
 
 
