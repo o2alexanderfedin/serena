@@ -52,6 +52,11 @@ from serena.tools.scalpel_facades import (
     ScalpelIntroduceParameterTool,
     ScalpelLocalToFieldTool,
     ScalpelUseFunctionTool,
+    # v1.1.1 Markdown facades
+    ScalpelExtractSectionTool,
+    ScalpelOrganizeLinksTool,
+    ScalpelRenameHeadingTool,
+    ScalpelSplitDocTool,
 )
 from serena.tools.scalpel_primitives import (
     ScalpelCapabilitiesListTool,
@@ -74,6 +79,9 @@ PLAYGROUND_RUST_BASELINE = Path(__file__).resolve().parents[4] / "playground" / 
 
 # v1.3-C Python playground — mirrors PLAYGROUND_RUST_BASELINE structure.
 PLAYGROUND_PYTHON_BASELINE = Path(__file__).resolve().parents[4] / "playground" / "python"
+
+# v1.3-D Markdown playground — mirrors PLAYGROUND_RUST_BASELINE + PLAYGROUND_PYTHON_BASELINE.
+PLAYGROUND_MARKDOWN_BASELINE = Path(__file__).resolve().parents[4] / "playground" / "markdown"
 
 
 def _e2e_enabled() -> bool:
@@ -132,6 +140,11 @@ def basedpyright_bin() -> str:
 @pytest.fixture(scope="session")
 def ruff_bin() -> str:
     return _which_or_skip("ruff")
+
+
+@pytest.fixture(scope="session")
+def marksman_bin() -> str:
+    return _which_or_skip("marksman")
 
 
 @pytest.fixture
@@ -296,6 +309,20 @@ class _McpDriver:
     def ignore_diagnostic(self, **kwargs: Any) -> str:
         return self._bind(ScalpelIgnoreDiagnosticTool).apply(**kwargs)
 
+    # --- v1.1.1 Markdown facades ---
+
+    def rename_heading(self, **kwargs: Any) -> str:
+        return self._bind(ScalpelRenameHeadingTool).apply(**kwargs)
+
+    def split_doc(self, **kwargs: Any) -> str:
+        return self._bind(ScalpelSplitDocTool).apply(**kwargs)
+
+    def extract_section(self, **kwargs: Any) -> str:
+        return self._bind(ScalpelExtractSectionTool).apply(**kwargs)
+
+    def organize_links(self, **kwargs: Any) -> str:
+        return self._bind(ScalpelOrganizeLinksTool).apply(**kwargs)
+
 
 @pytest.fixture
 def mcp_driver_rust(
@@ -348,6 +375,28 @@ def mcp_driver_playground_python(
     """v1.3-C playground driver: mirrors mcp_driver_python but binds to playground_python_root."""
     del scalpel_runtime  # used only for setup/teardown ordering
     return _McpDriver(project_root=playground_python_root)
+
+
+@pytest.fixture
+def playground_markdown_root(tmp_path: Path) -> Path:
+    """v1.3-D Markdown playground clone under tmp_path.
+
+    Mirrors ``playground_python_root``: clones the baseline workspace into an
+    isolated ``tmp_path`` directory. No transient directories to strip for
+    plain-text Markdown (no bytecode or build caches).
+    """
+    dest = tmp_path / "playground_markdown"
+    shutil.copytree(PLAYGROUND_MARKDOWN_BASELINE, dest, dirs_exist_ok=False)
+    return dest.resolve(strict=False)
+
+
+@pytest.fixture
+def mcp_driver_playground_markdown(
+    scalpel_runtime: ScalpelRuntime, playground_markdown_root: Path
+) -> _McpDriver:
+    """v1.3-D playground driver: mirrors mcp_driver_playground_python but binds to playground_markdown_root."""
+    del scalpel_runtime  # used only for setup/teardown ordering
+    return _McpDriver(project_root=playground_markdown_root)
 
 
 # --- wall-clock budget recorder (consumed by T13) -------------------------
