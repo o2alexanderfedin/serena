@@ -138,7 +138,9 @@ def test_build_manifest_ignores_non_plugin_dirs(tmp_path: Path) -> None:
 def test_build_manifest_populates_top_level_identity(tmp_path: Path) -> None:
     m = build_manifest(tmp_path, generator_sha="abcdef012345")
     assert m.name == "o2-scalpel"
-    assert m.owner.name == "AI Hive(R)"
+    assert m.owner.name == "Alex Fedin & AI Hive®"
+    assert m.owner.email == "af@O2.services"
+    assert m.owner.url == "https://O2.services"
     assert m.metadata.repository == "https://github.com/o2alexanderfedin/o2-scalpel"
     assert m.metadata.license == "MIT"
     assert "abcdef012345" in m.generator

@@ -64,7 +64,9 @@ _INSTALL_HINTS: dict[str, str] = {
 # Identity constants for every emitted plugin. Kept module-private so they
 # travel with the generator and are easy to lift to env in Stage 1K if we
 # ever want to publish plugins under a different owner.
-_AUTHOR = "AI Hive(R)"
+_AUTHOR_NAME = "Alex Fedin & AI Hive®"
+_AUTHOR_EMAIL = "af@O2.services"
+_AUTHOR_URL = "https://O2.services"
 _LICENSE = "MIT"
 _REPO = "https://github.com/o2alexanderfedin/o2-scalpel"
 _VERSION = "1.0.0"
@@ -131,7 +133,7 @@ def _render_plugin_json(strategy: _StrategyLike) -> str:
         name=_plugin_name(strategy),
         description=_description(strategy),
         version=_VERSION,
-        author=AuthorInfo(name=_AUTHOR),
+        author=AuthorInfo(name=_AUTHOR_NAME, email=_AUTHOR_EMAIL, url=_AUTHOR_URL),
         license=_LICENSE,
         repository=_REPO,
         homepage=_REPO,
