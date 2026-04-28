@@ -9,7 +9,7 @@ import platform
 import shutil
 import subprocess
 import threading
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 from overrides import override
 
@@ -26,6 +26,8 @@ class RustAnalyzer(SolidLanguageServer):
     """
     Provides Rust specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Rust.
     """
+
+    server_id: ClassVar[str] = "rust-analyzer"
 
     @staticmethod
     def _determine_log_level(line: str) -> int:
