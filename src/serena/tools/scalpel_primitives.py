@@ -999,6 +999,149 @@ class ScalpelReloadPluginsTool(Tool):
         return report.model_dump_json(indent=2)
 
 
+# ---------------------------------------------------------------------------
+# v1.1.1 Leaf 03 — ScalpelInstallLspServersTool
+# ---------------------------------------------------------------------------
+
+
+# Per-language installer registry. v1.1.1 ships marksman; v1.2 back-ports
+# rust-analyzer / pylsp / basedpyright / ruff / clippy. The mapping lives
+# here (rather than auto-discovering installer subclasses) so the MCP
+# surface is explicit about which languages the tool will probe.
+def _installer_registry() -> dict[str, type]:
+    from serena.installer.marksman_installer import MarksmanInstaller
+
+    return {
+        "markdown": MarksmanInstaller,
+    }
+
+
+def _decide_action(
+    *,
+    detected_present: bool,
+    detected_version: str | None,
+    latest: str | None,
+) -> Literal["install", "update", "noop"]:
+    if not detected_present:
+        return "install"
+    if latest is not None and detected_version is not None and latest != detected_version:
+        return "update"
+    return "noop"
+
+
+class ScalpelInstallLspServersTool(Tool):
+    """Install or update LSP servers (default dry-run; explicit consent gates execution)."""
+
+    def apply(
+        self,
+        languages: list[str] | None = None,
+        dry_run: bool = True,
+        allow_install: bool = False,
+        allow_update: bool = False,
+    ) -> str:
+        """Probe + optionally install/update LSP servers. Defaults to safe
+        dry-run; pass dry_run=False AND allow_install=True (or allow_update=True)
+        to actually run the install command.
+
+        :param languages: subset of registered installer languages
+            (e.g. ['markdown']); None probes every registered language.
+        :param dry_run: when True (default), surface the planned argv
+            tuple but never invoke subprocess.run.
+        :param allow_install: explicit consent to run the install command
+            for absent LSPs. Ignored when dry_run=True.
+        :param allow_update: explicit consent to re-run the install
+            command for outdated LSPs. Ignored when dry_run=True.
+        :return: JSON dict {language: {detected, latest, action,
+            command, dry_run, success?, stdout?, stderr?, return_code?}}.
+        """
+        import json as _json
+
+        registry = _installer_registry()
+        wanted = list(registry.keys()) if languages is None else list(languages)
+        report: dict[str, dict[str, object]] = {}
+        for lang in wanted:
+            installer_cls = registry.get(lang)
+            if installer_cls is None:
+                report[lang] = {
+                    "action": "skipped",
+                    "reason": (
+                        f"No installer registered for language {lang!r}; "
+                        f"available: {sorted(registry)}."
+                    ),
+                }
+                continue
+            installer = installer_cls()
+            try:
+                detected = installer.detect_installed()
+            except Exception as exc:  # noqa: BLE001 — surface as skipped
+                report[lang] = {
+                    "action": "skipped",
+                    "reason": f"detect_installed raised {type(exc).__name__}: {exc}",
+                }
+                continue
+            try:
+                latest = installer.latest_available()
+            except Exception:  # noqa: BLE001 — registry probe is best-effort
+                latest = None
+            try:
+                command = installer.install_command()
+            except NotImplementedError as exc:
+                report[lang] = {
+                    "action": "skipped",
+                    "reason": str(exc),
+                    "detected": {
+                        "present": detected.present,
+                        "version": detected.version,
+                        "path": detected.path,
+                    },
+                    "latest": latest,
+                }
+                continue
+            action = _decide_action(
+                detected_present=detected.present,
+                detected_version=detected.version,
+                latest=latest,
+            )
+            entry: dict[str, object] = {
+                "detected": {
+                    "present": detected.present,
+                    "version": detected.version,
+                    "path": detected.path,
+                },
+                "latest": latest,
+                "action": action,
+                "command": list(command),
+                "dry_run": True,
+            }
+            # Only invoke when BOTH gates are open. dry_run=True overrides
+            # allow_install/allow_update so the LLM can audit the planned
+            # command first (CLAUDE.md "executing actions with care").
+            if not dry_run:
+                if action == "install" and allow_install:
+                    result = installer.install(allow_install=True)
+                    _merge_install_result(entry, result)
+                elif action == "update" and allow_update:
+                    result = installer.update(allow_update=True)
+                    _merge_install_result(entry, result)
+                # action == "noop" or gate closed → keep dry_run=True.
+            report[lang] = entry
+        return _json.dumps(report, indent=2)
+
+
+def _merge_install_result(entry: dict[str, object], result: object) -> None:
+    """Project an :class:`InstallResult` into the per-language report row."""
+    from serena.installer.installer import InstallResult
+
+    if not isinstance(result, InstallResult):
+        return
+    entry["dry_run"] = result.dry_run
+    entry["success"] = result.success
+    entry["stdout"] = result.stdout
+    entry["stderr"] = result.stderr
+    entry["return_code"] = result.return_code
+    entry["command"] = list(result.command_run)
+
+
 __all__ = [
     "ScalpelApplyCapabilityTool",
     "ScalpelCapabilitiesListTool",
@@ -1006,6 +1149,7 @@ __all__ = [
     "ScalpelConfirmAnnotationsTool",
     "ScalpelDryRunComposeTool",
     "ScalpelExecuteCommandTool",
+    "ScalpelInstallLspServersTool",
     "ScalpelReloadPluginsTool",
     "ScalpelRollbackTool",
     "ScalpelTransactionRollbackTool",
