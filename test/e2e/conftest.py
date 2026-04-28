@@ -67,6 +67,11 @@ FIXTURES_DIR = E2E_DIR / "fixtures"
 CALCRS_BASELINE = FIXTURES_DIR / "calcrs_e2e"
 CALCPY_BASELINE = FIXTURES_DIR / "calcpy_e2e"
 
+# v1.2.2 playground per spec docs/superpowers/specs/2026-04-28-rust-plugin-e2e-playground-spec.md § 4.3.
+# parents[4] resolves vendor/serena/test/e2e/conftest.py up four directory levels:
+#   parents[0]=e2e/, parents[1]=test/, parents[2]=serena/, parents[3]=vendor/, parents[4]=repo root.
+PLAYGROUND_RUST_BASELINE = Path(__file__).resolve().parents[4] / "playground" / "rust"
+
 
 def _e2e_enabled() -> bool:
     """Return True iff the e2e suite is opted-in for this pytest session."""
@@ -142,6 +147,17 @@ def calcpy_e2e_root(tmp_path: Path) -> Path:
     """Per-test clone of the calcpy_e2e baseline."""
     dest = tmp_path / "calcpy_e2e"
     shutil.copytree(CALCPY_BASELINE, dest, dirs_exist_ok=False)
+    return dest.resolve(strict=False)
+
+
+@pytest.fixture
+def playground_rust_root(tmp_path: Path) -> Path:
+    """Per-test clone of the playground/rust baseline; target/ stripped post-copy."""
+    dest = tmp_path / "playground_rust"
+    shutil.copytree(PLAYGROUND_RUST_BASELINE, dest, dirs_exist_ok=False)
+    target = dest / "target"
+    if target.exists():
+        shutil.rmtree(target)
     return dest.resolve(strict=False)
 
 
@@ -292,6 +308,15 @@ def mcp_driver_python(
 ) -> _McpDriver:
     del scalpel_runtime
     return _McpDriver(project_root=calcpy_e2e_root)
+
+
+@pytest.fixture
+def mcp_driver_playground_rust(
+    scalpel_runtime: ScalpelRuntime, playground_rust_root: Path
+) -> _McpDriver:
+    """v1.2.2 playground driver: mirrors mcp_driver_rust but binds to playground_rust_root."""
+    del scalpel_runtime  # used only for setup/teardown ordering
+    return _McpDriver(project_root=playground_rust_root)
 
 
 # --- wall-clock budget recorder (consumed by T13) -------------------------
