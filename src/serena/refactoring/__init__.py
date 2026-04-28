@@ -44,6 +44,7 @@ from .golang_strategy import GolangStrategy
 from .typescript_strategy import TypescriptStrategy
 from .cpp_strategy import CppStrategy
 from .java_strategy import JavaStrategy
+from .lean_strategy import LeanStrategy
 
 
 # Lazy-import the Language enum to keep refactoring/__init__.py free of
@@ -58,6 +59,7 @@ def _build_strategy_registry() -> dict:
         Language.GO: GolangStrategy,
         Language.CPP: CppStrategy,
         Language.JAVA: JavaStrategy,
+        Language.LEAN4: LeanStrategy,
     }
 
 
@@ -96,6 +98,7 @@ __all__ = [
     "TypescriptStrategy",
     "CppStrategy",
     "JavaStrategy",
+    "LeanStrategy",
     "WaitingForLspBudget",
     "build_capability_catalog",
     "default_cache_root",
