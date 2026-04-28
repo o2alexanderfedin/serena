@@ -438,6 +438,54 @@
     },
     {
       "extension_allow_list": [
+        ".lean"
+      ],
+      "id": "lean.quickfix",
+      "kind": "quickfix",
+      "language": "lean",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "lean"
+    },
+    {
+      "extension_allow_list": [
+        ".problog"
+      ],
+      "id": "problog.quickfix",
+      "kind": "quickfix",
+      "language": "problog",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "problog-lsp"
+    },
+    {
+      "extension_allow_list": [
+        ".pl",
+        ".pro",
+        ".prolog"
+      ],
+      "id": "prolog.quickfix",
+      "kind": "quickfix",
+      "language": "prolog",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "swipl-lsp"
+    },
+    {
+      "extension_allow_list": [
+        ".pl",
+        ".pro",
+        ".prolog"
+      ],
+      "id": "prolog.refactor.rename",
+      "kind": "refactor.rename",
+      "language": "prolog",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "swipl-lsp"
+    },
+    {
+      "extension_allow_list": [
         ".py",
         ".pyi"
       ],
@@ -585,6 +633,18 @@
       "params_schema": {},
       "preferred_facade": null,
       "source_server": "rust-analyzer"
+    },
+    {
+      "extension_allow_list": [
+        ".smt",
+        ".smt2"
+      ],
+      "id": "smt2.quickfix",
+      "kind": "quickfix",
+      "language": "smt2",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "smt2-lsp"
     },
     {
       "extension_allow_list": [

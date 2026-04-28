@@ -45,6 +45,9 @@ from .typescript_strategy import TypescriptStrategy
 from .cpp_strategy import CppStrategy
 from .java_strategy import JavaStrategy
 from .lean_strategy import LeanStrategy
+from .smt2_strategy import Smt2Strategy
+from .prolog_strategy import PrologStrategy
+from .problog_strategy import ProblogStrategy
 
 
 # Lazy-import the Language enum to keep refactoring/__init__.py free of
@@ -60,6 +63,9 @@ def _build_strategy_registry() -> dict:
         Language.CPP: CppStrategy,
         Language.JAVA: JavaStrategy,
         Language.LEAN4: LeanStrategy,
+        Language.SMT2: Smt2Strategy,
+        Language.PROLOG: PrologStrategy,
+        Language.PROBLOG: ProblogStrategy,
     }
 
 
@@ -99,6 +105,9 @@ __all__ = [
     "CppStrategy",
     "JavaStrategy",
     "LeanStrategy",
+    "Smt2Strategy",
+    "PrologStrategy",
+    "ProblogStrategy",
     "WaitingForLspBudget",
     "build_capability_catalog",
     "default_cache_root",

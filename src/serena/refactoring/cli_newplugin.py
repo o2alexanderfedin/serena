@@ -425,6 +425,99 @@ _LANGUAGE_METADATA: dict[str, _StrategyView] = {
             ),
         ),
     ),
+    "smt2": _StrategyView(
+        # Stream 6 / Leaf F: SMT-LIB 2 constraint format.
+        # No production LSP exists as of 2026-04-27; Smt2Installer raises
+        # NotImplementedError with guidance.  The seam is preserved here.
+        #
+        # SMT-LIB 2 is a constraint specification format — rename/extract have
+        # no solver-level semantics.  Only quickfix (diagnostic auto-corrections)
+        # is safe to advertise.  See smt2_strategy.py for the full rationale.
+        language="smt2",
+        display_name="SMT-LIB 2",
+        file_extensions=(".smt2", ".smt"),
+        lsp_server_cmd=("smt2-lsp", "--stdio"),
+        facades=(
+            _Facade(
+                name="fix_lints",
+                summary="Apply diagnostic quick-fixes (sort mismatch, syntax errors)",
+                trigger_phrases=("fix all", "fix lints", "fix syntax"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "prolog": _StrategyView(
+        # Stream 6 / Leaf G: SWI-Prolog via lsp_server pack.
+        # Install: swipl -g "pack_install(lsp_server)" -t halt
+        # Requires SWI-Prolog 8.1.5+.
+        #
+        # Prolog predicates are purely symbolic names — alpha-renaming is safe.
+        # quickfix covers diagnostic fixes; refactor.rename covers predicate
+        # and variable renaming within the current file.
+        language="prolog",
+        display_name="Prolog (SWI-Prolog)",
+        file_extensions=(".pl", ".pro", ".prolog"),
+        lsp_server_cmd=(
+            "swipl",
+            "-g", "use_module(library(lsp_server)).",
+            "-g", "lsp_server:main",
+            "-t", "halt",
+            "--", "stdio",
+        ),
+        facades=(
+            _Facade(
+                name="fix_lints",
+                summary="Apply diagnostic quick-fixes (singleton variables, syntax errors)",
+                trigger_phrases=("fix all", "fix lints", "fix singleton"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="rename_predicate",
+                summary="Rename a Prolog predicate or variable across the current file",
+                trigger_phrases=("rename", "rename predicate", "rename variable"),
+                primitive_chain=(
+                    "textDocument/rename",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "problog": _StrategyView(
+        # Stream 6 / Leaf H: ProbLog (probabilistic Prolog) — research-mode.
+        # No dedicated LSP; piggybacks on swipl + lsp_server pack.
+        # Install: pip install problog + swipl lsp_server pack.
+        #
+        # Probabilistic semantics make rename/extract research-mode:
+        # renaming a probabilistic fact must also update EM-learning weights.
+        # Only quickfix (syntax-level fixes) is safe.
+        language="problog",
+        display_name="ProbLog",
+        file_extensions=(".problog",),
+        lsp_server_cmd=(
+            "swipl",
+            "-g", "use_module(library(lsp_server)).",
+            "-g", "lsp_server:main",
+            "-t", "halt",
+            "--", "stdio",
+        ),
+        facades=(
+            _Facade(
+                name="fix_lints",
+                summary="Apply diagnostic quick-fixes (singleton variables, syntax errors)",
+                trigger_phrases=("fix all", "fix lints", "fix syntax"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
     "lean": _StrategyView(
         # Stream 6 / Leaf E: ``lean --server`` drives the LSP over stdio.
         # Lean 4 (https://leanprover.github.io/lean4/) is a dependently-typed

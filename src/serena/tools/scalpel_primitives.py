@@ -1056,9 +1056,12 @@ def _installer_registry() -> dict[str, type]:
     from serena.installer.jdtls_installer import JdtlsInstaller
     from serena.installer.lean_installer import LeanInstaller
     from serena.installer.marksman_installer import MarksmanInstaller
+    from serena.installer.problog_installer import ProblogInstaller
+    from serena.installer.prolog_installer import PrologInstaller
     from serena.installer.pylsp_installer import PylspInstaller
     from serena.installer.ruff_installer import RuffInstaller
     from serena.installer.rust_analyzer_installer import RustAnalyzerInstaller
+    from serena.installer.smt2_installer import Smt2Installer
     from serena.installer.vtsls_installer import VtslsInstaller
 
     return {
@@ -1073,6 +1076,9 @@ def _installer_registry() -> dict[str, type]:
         "cpp": ClangdInstaller,
         "java": JdtlsInstaller,
         "lean": LeanInstaller,
+        "smt2": Smt2Installer,
+        "prolog": PrologInstaller,
+        "problog": ProblogInstaller,
     }
 
 
