@@ -5,6 +5,6 @@ set -eu
 if ! command -v $lsp_cmd >/dev/null 2>&1; then
   printf 'scalpel: LSP server "%s" not found on PATH.\n' "$lsp_cmd" >&2
   printf 'Install hint: %s\n' "$install_hint" >&2
-  exit 1
+  exit 2
 fi
 printf 'scalpel: %s ready (language=%s)\n' "$lsp_cmd" "$language"

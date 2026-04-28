@@ -40,7 +40,7 @@ from serena.marketplace.schema import (
 _MARKETPLACE_NAME = "o2-scalpel"
 _AUTHOR = "AI Hive(R)"
 _LICENSE = "MIT"
-_REPO = "https://github.com/o2services/o2-scalpel"
+_REPO = "https://github.com/o2alexanderfedin/o2-scalpel"
 _VERSION = "1.0.0"
 _DESCRIPTION = "MCP-driven LSP refactor server for Rust + Python + Markdown."
 
@@ -166,9 +166,22 @@ boostvolt fields are populated from per-plugin ``plugin.json`` files so the
 marketplace builder remains a thin aggregator.
 """
 
+MANIFEST_SUBDIR = ".claude-plugin"
+"""Directory under the repo root that Claude Code requires the manifest in.
+
+``/plugin marketplace add <owner>/<repo>`` reads ``<repo>/.claude-plugin/
+marketplace.json`` — not ``<repo>/marketplace.json`` (failure F1 from
+install-mechanics §2). The subdirectory is created automatically by
+:func:`write_manifest` when absent.
+"""
+
 
 def write_manifest(repo_root: Path, manifest: MarketplaceManifest) -> Path:
-    """Write ``manifest`` to ``<repo_root>/marketplace.json``.
+    """Write ``manifest`` to ``<repo_root>/.claude-plugin/marketplace.json``.
+
+    Claude Code requires the marketplace catalog at
+    ``.claude-plugin/marketplace.json`` (not at the repo root). The
+    ``.claude-plugin/`` directory is created when it does not exist.
 
     Returns the path written. The same code path is used by the drift-CI
     re-baseline command (``--write``) and by the ``cli_newplugin`` integration
@@ -176,7 +189,9 @@ def write_manifest(repo_root: Path, manifest: MarketplaceManifest) -> Path:
     """
 
     payload = render_manifest_json(manifest)
-    out = repo_root / MANIFEST_FILENAME
+    out_dir = repo_root / MANIFEST_SUBDIR
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = out_dir / MANIFEST_FILENAME
     out.write_text(payload, encoding="utf-8")
     return out
 
@@ -276,7 +291,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--write",
         action="store_true",
-        help=f"Persist the manifest to <root>/{MANIFEST_FILENAME}.",
+        help=f"Persist the manifest to <root>/{MANIFEST_SUBDIR}/{MANIFEST_FILENAME}.",
     )
     parser.add_argument(
         "--generator-sha",
@@ -303,6 +318,7 @@ if __name__ == "__main__":  # pragma: no cover
 
 __all__ = [
     "MANIFEST_FILENAME",
+    "MANIFEST_SUBDIR",
     "build_manifest",
     "main",
     "render_manifest_json",
