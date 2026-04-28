@@ -24,12 +24,12 @@ def test_build_language_health_surfaces_dynamic_capabilities(tmp_path: Path) -> 
     ScalpelRuntime.reset_for_testing()
     try:
         registry = DynamicCapabilityRegistry()
-        registry.register("pylsp-rope", "textDocument/publishDiagnostics")
-        registry.register("pylsp-rope", "textDocument/codeAction")
+        registry.register("pylsp-rope", "wh-reg-1", "textDocument/publishDiagnostics")
+        registry.register("pylsp-rope", "wh-reg-2", "textDocument/codeAction")
         # A registration against an unknown server-id MUST be ignored —
         # only ids that intersect the static catalog count for this
         # language.
-        registry.register("rust-analyzer", "textDocument/hover")
+        registry.register("rust-analyzer", "wh-reg-3", "textDocument/hover")
 
         health = _build_language_health(
             Language.PYTHON,
