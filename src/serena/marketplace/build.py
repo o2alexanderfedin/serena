@@ -181,33 +181,73 @@ def write_manifest(repo_root: Path, manifest: MarketplaceManifest) -> Path:
     return out
 
 
+def _read_head_in_gitdir(gitdir: Path) -> str | None:
+    """Read the current HEAD SHA from a resolved git directory.
+
+    Handles both symbolic refs (``ref: refs/heads/<branch>``) and bare SHAs
+    (detached HEAD).  Returns ``None`` if anything is missing or unreadable —
+    the caller decides whether to fall through or return ``"unknown"``.
+    """
+
+    head = gitdir / "HEAD"
+    if not head.is_file():
+        return None
+    try:
+        ref = head.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    if ref.startswith("ref: "):
+        ref_path = gitdir / ref[len("ref: "):]
+        if ref_path.is_file():
+            try:
+                return ref_path.read_text(encoding="utf-8").strip() or None
+            except OSError:
+                return None
+        return None  # symbolic ref without a loose ref file (e.g. packed-refs only)
+    return ref or None
+
+
 def resolve_engine_sha() -> str:
     """Resolve the engine submodule's HEAD SHA, with a safe fallback.
 
     The submodule lives at ``vendor/serena`` from the parent root; this
     module sits inside that submodule, so we walk up to find a ``.git``
-    directory and read its ``HEAD`` ref. Anything we can't parse falls
-    back to ``unknown`` — the banner keeps regenerating with the same
-    sentinel until a real SHA is wired in by the caller.
+    entry and read its ``HEAD`` ref. Two cases are handled:
+
+    * **Submodule checkout**: ``<sub>/.git`` is a plain *file* whose content
+      begins with ``gitdir: <relative_path>``.  The path is resolved relative
+      to the file's parent and the actual git directory is read from there.
+      This prevents the walk from falling through to the parent consumer
+      repo's ``.git`` directory and stamping the wrong SHA in the banner.
+
+    * **Standalone checkout**: ``<repo>/.git`` is a *directory*; HEAD is read
+      directly from there.
+
+    Anything that cannot be parsed falls back to ``"unknown"`` — the banner
+    keeps regenerating with the same sentinel until a real SHA is available.
     """
 
     here = Path(__file__).resolve()
     for parent in here.parents:
-        head = parent / ".git" / "HEAD"
-        if head.is_file():
+        candidate = parent / ".git"
+        if candidate.is_file():
+            # Submodule case: .git is a pointer file `gitdir: <relative_path>`
             try:
-                ref = head.read_text(encoding="utf-8").strip()
+                content = candidate.read_text(encoding="utf-8").strip()
             except OSError:
                 return "unknown"
-            if ref.startswith("ref: "):
-                ref_path = parent / ".git" / ref[len("ref: "):]
-                if ref_path.is_file():
-                    try:
-                        return ref_path.read_text(encoding="utf-8").strip() or "unknown"
-                    except OSError:
-                        return "unknown"
-                return "unknown"
-            return ref or "unknown"
+            if not content.startswith("gitdir: "):
+                return "unknown"  # malformed pointer
+            resolved_gitdir = (candidate.parent / content[len("gitdir: "):]).resolve()
+            if resolved_gitdir.is_dir():
+                sha = _read_head_in_gitdir(resolved_gitdir)
+                if sha is not None:
+                    return sha
+            return "unknown"  # pointer target missing or HEAD unreadable
+        if candidate.is_dir():
+            sha = _read_head_in_gitdir(candidate)
+            if sha is not None:
+                return sha
     return "unknown"
 
 
