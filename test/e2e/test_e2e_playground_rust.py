@@ -22,6 +22,7 @@ Facade → Driver method mapping (all from ``_McpDriver``):
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -336,3 +337,61 @@ def test_playground_rust_facade_coverage() -> None:
     v1.3. The test ID is reserved here so the v1.3 PR is one decorator
     removal away from enforcing coverage.
     """
+
+
+# Engine repo URL — matches the git+URL in o2-scalpel-rust/.mcp.json (§ 3.3).
+# Updated to the renamed fork (project_serena_fork_renamed.md).
+_ENGINE_GIT_URL = "git+https://github.com/o2alexanderfedin/o2-scalpel-engine.git"
+
+
+@pytest.mark.skipif(
+    os.getenv("O2_SCALPEL_TEST_REMOTE_INSTALL") != "1",
+    reason="opt-in via O2_SCALPEL_TEST_REMOTE_INSTALL=1; v1.3 graduation candidate (PyPI publish)",
+)
+def test_playground_rust_remote_install_smoke(tmp_path: Path) -> None:
+    """Verify the published install path works end-to-end against the live GitHub repo.
+
+    Currently gated off by default — see spec § 4.5 for rationale (cold uvx fetch
+    of 60–90 s dominates CI wall-clock budget; revisit at v1.3 alongside PyPI publish).
+
+    What this smoke proves:
+    1. The git+URL endpoint resolves (no o2services owner regression — § 3.3/§ 3.4).
+    2. uvx can pip-install the engine without recursing into the parent repo's
+       vendor/serena submodule (the standalone engine repo IS its own root).
+    3. The CLI entrypoint ``serena`` boots and emits a well-formed help string that
+       includes ``--language`` (proof the MCP server subcommand is reachable).
+
+    v1.3 graduation: once PyPI publication lands, replace the ``git+URL`` form with
+    ``o2-scalpel-engine`` (package name); ``uvx`` resolves from cache in <1 s and
+    this test moves to default-on.  The assertion can also be tightened at that point
+    to spawn a full ``tools/list`` JSON-RPC round-trip instead of ``--help``.
+
+    Entry point: ``serena`` (pyproject.toml ``[project.scripts]`` → ``serena.cli:top_level``).
+    Relevant subcommand: ``serena start-mcp-server --help`` — contains ``--language-backend``.
+    """
+    del tmp_path  # unused; present for future fixture expansion (e.g. isolated uvx cache dir)
+
+    proc = subprocess.run(
+        [
+            "uvx",
+            "--from",
+            _ENGINE_GIT_URL,
+            "serena",
+            "start-mcp-server",
+            "--help",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=180,  # cold uvx git+URL fetch + venv build can be slow
+    )
+
+    assert proc.returncode == 0, (
+        f"uvx serena start-mcp-server --help failed (rc={proc.returncode}):\n"
+        f"stdout:\n{proc.stdout[:1000]}\n"
+        f"stderr:\n{proc.stderr[:1000]}"
+    )
+    combined = proc.stdout + proc.stderr
+    assert "--language" in combined, (
+        f"expected '--language' in help output — engine may not have booted correctly:\n"
+        f"{combined[:500]}"
+    )
