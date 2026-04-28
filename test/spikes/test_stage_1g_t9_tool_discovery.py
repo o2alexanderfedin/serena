@@ -66,12 +66,13 @@ _V11_NAMES: frozenset[str] = frozenset({
     "scalpel_convert_from_relative_imports",  # Leaf 07 — rope relatives_to_absolutes
 })
 
-# v1.1.1 — markdown stream (single-LSP marksman; 4 facades).
+# v1.1.1 — markdown stream (single-LSP marksman; 4 facades + installer primitive).
 _V11_1_NAMES: frozenset[str] = frozenset({
     "scalpel_rename_heading",  # Leaf 02 — marksman textDocument/rename
     "scalpel_split_doc",  # Leaf 02 — split a doc along H1/H2 boundaries
     "scalpel_extract_section",  # Leaf 02 — extract one section into a sibling file
     "scalpel_organize_links",  # Leaf 02 — sort + dedup wiki + markdown links
+    "scalpel_install_lsp_servers",  # Leaf 03 — LSP installer infra (marksman PoC)
 })
 
 EXPECTED_NAMES: frozenset[str] = (
