@@ -1105,7 +1105,7 @@ class ScalpelInstallLspServersTool(Tool):
             except Exception:  # noqa: BLE001 — registry probe is best-effort
                 latest = None
             try:
-                command = installer.install_command()
+                command = installer._install_command()  # pyright: ignore[reportPrivateUsage]
             except NotImplementedError as exc:
                 report[lang] = {
                     "action": "skipped",
