@@ -2,6 +2,167 @@
   "records": [
     {
       "extension_allow_list": [
+        ".c",
+        ".c++",
+        ".cc",
+        ".cpp",
+        ".cxx",
+        ".h",
+        ".h++",
+        ".hh",
+        ".hpp",
+        ".hxx",
+        ".inl",
+        ".ipp",
+        ".tpp"
+      ],
+      "id": "cpp.quickfix",
+      "kind": "quickfix",
+      "language": "cpp",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "clangd"
+    },
+    {
+      "extension_allow_list": [
+        ".c",
+        ".c++",
+        ".cc",
+        ".cpp",
+        ".cxx",
+        ".h",
+        ".h++",
+        ".hh",
+        ".hpp",
+        ".hxx",
+        ".inl",
+        ".ipp",
+        ".tpp"
+      ],
+      "id": "cpp.refactor",
+      "kind": "refactor",
+      "language": "cpp",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "clangd"
+    },
+    {
+      "extension_allow_list": [
+        ".c",
+        ".c++",
+        ".cc",
+        ".cpp",
+        ".cxx",
+        ".h",
+        ".h++",
+        ".hh",
+        ".hpp",
+        ".hxx",
+        ".inl",
+        ".ipp",
+        ".tpp"
+      ],
+      "id": "cpp.refactor.extract",
+      "kind": "refactor.extract",
+      "language": "cpp",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "clangd"
+    },
+    {
+      "extension_allow_list": [
+        ".c",
+        ".c++",
+        ".cc",
+        ".cpp",
+        ".cxx",
+        ".h",
+        ".h++",
+        ".hh",
+        ".hpp",
+        ".hxx",
+        ".inl",
+        ".ipp",
+        ".tpp"
+      ],
+      "id": "cpp.refactor.extract.function",
+      "kind": "refactor.extract.function",
+      "language": "cpp",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "clangd"
+    },
+    {
+      "extension_allow_list": [
+        ".c",
+        ".c++",
+        ".cc",
+        ".cpp",
+        ".cxx",
+        ".h",
+        ".h++",
+        ".hh",
+        ".hpp",
+        ".hxx",
+        ".inl",
+        ".ipp",
+        ".tpp"
+      ],
+      "id": "cpp.refactor.inline",
+      "kind": "refactor.inline",
+      "language": "cpp",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "clangd"
+    },
+    {
+      "extension_allow_list": [
+        ".c",
+        ".c++",
+        ".cc",
+        ".cpp",
+        ".cxx",
+        ".h",
+        ".h++",
+        ".hh",
+        ".hpp",
+        ".hxx",
+        ".inl",
+        ".ipp",
+        ".tpp"
+      ],
+      "id": "cpp.source.fixAll.clangd",
+      "kind": "source.fixAll.clangd",
+      "language": "cpp",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "clangd"
+    },
+    {
+      "extension_allow_list": [
+        ".c",
+        ".c++",
+        ".cc",
+        ".cpp",
+        ".cxx",
+        ".h",
+        ".h++",
+        ".hh",
+        ".hpp",
+        ".hxx",
+        ".inl",
+        ".ipp",
+        ".tpp"
+      ],
+      "id": "cpp.source.organizeImports",
+      "kind": "source.organizeImports",
+      "language": "cpp",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "clangd"
+    },
+    {
+      "extension_allow_list": [
         ".go"
       ],
       "id": "go.quickfix",

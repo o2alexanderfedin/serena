@@ -1050,6 +1050,7 @@ class ScalpelReloadPluginsTool(Tool):
 # tool will probe.
 def _installer_registry() -> dict[str, type]:
     from serena.installer.basedpyright_installer import BasedpyrightInstaller
+    from serena.installer.clangd_installer import ClangdInstaller
     from serena.installer.clippy_installer import ClippyInstaller
     from serena.installer.gopls_installer import GoplsInstaller
     from serena.installer.marksman_installer import MarksmanInstaller
@@ -1067,6 +1068,7 @@ def _installer_registry() -> dict[str, type]:
         "rust-clippy": ClippyInstaller,                  # secondary Rust LSP
         "typescript": VtslsInstaller,
         "go": GoplsInstaller,
+        "cpp": ClangdInstaller,
     }
 
 

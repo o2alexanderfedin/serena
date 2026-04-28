@@ -39,6 +39,7 @@ _DEFAULT_SOURCE_SERVER_BY_LANGUAGE: dict[str, ProvenanceLiteral] = {
     "markdown": "marksman",
     "typescript": "vtsls",
     "go": "gopls",
+    "cpp": "clangd",
 }
 
 
@@ -161,6 +162,7 @@ class CapabilityCatalog(BaseModel):
 def _adapter_map() -> dict[ProvenanceLiteral, type]:
     """Lazy import to avoid forcing solidlsp adapter modules at import time."""
     from solidlsp.language_servers.basedpyright_server import BasedpyrightServer
+    from solidlsp.language_servers.clangd_server import ClangdServer
     from solidlsp.language_servers.gopls_server import GoplsServer
     from solidlsp.language_servers.pylsp_server import PylspServer
     from solidlsp.language_servers.ruff_server import RuffServer
@@ -173,6 +175,7 @@ def _adapter_map() -> dict[ProvenanceLiteral, type]:
         "rust-analyzer": RustAnalyzer,
         "vtsls": VtslsServer,
         "gopls": GoplsServer,
+        "clangd": ClangdServer,
     }
 
 
@@ -185,6 +188,7 @@ _ADAPTER_ATTRIBUTION_ORDER: dict[str, tuple[ProvenanceLiteral, ...]] = {
     "rust": ("rust-analyzer",),
     "typescript": ("vtsls",),
     "go": ("gopls",),
+    "cpp": ("clangd",),
 }
 
 
