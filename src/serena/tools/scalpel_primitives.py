@@ -1054,6 +1054,7 @@ def _installer_registry() -> dict[str, type]:
     from serena.installer.clippy_installer import ClippyInstaller
     from serena.installer.gopls_installer import GoplsInstaller
     from serena.installer.jdtls_installer import JdtlsInstaller
+    from serena.installer.lean_installer import LeanInstaller
     from serena.installer.marksman_installer import MarksmanInstaller
     from serena.installer.pylsp_installer import PylspInstaller
     from serena.installer.ruff_installer import RuffInstaller
@@ -1071,6 +1072,7 @@ def _installer_registry() -> dict[str, type]:
         "go": GoplsInstaller,
         "cpp": ClangdInstaller,
         "java": JdtlsInstaller,
+        "lean": LeanInstaller,
     }
 
 

@@ -425,6 +425,36 @@ _LANGUAGE_METADATA: dict[str, _StrategyView] = {
             ),
         ),
     ),
+    "lean": _StrategyView(
+        # Stream 6 / Leaf E: ``lean --server`` drives the LSP over stdio.
+        # Lean 4 (https://leanprover.github.io/lean4/) is a dependently-typed
+        # theorem prover. Its LSP server is built into the ``lean`` compiler
+        # binary — no separate binary download is required.
+        #
+        # Install via elan (the Lean toolchain manager):
+        #   curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh
+        #   elan toolchain install stable
+        #
+        # Only ``quickfix`` code actions are exposed because dependent types
+        # make rename/extract semantically unsafe — renaming a hypothesis
+        # or extracting a subterm can silently invalidate proofs elsewhere.
+        # See lean_strategy.py module docstring for the full rationale.
+        language="lean",
+        display_name="Lean 4",
+        file_extensions=(".lean",),
+        lsp_server_cmd=("lean", "--server"),
+        facades=(
+            _Facade(
+                name="fix_lints",
+                summary="Apply tactic suggestions and auto-fixable diagnostics (quickfix)",
+                trigger_phrases=("fix all", "fix lints", "apply tactic", "try this"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
 }
 
 

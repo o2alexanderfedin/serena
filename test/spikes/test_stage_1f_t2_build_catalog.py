@@ -94,6 +94,7 @@ def test_factory_python_source_server_is_one_of_python_servers() -> None:
         "go": "gopls",
         "cpp": "clangd",
         "java": "jdtls",
+        "lean": "lean",
     }
     cat = build_capability_catalog(STRATEGY_REGISTRY)
     for rec in cat.records:
