@@ -1004,15 +1004,36 @@ class ScalpelReloadPluginsTool(Tool):
 # ---------------------------------------------------------------------------
 
 
-# Per-language installer registry. v1.1.1 ships marksman; v1.2 back-ports
-# rust-analyzer / pylsp / basedpyright / ruff / clippy. The mapping lives
-# here (rather than auto-discovering installer subclasses) so the MCP
-# surface is explicit about which languages the tool will probe.
+# Per-language installer registry. v1.1.1 shipped marksman; v1.2
+# back-ports rust-analyzer / pylsp / basedpyright / ruff / clippy.
+#
+# Keys are unique installer identifiers — the registry maps each to a
+# SINGLE installer class per the v1.1.1 contract. ``python`` resolves
+# to pylsp (the primary Python LSP); ``python-basedpyright`` and
+# ``python-ruff`` are secondary slots so the MCP tool can probe / install
+# them independently. ``rust`` resolves to rust-analyzer; ``rust-clippy``
+# is the Rust lint counterpart. The compound keys keep the contract one
+# language-id → one installer (KISS) without losing the ability to drive
+# every supported LSP server from the same MCP tool.
+#
+# The mapping lives here (rather than auto-discovering installer
+# subclasses) so the MCP surface is explicit about which languages the
+# tool will probe.
 def _installer_registry() -> dict[str, type]:
+    from serena.installer.basedpyright_installer import BasedpyrightInstaller
+    from serena.installer.clippy_installer import ClippyInstaller
     from serena.installer.marksman_installer import MarksmanInstaller
+    from serena.installer.pylsp_installer import PylspInstaller
+    from serena.installer.ruff_installer import RuffInstaller
+    from serena.installer.rust_analyzer_installer import RustAnalyzerInstaller
 
     return {
         "markdown": MarksmanInstaller,
+        "rust": RustAnalyzerInstaller,
+        "python": PylspInstaller,
+        "python-basedpyright": BasedpyrightInstaller,  # secondary Python LSP
+        "python-ruff": RuffInstaller,                    # secondary Python LSP
+        "rust-clippy": ClippyInstaller,                  # secondary Rust LSP
     }
 
 
