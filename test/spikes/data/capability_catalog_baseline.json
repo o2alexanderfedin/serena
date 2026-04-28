@@ -262,6 +262,182 @@
     },
     {
       "extension_allow_list": [
+        ".java"
+      ],
+      "id": "java.quickfix",
+      "kind": "quickfix",
+      "language": "java",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "jdtls"
+    },
+    {
+      "extension_allow_list": [
+        ".java"
+      ],
+      "id": "java.refactor",
+      "kind": "refactor",
+      "language": "java",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "jdtls"
+    },
+    {
+      "extension_allow_list": [
+        ".java"
+      ],
+      "id": "java.refactor.extract",
+      "kind": "refactor.extract",
+      "language": "java",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "jdtls"
+    },
+    {
+      "extension_allow_list": [
+        ".java"
+      ],
+      "id": "java.refactor.extract.field",
+      "kind": "refactor.extract.field",
+      "language": "java",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "jdtls"
+    },
+    {
+      "extension_allow_list": [
+        ".java"
+      ],
+      "id": "java.refactor.extract.interface",
+      "kind": "refactor.extract.interface",
+      "language": "java",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "jdtls"
+    },
+    {
+      "extension_allow_list": [
+        ".java"
+      ],
+      "id": "java.refactor.extract.method",
+      "kind": "refactor.extract.method",
+      "language": "java",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "jdtls"
+    },
+    {
+      "extension_allow_list": [
+        ".java"
+      ],
+      "id": "java.refactor.extract.variable",
+      "kind": "refactor.extract.variable",
+      "language": "java",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "jdtls"
+    },
+    {
+      "extension_allow_list": [
+        ".java"
+      ],
+      "id": "java.refactor.inline",
+      "kind": "refactor.inline",
+      "language": "java",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "jdtls"
+    },
+    {
+      "extension_allow_list": [
+        ".java"
+      ],
+      "id": "java.refactor.rewrite",
+      "kind": "refactor.rewrite",
+      "language": "java",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "jdtls"
+    },
+    {
+      "extension_allow_list": [
+        ".java"
+      ],
+      "id": "java.source.generate.accessors",
+      "kind": "source.generate.accessors",
+      "language": "java",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "jdtls"
+    },
+    {
+      "extension_allow_list": [
+        ".java"
+      ],
+      "id": "java.source.generate.constructor",
+      "kind": "source.generate.constructor",
+      "language": "java",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "jdtls"
+    },
+    {
+      "extension_allow_list": [
+        ".java"
+      ],
+      "id": "java.source.generate.delegateMethods",
+      "kind": "source.generate.delegateMethods",
+      "language": "java",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "jdtls"
+    },
+    {
+      "extension_allow_list": [
+        ".java"
+      ],
+      "id": "java.source.generate.hashCodeEquals",
+      "kind": "source.generate.hashCodeEquals",
+      "language": "java",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "jdtls"
+    },
+    {
+      "extension_allow_list": [
+        ".java"
+      ],
+      "id": "java.source.generate.overrideMethods",
+      "kind": "source.generate.overrideMethods",
+      "language": "java",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "jdtls"
+    },
+    {
+      "extension_allow_list": [
+        ".java"
+      ],
+      "id": "java.source.generate.toString",
+      "kind": "source.generate.toString",
+      "language": "java",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "jdtls"
+    },
+    {
+      "extension_allow_list": [
+        ".java"
+      ],
+      "id": "java.source.organizeImports",
+      "kind": "source.organizeImports",
+      "language": "java",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "jdtls"
+    },
+    {
+      "extension_allow_list": [
         ".py",
         ".pyi"
       ],

@@ -77,19 +77,34 @@ def test_factory_empty_registry_returns_empty_catalog() -> None:
 def test_factory_python_source_server_is_one_of_python_servers() -> None:
     """T3 enriches T2's defaults: each Python record's source_server is
     one of the Python adapter set ('pylsp-rope', 'basedpyright', 'ruff').
-    The exact attribution per kind is asserted in T3's tests."""
+    The exact attribution per kind is asserted in T3's tests.
+
+    Single-LSP languages (rust, typescript, go, cpp, java) each have exactly
+    one valid source_server. Markdown has no code-action kinds (catalog has
+    0 rows for it). New languages added in Stream 6 are covered here.
+    """
     from serena.refactoring import STRATEGY_REGISTRY
     from serena.refactoring.capabilities import build_capability_catalog
 
     legal_python_servers = {"pylsp-rope", "basedpyright", "ruff"}
+    # Single-source-server languages introduced in Stream 6 and earlier.
+    single_server_languages: dict[str, str] = {
+        "rust": "rust-analyzer",
+        "typescript": "vtsls",
+        "go": "gopls",
+        "cpp": "clangd",
+        "java": "jdtls",
+    }
     cat = build_capability_catalog(STRATEGY_REGISTRY)
     for rec in cat.records:
         if rec.language == "python":
             assert rec.source_server in legal_python_servers
-        elif rec.language == "rust":
-            assert rec.source_server == "rust-analyzer"
-        elif rec.language == "typescript":
-            assert rec.source_server == "vtsls"
+        elif rec.language in single_server_languages:
+            expected = single_server_languages[rec.language]
+            assert rec.source_server == expected, (
+                f"{rec.language} record has unexpected source_server "
+                f"{rec.source_server!r}; expected {expected!r}"
+            )
         elif rec.language == "markdown":
             pass  # marksman has no code-action kinds; catalog has 0 rows for it
         else:
