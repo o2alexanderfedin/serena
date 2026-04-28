@@ -84,7 +84,7 @@ class MarksmanInstaller(LspInstaller):
             return None
         return _extract_brew_stable_version(payload, self.binary_name)
 
-    def install_command(self) -> tuple[str, ...]:
+    def _install_command(self) -> tuple[str, ...]:
         system = platform.system()
         if system == "Darwin":
             return ("brew", "install", self.binary_name)

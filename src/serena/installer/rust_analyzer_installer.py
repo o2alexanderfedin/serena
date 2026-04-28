@@ -54,7 +54,7 @@ class RustAnalyzerInstaller(LspInstaller):
         """
         return None
 
-    def install_command(self) -> tuple[str, ...]:
+    def _install_command(self) -> tuple[str, ...]:
         """Return ``rustup component add rust-analyzer``.
 
         Cross-platform: ``rustup`` is installed via the same shell

@@ -43,7 +43,7 @@ class ClippyInstaller(LspInstaller):
         """Always returns ``None`` for clippy (toolchain-pinned, like rust-analyzer)."""
         return None
 
-    def install_command(self) -> tuple[str, ...]:
+    def _install_command(self) -> tuple[str, ...]:
         """Return ``rustup component add clippy``.
 
         Cross-platform: ``rustup`` ships everywhere via the same shell
