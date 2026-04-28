@@ -60,11 +60,30 @@ def test_apply_unknown_language_returns_invalid_argument(tmp_path: Path) -> None
 
 
 def test_apply_whitelisted_command_invokes_coordinator_broadcast(tmp_path: Path) -> None:
-    """A command in the strategy's whitelist is passed through to broadcast."""
+    """A command in the strategy's whitelist is passed through to broadcast.
+
+    DLp5: the tool now calls coordinator_for() to obtain the live allowlist
+    before dispatching.  We mock both coordinator_for() (returning a lightweight
+    fake whose execute_command_allowlist returns the fallback set) and
+    _execute_via_coordinator so no real LSP process is started.
+    """
     tool = _build_tool(tmp_path)
+
+    # Build a lightweight coordinator fake whose execute_command_allowlist
+    # returns the fallback set (simulating a server that provides no live
+    # executeCommandProvider.commands — triggers the fallback path).
+    from serena.tools.scalpel_primitives import _EXECUTE_COMMAND_FALLBACK
+    fake_coord = MagicMock()
+    fake_coord.servers = {"pylsp-rope": MagicMock()}
+    fake_coord.execute_command_allowlist.return_value = _EXECUTE_COMMAND_FALLBACK["python"]
+
     with patch(
+        "serena.tools.scalpel_primitives.ScalpelRuntime",
+    ) as mock_runtime_cls, patch(
         "serena.tools.scalpel_primitives._execute_via_coordinator",
     ) as mock_exec:
+        mock_runtime_cls.instance.return_value.coordinator_for.return_value = fake_coord
+
         from serena.tools.scalpel_schemas import (
             DiagnosticsDelta,
             DiagnosticSeverityBreakdown,

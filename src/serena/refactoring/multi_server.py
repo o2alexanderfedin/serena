@@ -955,6 +955,63 @@ class MultiServerCoordinator:
             return kind in kinds_list
         return False
 
+    # -----------------------------------------------------------------------
+    # DLp5 — live executeCommandProvider allowlist (spec § 4.6)
+    # -----------------------------------------------------------------------
+
+    def execute_command_allowlist(
+        self,
+        server_id: str,
+        fallback: frozenset[str],
+    ) -> frozenset[str]:
+        """Return the live ``executeCommandProvider.commands`` allowlist for *server_id*.
+
+        Resolution order (union of all sources):
+
+        1. ``ServerCapabilities.executeCommandProvider.commands`` from the
+           ``initialize`` response — the primary source per LSP 3.17.
+        2. Dynamically registered command IDs from ``client/registerCapability``
+           events where the method is ``"workspace/executeCommand"`` and the
+           ``registerOptions`` carries a ``commands`` list
+           (``ExecuteCommandRegistrationOptions.commands``).
+        3. *fallback* — the caller-supplied static set, consulted only when
+           both runtime sources yield an empty result.  This handles servers
+           that under-advertise ``executeCommandProvider`` (spec § R2).
+
+        :param server_id: Adapter-level server identifier (e.g. ``"rust-analyzer"``).
+        :param fallback: Hardcoded command set to use when no live data is available.
+        :return: Frozenset of allowed command strings.
+        """
+        live: set[str] = set()
+
+        # Source 1: ServerCapabilities.executeCommandProvider.commands
+        server = self._servers.get(server_id)
+        if server is not None:
+            caps: Mapping[str, Any] = server.server_capabilities() if callable(
+                getattr(server, "server_capabilities", None)
+            ) else {}
+            exec_provider = caps.get("executeCommandProvider")
+            if isinstance(exec_provider, dict):
+                cmds = exec_provider.get("commands")
+                if cmds:
+                    live.update(cmds)
+
+        # Source 2: dynamic registrations for "workspace/executeCommand"
+        # Each registration's registerOptions may carry a ``commands`` list
+        # (ExecuteCommandRegistrationOptions per LSP 3.17 § workspace/executeCommand).
+        with self._dynamic_registry._lock:
+            regs = self._dynamic_registry._by_server.get(server_id, {})
+            for reg in regs.values():
+                if reg.method == "workspace/executeCommand":
+                    dyn_cmds = reg.register_options.get("commands")
+                    if dyn_cmds:
+                        live.update(dyn_cmds)
+
+        # Source 3: fallback when live data is absent.
+        if live:
+            return frozenset(live)
+        return fallback
+
     async def broadcast(
         self,
         method: str,
