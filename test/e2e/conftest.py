@@ -72,6 +72,9 @@ CALCPY_BASELINE = FIXTURES_DIR / "calcpy_e2e"
 #   parents[0]=e2e/, parents[1]=test/, parents[2]=serena/, parents[3]=vendor/, parents[4]=repo root.
 PLAYGROUND_RUST_BASELINE = Path(__file__).resolve().parents[4] / "playground" / "rust"
 
+# v1.3-C Python playground — mirrors PLAYGROUND_RUST_BASELINE structure.
+PLAYGROUND_PYTHON_BASELINE = Path(__file__).resolve().parents[4] / "playground" / "python"
+
 
 def _e2e_enabled() -> bool:
     """Return True iff the e2e suite is opted-in for this pytest session."""
@@ -317,6 +320,34 @@ def mcp_driver_playground_rust(
     """v1.2.2 playground driver: mirrors mcp_driver_rust but binds to playground_rust_root."""
     del scalpel_runtime  # used only for setup/teardown ordering
     return _McpDriver(project_root=playground_rust_root)
+
+
+@pytest.fixture
+def playground_python_root(tmp_path: Path) -> Path:
+    """v1.3-C Python playground clone under tmp_path.
+
+    Mirrors ``playground_rust_root``: clones the baseline workspace into an
+    isolated ``tmp_path`` directory and strips ``__pycache__/``, ``.venv/``,
+    and ``.pytest_cache/`` to prevent stale bytecode from influencing
+    pylsp / basedpyright analysis.
+    """
+    dest = tmp_path / "playground_python"
+    shutil.copytree(PLAYGROUND_PYTHON_BASELINE, dest, dirs_exist_ok=False)
+    # Strip transient directories that confuse LSP indexing.
+    for purge in ["__pycache__", ".venv", ".pytest_cache"]:
+        for hit in dest.rglob(purge):
+            if hit.is_dir():
+                shutil.rmtree(hit, ignore_errors=True)
+    return dest.resolve(strict=False)
+
+
+@pytest.fixture
+def mcp_driver_playground_python(
+    scalpel_runtime: ScalpelRuntime, playground_python_root: Path
+) -> _McpDriver:
+    """v1.3-C playground driver: mirrors mcp_driver_python but binds to playground_python_root."""
+    del scalpel_runtime  # used only for setup/teardown ordering
+    return _McpDriver(project_root=playground_python_root)
 
 
 # --- wall-clock budget recorder (consumed by T13) -------------------------
