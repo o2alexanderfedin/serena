@@ -2,6 +2,105 @@
   "records": [
     {
       "extension_allow_list": [
+        ".go"
+      ],
+      "id": "go.quickfix",
+      "kind": "quickfix",
+      "language": "go",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "gopls"
+    },
+    {
+      "extension_allow_list": [
+        ".go"
+      ],
+      "id": "go.refactor",
+      "kind": "refactor",
+      "language": "go",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "gopls"
+    },
+    {
+      "extension_allow_list": [
+        ".go"
+      ],
+      "id": "go.refactor.extract",
+      "kind": "refactor.extract",
+      "language": "go",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "gopls"
+    },
+    {
+      "extension_allow_list": [
+        ".go"
+      ],
+      "id": "go.refactor.extract.function",
+      "kind": "refactor.extract.function",
+      "language": "go",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "gopls"
+    },
+    {
+      "extension_allow_list": [
+        ".go"
+      ],
+      "id": "go.refactor.extract.variable",
+      "kind": "refactor.extract.variable",
+      "language": "go",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "gopls"
+    },
+    {
+      "extension_allow_list": [
+        ".go"
+      ],
+      "id": "go.refactor.inline",
+      "kind": "refactor.inline",
+      "language": "go",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "gopls"
+    },
+    {
+      "extension_allow_list": [
+        ".go"
+      ],
+      "id": "go.refactor.rewrite",
+      "kind": "refactor.rewrite",
+      "language": "go",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "gopls"
+    },
+    {
+      "extension_allow_list": [
+        ".go"
+      ],
+      "id": "go.source.fixAll",
+      "kind": "source.fixAll",
+      "language": "go",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "gopls"
+    },
+    {
+      "extension_allow_list": [
+        ".go"
+      ],
+      "id": "go.source.organizeImports",
+      "kind": "source.organizeImports",
+      "language": "go",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "gopls"
+    },
+    {
+      "extension_allow_list": [
         ".py",
         ".pyi"
       ],
