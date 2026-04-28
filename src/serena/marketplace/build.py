@@ -31,6 +31,7 @@ from serena.marketplace.schema import MarketplaceManifest, PluginEntry
 _INSTALL_HINTS: dict[str, str] = {
     "rust": "rustup component add rust-analyzer",
     "python": "pipx install python-lsp-server",
+    "markdown": "brew install marksman  # macOS; snap install marksman on Linux",
     "typescript": "npm i -g typescript-language-server typescript",
     "go": "go install golang.org/x/tools/gopls@latest",
 }
