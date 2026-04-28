@@ -62,3 +62,21 @@ def test_emit_for_python(tmp_path, fake_strategy_python) -> None:
     PluginGenerator().emit(fake_strategy_python, tmp_path)
     root = tmp_path / "o2-scalpel-python"
     assert (root / "skills" / "using-scalpel-split-file-python.md").exists()
+
+
+# --- § 3.2: emit must write hooks.json alongside verify-scalpel-*.sh --------
+
+
+def test_emit_writes_hooks_json(tmp_path, fake_strategy_rust) -> None:
+    """§ 3.2: emit must produce hooks/hooks.json binding the verify script."""
+    PluginGenerator().emit(fake_strategy_rust, tmp_path)
+    assert (tmp_path / "o2-scalpel-rust" / "hooks" / "hooks.json").exists()
+
+
+def test_emit_hooks_json_has_session_start(tmp_path, fake_strategy_rust) -> None:
+    """§ 3.2: hooks.json must bind verify script to SessionStart."""
+    PluginGenerator().emit(fake_strategy_rust, tmp_path)
+    data = json.loads(
+        (tmp_path / "o2-scalpel-rust" / "hooks" / "hooks.json").read_text()
+    )
+    assert "SessionStart" in data["hooks"]
