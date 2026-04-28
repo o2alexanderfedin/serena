@@ -241,6 +241,13 @@ class ScalpelSplitFileTool(Tool):
                 file=file, groups=groups,
                 project_root=project_root, dry_run=dry_run,
             ).model_dump_json(indent=2)
+        # Gate: Rust code-action dispatch — skip when rust-analyzer does not
+        # advertise the refactor.extract.module kind (spec § 4.5 P4).
+        coord = coordinator_for_facade(language="rust", project_root=project_root)
+        if not coord.supports_kind("rust", "refactor.extract.module"):
+            return json.dumps(_capability_not_available_envelope(
+                language="rust", kind="refactor.extract.module",
+            ))
         return self._split_rust(
             file=file, groups=groups,
             project_root=project_root, dry_run=dry_run,
@@ -444,6 +451,10 @@ class ScalpelExtractTool(Tool):
                 ).model_dump_json(indent=2)
         assert range is not None  # type-narrowing for the type-checker
         rng = range
+        # Gate: skip when the responsible server does not advertise this
+        # extract kind (spec § 4.5 P4).
+        if not coord.supports_kind(lang, kind):
+            return json.dumps(_capability_not_available_envelope(language=lang, kind=kind))
         t0 = time.monotonic()
         actions = _run_async(coord.merge_code_actions(
             file=file,
@@ -563,6 +574,10 @@ class ScalpelInlineTool(Tool):
                 recoverable=False,
             ).model_dump_json(indent=2)
         coord = coordinator_for_facade(language=lang, project_root=project_root)
+        # Gate: skip when the responsible server does not advertise this
+        # inline kind (spec § 4.5 P4).
+        if not coord.supports_kind(lang, kind):
+            return json.dumps(_capability_not_available_envelope(language=lang, kind=kind))
         pos = position or {"line": 0, "character": 0}
         rng = {"start": pos, "end": pos}
         t0 = time.monotonic()
@@ -677,6 +692,13 @@ class ScalpelRenameTool(Tool):
                 stage="scalpel_rename",
                 reason=f"Symbol {name_path!r} not found in {file!r}.",
             ).model_dump_json(indent=2)
+        # Gate: skip when the responsible server does not advertise
+        # textDocument/rename (spec § 4.5 P4).
+        rename_server_id = "pylsp-rope" if lang == "python" else "rust-analyzer"
+        if not coord.supports_method(rename_server_id, "textDocument/rename"):
+            return json.dumps(_capability_not_available_envelope(
+                language=lang, kind="textDocument/rename", server_id=rename_server_id,
+            ))
         # v0.2.0-B: permanent integration of the real Stage 1D
         # MultiServerCoordinator.merge_rename signature
         # ``(relative_file_path, line, column, new_name, language)`` returning
@@ -911,6 +933,12 @@ class ScalpelImportsOrganizeTool(Tool):
                 recoverable=False,
             ).model_dump_json(indent=2)
         coord = coordinator_for_facade(language=lang, project_root=project_root)
+        # Gate: skip when the responsible server does not advertise
+        # source.organizeImports (spec § 4.5 P4).
+        if not coord.supports_kind(lang, "source.organizeImports"):
+            return json.dumps(_capability_not_available_envelope(
+                language=lang, kind="source.organizeImports",
+            ))
         t0 = time.monotonic()
         all_actions: list[Any] = []
         for f in files:
@@ -1269,6 +1297,10 @@ class ScalpelTidyStructureTool(Tool):
         t0 = time.monotonic()
         all_actions: list[Any] = []
         for kind in _TIDY_STRUCTURE_KINDS:
+            # Gate: skip individual kinds not advertised by the server
+            # (spec § 4.5 P4 — per-kind gate inside multi-kind loop).
+            if not coord.supports_kind(lang, kind):
+                continue
             actions = _run_async(coord.merge_code_actions(
                 file=file, start=cursor, end=cursor, only=[kind],
             ))
@@ -2140,6 +2172,12 @@ class ScalpelFixLintsTool(Tool):
         if guard is not None:
             return guard.model_dump_json(indent=2)
         coord = coordinator_for_facade(language="python", project_root=project_root)
+        # Gate: skip when ruff/pylsp does not advertise source.fixAll.ruff
+        # (spec § 4.5 P4).
+        if not coord.supports_kind("python", _FIX_LINTS_KIND):
+            return json.dumps(_capability_not_available_envelope(
+                language="python", kind=_FIX_LINTS_KIND,
+            ))
         t0 = time.monotonic()
         actions = _run_async(coord.merge_code_actions(
             file=file,
@@ -2622,6 +2660,12 @@ class ScalpelRenameHeadingTool(Tool):
                 recoverable=False,
             ).model_dump_json(indent=2)
         coord = coordinator_for_facade(language="markdown", project_root=project_root)
+        # Gate: skip when marksman does not advertise textDocument/rename
+        # (spec § 4.5 P4).
+        if not coord.supports_method("marksman", "textDocument/rename"):
+            return json.dumps(_capability_not_available_envelope(
+                language="markdown", kind="textDocument/rename", server_id="marksman",
+            ))
         try:
             rel_path = str(Path(file).relative_to(project_root))
         except ValueError:
