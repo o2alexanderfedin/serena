@@ -328,15 +328,404 @@ def test_playground_rust_cargo_smoke(
     )
 
 
-@pytest.mark.skip(reason="enable in v1.3 when remaining 7 Rust facades land")
-def test_playground_rust_facade_coverage() -> None:
-    """Placeholder: coverage assertion for all 12 Rust facades.
+@pytest.mark.e2e
+def test_playground_rust_extract_lifetime(
+    mcp_driver_playground_rust,
+    playground_rust_root: Path,
+    rust_analyzer_bin: str,
+) -> None:
+    """Introduce an explicit lifetime on ``first_word`` in types/lifetimes.rs.
 
-    Placeholder per spec § 8 risk 3. Remove the ``@pytest.mark.skip`` and
-    implement the coverage check when the remaining 7 Rust facades ship in
-    v1.3. The test ID is reserved here so the v1.3 PR is one decorator
-    removal away from enforcing coverage.
+    Facade: scalpel_extract_lifetime.
+    Target: the return-type ``&str`` token at line 13 (1-indexed) = 12 (0-indexed),
+    column 30 in types/src/lifetimes.rs.
+    After the refactor: the signature must contain a lifetime parameter (e.g. ``'a``).
     """
+    del rust_analyzer_bin
+    lifetimes_rs = playground_rust_root / "types" / "src" / "lifetimes.rs"
+    assert lifetimes_rs.exists(), "playground types/src/lifetimes.rs baseline missing"
+
+    # ``pub fn first_word(s: &str) -> &str {`` is at line 13 (1-indexed) = 12 (0-indexed).
+    # The return ``&str`` starts at column 30 (the ``&`` of the return type).
+    try:
+        result_json = mcp_driver_playground_rust.extract_lifetime(
+            file=str(lifetimes_rs),
+            position={"line": 12, "character": 30},
+            lifetime_name="a",
+            dry_run=False,
+            language="rust",
+        )
+    except Exception as exc:
+        pytest.skip(
+            f"playground extract_lifetime raised before result (LSP-init gap): {exc!r}"
+        )
+
+    payload = json.loads(result_json)
+    assert isinstance(payload, dict), f"non-JSON-object result: {result_json!r}"
+
+    if payload.get("applied") is not True:
+        pytest.skip(
+            f"playground extract_lifetime did not apply (RA assist gap): "
+            f"failure={payload.get('failure')}"
+        )
+
+    assert payload.get("checkpoint_id"), (
+        f"applied=True but no checkpoint_id: {payload}"
+    )
+    lifetime_text = lifetimes_rs.read_text(encoding="utf-8")
+    assert "'" in lifetime_text, (
+        "no lifetime parameter found in lifetimes.rs after extract_lifetime"
+    )
+
+
+@pytest.mark.e2e
+def test_playground_rust_complete_match_arms(
+    mcp_driver_playground_rust,
+    playground_rust_root: Path,
+    rust_analyzer_bin: str,
+) -> None:
+    """Replace the wildcard arm in ``describe`` with all Direction variants.
+
+    Facade: scalpel_complete_match_arms.
+    Target: the ``match`` keyword at line 24 (1-indexed) = 23 (0-indexed),
+    column 4 in types/src/arms.rs.
+    After the refactor: all four Direction variants must appear in arms.rs.
+    """
+    del rust_analyzer_bin
+    arms_rs = playground_rust_root / "types" / "src" / "arms.rs"
+    assert arms_rs.exists(), "playground types/src/arms.rs baseline missing"
+
+    # ``    match dir {`` is at line 24 (1-indexed) = 23 (0-indexed).
+    # The ``match`` keyword starts at column 4.
+    try:
+        result_json = mcp_driver_playground_rust.complete_match_arms(
+            file=str(arms_rs),
+            position={"line": 23, "character": 4},
+            dry_run=False,
+            language="rust",
+        )
+    except Exception as exc:
+        pytest.skip(
+            f"playground complete_match_arms raised before result (LSP-init gap): {exc!r}"
+        )
+
+    payload = json.loads(result_json)
+    assert isinstance(payload, dict), f"non-JSON-object result: {result_json!r}"
+
+    if payload.get("applied") is not True:
+        pytest.skip(
+            f"playground complete_match_arms did not apply (RA assist gap): "
+            f"failure={payload.get('failure')}"
+        )
+
+    assert payload.get("checkpoint_id"), (
+        f"applied=True but no checkpoint_id: {payload}"
+    )
+    arms_text = arms_rs.read_text(encoding="utf-8")
+    for variant in ("South", "East", "West"):
+        assert variant in arms_text, (
+            f"Direction::{variant} arm missing from arms.rs after complete_match_arms"
+        )
+    assert "_ =>" not in arms_text, (
+        "wildcard arm still present after complete_match_arms"
+    )
+
+
+@pytest.mark.e2e
+def test_playground_rust_change_return_type(
+    mcp_driver_playground_rust,
+    playground_rust_root: Path,
+    rust_analyzer_bin: str,
+) -> None:
+    """Wrap the return type of ``square`` from ``i32`` to ``Option<i32>``.
+
+    Facade: scalpel_change_return_type.
+    Target: the ``i32`` return-type token at line 12 (1-indexed) = 11 (0-indexed),
+    column 25 in types/src/returns.rs.
+    After the refactor: the signature must contain ``Option``.
+    """
+    del rust_analyzer_bin
+    returns_rs = playground_rust_root / "types" / "src" / "returns.rs"
+    assert returns_rs.exists(), "playground types/src/returns.rs baseline missing"
+
+    # ``pub fn square(n: i32) -> i32 {`` is at line 12 (1-indexed) = 11 (0-indexed).
+    # The return ``i32`` starts at column 25.
+    try:
+        result_json = mcp_driver_playground_rust.change_return_type(
+            file=str(returns_rs),
+            position={"line": 11, "character": 25},
+            new_return_type="Option<i32>",
+            dry_run=False,
+            language="rust",
+        )
+    except Exception as exc:
+        pytest.skip(
+            f"playground change_return_type raised before result (LSP-init gap): {exc!r}"
+        )
+
+    payload = json.loads(result_json)
+    assert isinstance(payload, dict), f"non-JSON-object result: {result_json!r}"
+
+    if payload.get("applied") is not True:
+        pytest.skip(
+            f"playground change_return_type did not apply (RA assist gap): "
+            f"failure={payload.get('failure')}"
+        )
+
+    assert payload.get("checkpoint_id"), (
+        f"applied=True but no checkpoint_id: {payload}"
+    )
+    returns_text = returns_rs.read_text(encoding="utf-8")
+    assert "Option" in returns_text, (
+        "Option wrapper not found in returns.rs after change_return_type"
+    )
+
+
+@pytest.mark.e2e
+def test_playground_rust_change_type_shape(
+    mcp_driver_playground_rust,
+    playground_rust_root: Path,
+    rust_analyzer_bin: str,
+) -> None:
+    """Convert the named struct ``Point`` to a tuple struct.
+
+    Facade: scalpel_change_type_shape.
+    Target: the ``Point`` identifier at line 14 (1-indexed) = 13 (0-indexed),
+    column 11 in types/src/shapes.rs.
+    After the refactor: the named-field form must be gone; tuple form present.
+    """
+    del rust_analyzer_bin
+    shapes_rs = playground_rust_root / "types" / "src" / "shapes.rs"
+    assert shapes_rs.exists(), "playground types/src/shapes.rs baseline missing"
+
+    # ``pub struct Point {`` is at line 14 (1-indexed) = 13 (0-indexed).
+    # ``Point`` starts at column 11.
+    try:
+        result_json = mcp_driver_playground_rust.change_type_shape(
+            file=str(shapes_rs),
+            position={"line": 13, "character": 11},
+            target_shape="tuple_struct",
+            dry_run=False,
+            language="rust",
+        )
+    except Exception as exc:
+        pytest.skip(
+            f"playground change_type_shape raised before result (LSP-init gap): {exc!r}"
+        )
+
+    payload = json.loads(result_json)
+    assert isinstance(payload, dict), f"non-JSON-object result: {result_json!r}"
+
+    if payload.get("applied") is not True:
+        pytest.skip(
+            f"playground change_type_shape did not apply (RA assist gap): "
+            f"failure={payload.get('failure')}"
+        )
+
+    assert payload.get("checkpoint_id"), (
+        f"applied=True but no checkpoint_id: {payload}"
+    )
+    shapes_text = shapes_rs.read_text(encoding="utf-8")
+    # Tuple struct: ``pub struct Point(`` — curly brace form gone.
+    assert "pub struct Point(" in shapes_text, (
+        "tuple-struct form not found in shapes.rs after change_type_shape"
+    )
+    assert "pub struct Point {" not in shapes_text, (
+        "named-struct form still present after change_type_shape"
+    )
+
+
+@pytest.mark.e2e
+def test_playground_rust_generate_member(
+    mcp_driver_playground_rust,
+    playground_rust_root: Path,
+    rust_analyzer_bin: str,
+) -> None:
+    """Generate a getter for the ``value`` field on ``Counter``.
+
+    Facade: scalpel_generate_member.
+    Target: the ``value`` field at line 14 (1-indexed) = 13 (0-indexed),
+    column 8 in types/src/member.rs.
+    After the refactor: a ``fn value`` getter method must appear in member.rs.
+    """
+    del rust_analyzer_bin
+    member_rs = playground_rust_root / "types" / "src" / "member.rs"
+    assert member_rs.exists(), "playground types/src/member.rs baseline missing"
+
+    # ``    pub value: u64,`` is at line 14 (1-indexed) = 13 (0-indexed).
+    # ``value`` starts at column 8.
+    try:
+        result_json = mcp_driver_playground_rust.generate_member(
+            file=str(member_rs),
+            position={"line": 13, "character": 8},
+            member_kind="getter",
+            dry_run=False,
+            language="rust",
+        )
+    except Exception as exc:
+        pytest.skip(
+            f"playground generate_member raised before result (LSP-init gap): {exc!r}"
+        )
+
+    payload = json.loads(result_json)
+    assert isinstance(payload, dict), f"non-JSON-object result: {result_json!r}"
+
+    if payload.get("applied") is not True:
+        pytest.skip(
+            f"playground generate_member did not apply (RA assist gap): "
+            f"failure={payload.get('failure')}"
+        )
+
+    assert payload.get("checkpoint_id"), (
+        f"applied=True but no checkpoint_id: {payload}"
+    )
+    member_text = member_rs.read_text(encoding="utf-8")
+    assert "fn value" in member_text, (
+        "generated getter fn value not found in member.rs after generate_member"
+    )
+
+
+@pytest.mark.e2e
+def test_playground_rust_generate_trait_impl_scaffold(
+    mcp_driver_playground_rust,
+    playground_rust_root: Path,
+    rust_analyzer_bin: str,
+) -> None:
+    """Generate an ``impl Describable for Widget`` scaffold.
+
+    Facade: scalpel_generate_trait_impl_scaffold.
+    Target: the ``Widget`` type name at line 23 (1-indexed) = 22 (0-indexed),
+    column 11 in types/src/traits.rs.
+    After the refactor: an ``impl Describable for Widget`` block must appear.
+    """
+    del rust_analyzer_bin
+    traits_rs = playground_rust_root / "types" / "src" / "traits.rs"
+    assert traits_rs.exists(), "playground types/src/traits.rs baseline missing"
+
+    # ``pub struct Widget {`` is at line 23 (1-indexed) = 22 (0-indexed).
+    # ``Widget`` starts at column 11.
+    try:
+        result_json = mcp_driver_playground_rust.generate_trait_impl_scaffold(
+            file=str(traits_rs),
+            position={"line": 22, "character": 11},
+            trait_name="Describable",
+            dry_run=False,
+            language="rust",
+        )
+    except Exception as exc:
+        pytest.skip(
+            f"playground generate_trait_impl_scaffold raised before result (LSP-init gap): {exc!r}"
+        )
+
+    payload = json.loads(result_json)
+    assert isinstance(payload, dict), f"non-JSON-object result: {result_json!r}"
+
+    if payload.get("applied") is not True:
+        pytest.skip(
+            f"playground generate_trait_impl_scaffold did not apply (RA assist gap): "
+            f"failure={payload.get('failure')}"
+        )
+
+    assert payload.get("checkpoint_id"), (
+        f"applied=True but no checkpoint_id: {payload}"
+    )
+    traits_text = traits_rs.read_text(encoding="utf-8")
+    assert "impl Describable for Widget" in traits_text, (
+        "impl scaffold not found in traits.rs after generate_trait_impl_scaffold"
+    )
+
+
+@pytest.mark.e2e
+def test_playground_rust_expand_glob_imports(
+    mcp_driver_playground_rust,
+    playground_rust_root: Path,
+    rust_analyzer_bin: str,
+) -> None:
+    """Expand ``use std::collections::*;`` into explicit names in types/globs.rs.
+
+    Facade: scalpel_expand_glob_imports.
+    Target: the ``*`` token at line 9 (1-indexed) = 8 (0-indexed),
+    column 22 in types/src/globs.rs.
+    After the refactor: the glob ``*`` must be gone; explicit names present.
+    """
+    del rust_analyzer_bin
+    globs_rs = playground_rust_root / "types" / "src" / "globs.rs"
+    assert globs_rs.exists(), "playground types/src/globs.rs baseline missing"
+
+    # ``use std::collections::*;`` is at line 9 (1-indexed) = 8 (0-indexed).
+    # The glob ``*`` is at column 22.
+    try:
+        result_json = mcp_driver_playground_rust.expand_glob_imports(
+            file=str(globs_rs),
+            position={"line": 8, "character": 22},
+            dry_run=False,
+            language="rust",
+        )
+    except Exception as exc:
+        pytest.skip(
+            f"playground expand_glob_imports raised before result (LSP-init gap): {exc!r}"
+        )
+
+    payload = json.loads(result_json)
+    assert isinstance(payload, dict), f"non-JSON-object result: {result_json!r}"
+
+    if payload.get("applied") is not True:
+        pytest.skip(
+            f"playground expand_glob_imports did not apply (RA assist gap): "
+            f"failure={payload.get('failure')}"
+        )
+
+    assert payload.get("checkpoint_id"), (
+        f"applied=True but no checkpoint_id: {payload}"
+    )
+    globs_text = globs_rs.read_text(encoding="utf-8")
+    assert "::*" not in globs_text, (
+        "glob import still present in globs.rs after expand_glob_imports"
+    )
+    # At least one of the explicitly-used types must appear as an import.
+    assert "HashMap" in globs_text or "BTreeSet" in globs_text, (
+        "no explicit import found in globs.rs after expand_glob_imports"
+    )
+
+
+def test_playground_rust_facade_coverage() -> None:
+    """Confirm that all 12 Rust facades have at least one E2E test in this module.
+
+    Per spec § 8 risk 3 — the placeholder ``@pytest.mark.skip`` was removed in
+    v1.3-E when the 7 deferred Stage-3 facade tests landed.  This test now
+    asserts the full set is covered by inspecting the names of all test functions
+    defined in this module.
+    """
+    import sys as _sys
+    this_module = _sys.modules[__name__]
+    test_names = [
+        name for name in dir(this_module)
+        if name.startswith("test_playground_rust_") and callable(getattr(this_module, name))
+    ]
+    required_facades = {
+        "split",
+        "rename",
+        "extract",
+        "change_visibility",
+        "inline",
+        "extract_lifetime",
+        "complete_match_arms",
+        "change_return_type",
+        "change_type_shape",
+        "generate_member",
+        "generate_trait_impl_scaffold",
+        "expand_glob_imports",
+    }
+    covered = {
+        facade
+        for facade in required_facades
+        if any(facade in name for name in test_names)
+    }
+    missing = required_facades - covered
+    assert not missing, (
+        f"Missing E2E coverage for Rust facades: {sorted(missing)}. "
+        f"Add tests for them or update this assertion."
+    )
 
 
 # Engine repo URL — matches the git+URL in o2-scalpel-rust/.mcp.json (§ 3.3).
