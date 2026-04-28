@@ -22,9 +22,11 @@ the gate so subclasses cannot accidentally regress it.
 """
 
 from serena.installer.installer import InstalledStatus, InstallResult, LspInstaller
+from serena.installer.marksman_installer import MarksmanInstaller
 
 __all__ = [
     "InstallResult",
     "InstalledStatus",
     "LspInstaller",
+    "MarksmanInstaller",
 ]
