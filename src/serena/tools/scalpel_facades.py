@@ -8,6 +8,7 @@ Each Tool subclass composes Stage 1G primitives (catalog -> coordinator
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -996,6 +997,29 @@ def _build_failure_step(
     )
 
 
+def _capability_not_available_envelope(
+    *,
+    language: str,
+    kind: str,
+    server_id: str | None = None,
+) -> dict[str, object]:
+    """Return a CAPABILITY_NOT_AVAILABLE skip envelope (spec § 4.7).
+
+    Used by the two shared dispatchers (and downstream by bespoke facades)
+    to report that the responsible LSP server does not advertise the
+    requested code-action *kind*.  The shape mirrors the existing
+    ``{status: "skipped", reason: "lsp_does_not_support_implementation"}``
+    convention from ``reference_lsp_capability_gaps.md``.
+    """
+    return {
+        "status": "skipped",
+        "reason": f"lsp_does_not_support_{kind}",
+        "server_id": server_id,
+        "language": language,
+        "kind": kind,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Stage 3 (v0.2.0) — Rust ergonomic facades wave A
 # ---------------------------------------------------------------------------
@@ -1028,6 +1052,8 @@ def _dispatch_single_kind_facade(
             recoverable=False,
         ).model_dump_json(indent=2)
     coord = coordinator_for_facade(language=lang, project_root=project_root)
+    if not coord.supports_kind(lang, kind):
+        return json.dumps(_capability_not_available_envelope(language=lang, kind=kind))
     t0 = time.monotonic()
     actions = _run_async(coord.merge_code_actions(
         file=file,
@@ -1777,6 +1803,8 @@ def _python_dispatch_single_kind(
     but pins ``language='python'`` and labels lsp_ops by the rope/ruff/pyright
     server. Used by Wave A (rope) and Wave B (ruff / basedpyright)."""
     coord = coordinator_for_facade(language="python", project_root=project_root)
+    if not coord.supports_kind("python", kind):
+        return json.dumps(_capability_not_available_envelope(language="python", kind=kind))
     t0 = time.monotonic()
     actions = _run_async(coord.merge_code_actions(
         file=file, start=position, end=position, only=[kind],
