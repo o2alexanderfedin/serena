@@ -279,6 +279,77 @@ _LANGUAGE_METADATA: dict[str, _StrategyView] = {
             ),
         ),
     ),
+    "cpp": _StrategyView(
+        # Stream 6 / Leaf C: clangd drives the LSP over stdio.
+        # clangd is the canonical C/C++ language server from the LLVM project
+        # (https://clangd.llvm.org). Installed via llvm formula on macOS
+        # (``brew install llvm``) or snap on Linux
+        # (``snap install clangd --classic``).
+        # A single unified language_id="cpp" covers both C and C++ sources —
+        # clangd auto-detects C vs. C++ mode from the file extension and
+        # compile_commands.json database.
+        language="cpp",
+        display_name="C/C++",
+        file_extensions=(
+            ".c", ".cc", ".cpp", ".cxx", ".c++",
+            ".h", ".hh", ".hpp", ".hxx", ".h++",
+            ".ipp", ".inl", ".tpp",
+        ),
+        lsp_server_cmd=("clangd",),
+        facades=(
+            _Facade(
+                name="split_file",
+                summary="Split a C/C++ file along symbol boundaries",
+                trigger_phrases=("split this file", "extract symbols"),
+                primitive_chain=(
+                    "textDocument/codeAction",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="extract",
+                summary="Extract selection into a function",
+                trigger_phrases=("extract this", "extract function"),
+                primitive_chain=(
+                    "textDocument/codeAction[refactor.extract]",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="inline",
+                summary="Inline a function at all call sites",
+                trigger_phrases=("inline this", "inline function"),
+                primitive_chain=(
+                    "textDocument/codeAction[refactor.inline]",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="rename",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="organize_includes",
+                summary="Sort and deduplicate #include directives",
+                trigger_phrases=("organize includes", "sort includes", "clean includes"),
+                primitive_chain=(
+                    "textDocument/codeAction[source.organizeImports]",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply all auto-fixable diagnostics (source.fixAll.clangd)",
+                trigger_phrases=("fix all", "fix lints", "auto fix"),
+                primitive_chain=(
+                    "textDocument/codeAction[source.fixAll.clangd]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
 }
 
 
