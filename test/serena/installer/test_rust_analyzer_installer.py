@@ -1,7 +1,7 @@
 """v1.2 Leaf A — :class:`RustAnalyzerInstaller` tests.
 
 Mirrors the marksman test layout: detection (real binary + monkeypatched
-absent path), install_command shape, and the inherited safety gate
+absent path), _install_command shape, and the inherited safety gate
 (``allow_install=False`` MUST NOT touch :func:`subprocess.run`).
 """
 
@@ -72,12 +72,12 @@ def test_detect_installed_returns_no_version_when_probe_fails(
 
 
 # -----------------------------------------------------------------------------
-# install_command — cross-platform (no platform branching)
+# _install_command — cross-platform (no platform branching)
 # -----------------------------------------------------------------------------
 
 
 def test_install_command_returns_rustup_argv() -> None:
-    cmd = RustAnalyzerInstaller().install_command()
+    cmd = RustAnalyzerInstaller()._install_command()  # pyright: ignore[reportPrivateUsage]
     assert cmd == ("rustup", "component", "add", "rust-analyzer")
 
 
@@ -146,7 +146,7 @@ def test_install_with_allow_install_true_invokes_subprocess(
 def test_update_with_allow_update_true_invokes_subprocess(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """update() re-runs install_command; same safety contract as install()."""
+    """update() re-runs _install_command; same safety contract as install()."""
     import serena.installer.installer as installer_mod
 
     monkeypatch.setattr(installer_mod.shutil, "which", lambda name: f"/x/{name}")

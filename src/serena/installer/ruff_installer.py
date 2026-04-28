@@ -69,7 +69,7 @@ class RuffInstaller(LspInstaller):
             return None
         return _extract_pipx_package_version(completed.stdout, "ruff")
 
-    def install_command(self) -> tuple[str, ...]:
+    def _install_command(self) -> tuple[str, ...]:
         """Return ``pipx install ruff``.
 
         Cross-platform: pipx is the recommended Python user-binary

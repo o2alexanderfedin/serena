@@ -2,7 +2,7 @@
 
 The ABC is deliberately tiny: subclasses declare two ``ClassVar``
 attributes (``language``, ``binary_name``) and implement three pure
-methods (``detect_installed``, ``latest_available``, ``install_command``).
+methods (``detect_installed``, ``latest_available``, ``_install_command``).
 The system-mutating ``install`` / ``update`` are implemented on the
 base class itself and are gated behind ``allow_install=True`` /
 ``allow_update=True`` so subclasses cannot accidentally bypass the
@@ -88,7 +88,7 @@ class LspInstaller(ABC):
 
     Subclasses MUST set :attr:`language` and :attr:`binary_name` as
     class attributes and implement :meth:`detect_installed`,
-    :meth:`latest_available`, and :meth:`install_command`.
+    :meth:`latest_available`, and :meth:`_install_command`.
 
     :meth:`install` and :meth:`update` are concrete and MUST NOT be
     overridden by subclasses — they are the safety gate that prevents
@@ -120,7 +120,7 @@ class LspInstaller(ABC):
         """
 
     @abstractmethod
-    def install_command(self) -> tuple[str, ...]:
+    def _install_command(self) -> tuple[str, ...]:
         """Return the argv tuple that would install (or re-install)
         the binary on this host.
 
@@ -143,7 +143,7 @@ class LspInstaller(ABC):
         Pass ``allow_install=True`` to actually run the install command.
         Caller is responsible for surfacing user approval first.
         """
-        return self._invoke(allow=allow_install, command=self.install_command())
+        return self._invoke(allow=allow_install, command=self._install_command())
 
     def update(self, *, allow_update: bool = False) -> InstallResult:
         """Re-run the install command to pick up the latest version.
@@ -153,11 +153,11 @@ class LspInstaller(ABC):
         Most package managers (brew, pipx, cargo, npm) treat
         re-running ``install`` as upgrade-if-newer. Subclasses that
         need a different argv (e.g. ``brew upgrade``) override
-        :meth:`install_command` or override this method entirely — but
+        :meth:`_install_command` or override this method entirely — but
         whenever they override this method they MUST preserve the
         ``allow_update`` gate.
         """
-        return self._invoke(allow=allow_update, command=self.install_command())
+        return self._invoke(allow=allow_update, command=self._install_command())
 
     # ------------------------------------------------------------------
     # Internals — kept private so subclasses can't accidentally bypass

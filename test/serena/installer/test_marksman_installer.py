@@ -53,7 +53,7 @@ def test_detect_installed_returns_absent_when_binary_missing(
 
 
 # -----------------------------------------------------------------------------
-# install_command — per-platform branching
+# _install_command — per-platform branching
 # -----------------------------------------------------------------------------
 
 
@@ -61,7 +61,7 @@ def test_install_command_on_macos_uses_brew(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(platform, "system", lambda: "Darwin")
-    cmd = MarksmanInstaller().install_command()
+    cmd = MarksmanInstaller()._install_command()  # pyright: ignore[reportPrivateUsage]
     assert cmd == ("brew", "install", "marksman")
 
 
@@ -69,7 +69,7 @@ def test_install_command_on_linux_uses_snap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(platform, "system", lambda: "Linux")
-    cmd = MarksmanInstaller().install_command()
+    cmd = MarksmanInstaller()._install_command()  # pyright: ignore[reportPrivateUsage]
     assert cmd == ("snap", "install", "marksman")
 
 
@@ -78,7 +78,7 @@ def test_install_command_on_unknown_platform_raises(
 ) -> None:
     monkeypatch.setattr(platform, "system", lambda: "Plan9")
     with pytest.raises(NotImplementedError):
-        MarksmanInstaller().install_command()
+        MarksmanInstaller()._install_command()  # pyright: ignore[reportPrivateUsage]
 
 
 # -----------------------------------------------------------------------------
@@ -142,7 +142,7 @@ def test_install_with_allow_install_true_invokes_subprocess(
 def test_update_with_allow_update_true_invokes_subprocess(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """update() re-runs install_command; safety gate identical to install()."""
+    """update() re-runs _install_command; safety gate identical to install()."""
     monkeypatch.setattr(platform, "system", lambda: "Darwin")
     import serena.installer.installer as installer_mod
 

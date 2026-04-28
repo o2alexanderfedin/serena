@@ -64,12 +64,12 @@ def test_detect_installed_returns_no_version_when_probe_fails(
 
 
 # -----------------------------------------------------------------------------
-# install_command
+# _install_command
 # -----------------------------------------------------------------------------
 
 
 def test_install_command_returns_pipx_argv() -> None:
-    cmd = BasedpyrightInstaller().install_command()
+    cmd = BasedpyrightInstaller()._install_command()  # pyright: ignore[reportPrivateUsage]
     assert cmd == ("pipx", "install", "basedpyright")
 
 

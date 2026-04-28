@@ -64,12 +64,12 @@ def test_detect_installed_returns_no_version_when_probe_fails(
 
 
 # -----------------------------------------------------------------------------
-# install_command
+# _install_command
 # -----------------------------------------------------------------------------
 
 
 def test_install_command_returns_rustup_argv() -> None:
-    cmd = ClippyInstaller().install_command()
+    cmd = ClippyInstaller()._install_command()  # pyright: ignore[reportPrivateUsage]
     assert cmd == ("rustup", "component", "add", "clippy")
 
 
