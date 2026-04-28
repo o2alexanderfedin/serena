@@ -40,6 +40,7 @@ from .python_strategy import (
 )
 from .rust_strategy import RustStrategy
 from .transactions import TransactionStore
+from .golang_strategy import GolangStrategy
 from .typescript_strategy import TypescriptStrategy
 
 
@@ -52,6 +53,7 @@ def _build_strategy_registry() -> dict:
         Language.RUST: RustStrategy,
         Language.MARKDOWN: MarkdownStrategy,
         Language.TYPESCRIPT: TypescriptStrategy,
+        Language.GO: GolangStrategy,
     }
 
 
@@ -86,6 +88,7 @@ __all__ = [
     "ServerTimeoutWarning",
     "SuppressedAlternative",
     "TransactionStore",
+    "GolangStrategy",
     "TypescriptStrategy",
     "WaitingForLspBudget",
     "build_capability_catalog",
