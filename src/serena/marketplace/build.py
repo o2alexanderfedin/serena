@@ -181,7 +181,7 @@ def write_manifest(repo_root: Path, manifest: MarketplaceManifest) -> Path:
     return out
 
 
-def _resolve_engine_sha() -> str:
+def resolve_engine_sha() -> str:
     """Resolve the engine submodule's HEAD SHA, with a safe fallback.
 
     The submodule lives at ``vendor/serena`` from the parent root; this
@@ -248,7 +248,7 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     args = parser.parse_args(argv)
-    sha = args.generator_sha if args.generator_sha is not None else _resolve_engine_sha()
+    sha = args.generator_sha if args.generator_sha is not None else resolve_engine_sha()
     manifest = build_manifest(args.root, generator_sha=sha)
     if args.write:
         write_manifest(args.root, manifest)
@@ -266,5 +266,6 @@ __all__ = [
     "build_manifest",
     "main",
     "render_manifest_json",
+    "resolve_engine_sha",
     "write_manifest",
 ]

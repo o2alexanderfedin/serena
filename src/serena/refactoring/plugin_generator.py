@@ -34,6 +34,7 @@ from pathlib import Path
 from string import Template
 from typing import Protocol
 
+from serena.marketplace.build import resolve_engine_sha
 from serena.refactoring.plugin_schemas import (
     AuthorInfo,
     PluginManifest,
@@ -195,13 +196,22 @@ def _render_skill_for_facade(
 
 
 def _render_readme(strategy: _StrategyWithFacades) -> str:
-    """Render the per-plugin ``README.md``."""
+    """Render the per-plugin ``README.md``.
+
+    The rendered document is prefixed with a two-line HTML comment banner
+    that carries the current engine SHA, matching the provenance stamp baked
+    into ``marketplace.json`` by :func:`serena.marketplace.build._generator_banner`.
+    The SHA is resolved via :func:`serena.marketplace.build.resolve_engine_sha`
+    so both surfaces stay in sync without caller-side coordination.
+    """
 
     rows = ["| Facade | Summary |", "|---|---|"]
     for facade in strategy.facades:
         rows.append(f"| `scalpel_{facade.name}` | {facade.summary} |")
     table = "\n".join(rows)
+    sha = resolve_engine_sha()[:12]
     return _README_TMPL.substitute(
+        generator_sha=sha,
         plugin_name=_plugin_name(strategy),
         description=_description(strategy),
         lsp_cmd=strategy.lsp_server_cmd[0],
