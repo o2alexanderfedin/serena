@@ -88,5 +88,9 @@ def test_factory_python_source_server_is_one_of_python_servers() -> None:
             assert rec.source_server in legal_python_servers
         elif rec.language == "rust":
             assert rec.source_server == "rust-analyzer"
+        elif rec.language == "typescript":
+            assert rec.source_server == "vtsls"
+        elif rec.language == "markdown":
+            pass  # marksman has no code-action kinds; catalog has 0 rows for it
         else:
             pytest.fail(f"unexpected language: {rec.language}")

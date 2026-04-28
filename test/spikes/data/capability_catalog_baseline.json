@@ -149,6 +149,240 @@
       "params_schema": {},
       "preferred_facade": null,
       "source_server": "rust-analyzer"
+    },
+    {
+      "extension_allow_list": [
+        ".cjs",
+        ".cts",
+        ".js",
+        ".jsx",
+        ".mjs",
+        ".mts",
+        ".ts",
+        ".tsx"
+      ],
+      "id": "typescript.quickfix",
+      "kind": "quickfix",
+      "language": "typescript",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "vtsls"
+    },
+    {
+      "extension_allow_list": [
+        ".cjs",
+        ".cts",
+        ".js",
+        ".jsx",
+        ".mjs",
+        ".mts",
+        ".ts",
+        ".tsx"
+      ],
+      "id": "typescript.refactor",
+      "kind": "refactor",
+      "language": "typescript",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "vtsls"
+    },
+    {
+      "extension_allow_list": [
+        ".cjs",
+        ".cts",
+        ".js",
+        ".jsx",
+        ".mjs",
+        ".mts",
+        ".ts",
+        ".tsx"
+      ],
+      "id": "typescript.refactor.extract",
+      "kind": "refactor.extract",
+      "language": "typescript",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "vtsls"
+    },
+    {
+      "extension_allow_list": [
+        ".cjs",
+        ".cts",
+        ".js",
+        ".jsx",
+        ".mjs",
+        ".mts",
+        ".ts",
+        ".tsx"
+      ],
+      "id": "typescript.refactor.extract.constant",
+      "kind": "refactor.extract.constant",
+      "language": "typescript",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "vtsls"
+    },
+    {
+      "extension_allow_list": [
+        ".cjs",
+        ".cts",
+        ".js",
+        ".jsx",
+        ".mjs",
+        ".mts",
+        ".ts",
+        ".tsx"
+      ],
+      "id": "typescript.refactor.extract.function",
+      "kind": "refactor.extract.function",
+      "language": "typescript",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "vtsls"
+    },
+    {
+      "extension_allow_list": [
+        ".cjs",
+        ".cts",
+        ".js",
+        ".jsx",
+        ".mjs",
+        ".mts",
+        ".ts",
+        ".tsx"
+      ],
+      "id": "typescript.refactor.extract.type",
+      "kind": "refactor.extract.type",
+      "language": "typescript",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "vtsls"
+    },
+    {
+      "extension_allow_list": [
+        ".cjs",
+        ".cts",
+        ".js",
+        ".jsx",
+        ".mjs",
+        ".mts",
+        ".ts",
+        ".tsx"
+      ],
+      "id": "typescript.refactor.extract.variable",
+      "kind": "refactor.extract.variable",
+      "language": "typescript",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "vtsls"
+    },
+    {
+      "extension_allow_list": [
+        ".cjs",
+        ".cts",
+        ".js",
+        ".jsx",
+        ".mjs",
+        ".mts",
+        ".ts",
+        ".tsx"
+      ],
+      "id": "typescript.refactor.inline",
+      "kind": "refactor.inline",
+      "language": "typescript",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "vtsls"
+    },
+    {
+      "extension_allow_list": [
+        ".cjs",
+        ".cts",
+        ".js",
+        ".jsx",
+        ".mjs",
+        ".mts",
+        ".ts",
+        ".tsx"
+      ],
+      "id": "typescript.refactor.inline.variable",
+      "kind": "refactor.inline.variable",
+      "language": "typescript",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "vtsls"
+    },
+    {
+      "extension_allow_list": [
+        ".cjs",
+        ".cts",
+        ".js",
+        ".jsx",
+        ".mjs",
+        ".mts",
+        ".ts",
+        ".tsx"
+      ],
+      "id": "typescript.refactor.move",
+      "kind": "refactor.move",
+      "language": "typescript",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "vtsls"
+    },
+    {
+      "extension_allow_list": [
+        ".cjs",
+        ".cts",
+        ".js",
+        ".jsx",
+        ".mjs",
+        ".mts",
+        ".ts",
+        ".tsx"
+      ],
+      "id": "typescript.refactor.rewrite",
+      "kind": "refactor.rewrite",
+      "language": "typescript",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "vtsls"
+    },
+    {
+      "extension_allow_list": [
+        ".cjs",
+        ".cts",
+        ".js",
+        ".jsx",
+        ".mjs",
+        ".mts",
+        ".ts",
+        ".tsx"
+      ],
+      "id": "typescript.source.fixAll",
+      "kind": "source.fixAll",
+      "language": "typescript",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "vtsls"
+    },
+    {
+      "extension_allow_list": [
+        ".cjs",
+        ".cts",
+        ".js",
+        ".jsx",
+        ".mjs",
+        ".mts",
+        ".ts",
+        ".tsx"
+      ],
+      "id": "typescript.source.organizeImports",
+      "kind": "source.organizeImports",
+      "language": "typescript",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "vtsls"
     }
   ],
   "schema_version": 1
