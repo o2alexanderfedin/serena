@@ -1,6 +1,6 @@
 """Stage 1J plugin generator — emits ``o2-scalpel-<lang>/`` Claude Code plugin trees.
 
-The generator composes six small ``_render_*`` helpers, each backed by a
+The generator composes five small ``_render_*`` helpers, each backed by a
 pydantic v2 schema and (where applicable) a ``string.Template`` source under
 ``./templates/``, into a deterministic byte-identical filesystem write rooted
 at ``out_parent / o2-scalpel-<language>/``.
@@ -10,10 +10,15 @@ Public surface:
 * :class:`PluginGenerator` — composition root.
 * ``_render_plugin_json(strategy)``
 * ``_render_mcp_json(strategy)``
-* ``_render_marketplace_json(strategies)``
 * ``_render_skill_for_facade(strategy, facade)``
 * ``_render_readme(strategy)``
 * ``_render_session_start_hook(strategy)``
+
+The top-level ``marketplace.json`` aggregator is rendered by
+:mod:`serena.marketplace.build`, which walks the per-plugin ``plugin.json``
+files written by this generator. v1.2 reconciliation removed the legacy
+``_render_marketplace_json`` helper that had duplicated that role; the
+single source of truth is now the marketplace package.
 
 All emitted JSON uses ``sort_keys=True, indent=2, ensure_ascii=False`` and
 ends in a trailing newline (POSIX). All shell scripts are POSIX ``sh``.
@@ -31,10 +36,6 @@ from typing import Protocol
 
 from serena.refactoring.plugin_schemas import (
     AuthorInfo,
-    MarketplaceManifest,
-    MarketplaceMetadata,
-    OwnerInfo,
-    PluginEntry,
     PluginManifest,
 )
 
@@ -101,6 +102,27 @@ def _description(strategy: _StrategyLike) -> str:
     return f"Scalpel refactor MCP server for {strategy.display_name} via {cmd}"
 
 
+# Tag suffix added to every scalpel plugin. Kept module-level so the order is
+# trivially auditable. The full per-plugin tag list is built by prefixing
+# the language id and lsp-cmd, then concatenating these.
+_COMMON_TAGS: tuple[str, ...] = ("lsp", "refactor", "mcp", "scalpel")
+
+
+def _tags_for(strategy: _StrategyLike) -> tuple[str, ...]:
+    """Compose the per-plugin marketplace-UI tag list.
+
+    Tags are ordered by significance: ``[language, lsp_cmd, *_COMMON_TAGS]``
+    with the lsp_cmd dropped if it is identical to the language id (e.g. the
+    Python plugin's ``pylsp`` would still appear since ``pylsp != python``;
+    only matches like a hypothetical ``markdown`` lsp_cmd would be elided).
+    """
+
+    language = strategy.language
+    lsp_cmd = strategy.lsp_server_cmd[0]
+    head: tuple[str, ...] = (language,) if lsp_cmd == language else (language, lsp_cmd)
+    return head + _COMMON_TAGS
+
+
 def _render_plugin_json(strategy: _StrategyLike) -> str:
     """Render the boostvolt-shape ``.claude-plugin/plugin.json``."""
 
@@ -112,6 +134,8 @@ def _render_plugin_json(strategy: _StrategyLike) -> str:
         license=_LICENSE,
         repository=_REPO,
         homepage=_REPO,
+        category="development",
+        tags=_tags_for(strategy),
     )
     payload = manifest.model_dump(mode="json", by_alias=True)
     return json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
@@ -135,32 +159,6 @@ def _render_mcp_json(strategy: _StrategyLike) -> str:
             }
         }
     }
-    return json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
-
-
-def _render_marketplace_json(strategies: list[_StrategyLike]) -> str:
-    """Render the top-level ``marketplace.json`` aggregator.
-
-    Plugin entries are sorted by ``language`` so the output is byte-identical
-    regardless of input order — caller can pass strategies in any sequence.
-    """
-
-    sorted_strats = sorted(strategies, key=lambda s: s.language)
-    entries = [
-        PluginEntry(
-            name=_plugin_name(s),
-            source=f"./{_plugin_name(s)}",
-            description=_description(s),
-        )
-        for s in sorted_strats
-    ]
-    manifest = MarketplaceManifest(
-        name="o2-scalpel",
-        metadata=MarketplaceMetadata(),
-        owner=OwnerInfo(name=_AUTHOR),
-        plugins=entries,
-    )
-    payload = manifest.model_dump(mode="json", by_alias=True)
     return json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
 
 
@@ -293,7 +291,6 @@ class PluginGenerator:
 __all__ = [
     "PluginGenerator",
     "PluginManifest",  # re-export for callers
-    "_render_marketplace_json",
     "_render_mcp_json",
     "_render_plugin_json",
     "_render_readme",

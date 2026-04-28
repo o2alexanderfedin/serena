@@ -1,12 +1,23 @@
-"""Pydantic v2 schemas for Stage 1J generated artefacts.
+"""Pydantic v2 schemas for Stage 1J generated per-plugin artefacts.
 
-Three boundary models gate every Stage 1J render:
+Two boundary models gate every Stage 1J render of a single plugin tree:
 
 * :class:`PluginManifest` — boostvolt-shape ``plugin.json`` consumed
-  by Claude Code marketplaces.
+  by Claude Code marketplaces; emitted into ``.claude-plugin/``.
 * :class:`SkillFrontmatter` — YAML head of each ``skills/*.md``.
-* :class:`MarketplaceManifest` — top-level ``marketplace.json`` aggregating
-  all language plugins for the o2-scalpel marketplace.
+
+The supporting :class:`AuthorInfo` and :class:`OwnerInfo` payloads are
+shared by the per-plugin manifest and the parent-root marketplace
+manifest (which lives at :mod:`serena.marketplace.schema`).
+
+v1.2 reconciliation moved the top-level ``marketplace.json`` shape
+(previously also modelled here as ``MarketplaceManifest`` /
+``PluginEntry`` / ``MarketplaceMetadata``) out to
+:mod:`serena.marketplace.schema`, the single source of truth. The
+legacy classes were removed because keeping a parallel shape here
+violates DRY — the marketplace builder reads per-plugin ``plugin.json``
+files (this module) and renders the unified ``marketplace.json``
+(the marketplace package).
 
 All models are frozen with ``extra="forbid"`` so any drift in the
 generator surfaces immediately as a validation error rather than a
@@ -74,7 +85,13 @@ class OwnerInfo(_Strict):
 
 
 class PluginManifest(_Strict):
-    """boostvolt-shape ``plugin.json`` — emitted into ``.claude-plugin/``."""
+    """boostvolt-shape ``plugin.json`` — emitted into ``.claude-plugin/``.
+
+    v1.2 adds ``category`` and ``tags`` so the published ``marketplace.json``
+    can derive its per-plugin marketplace-UI metadata from a single source of
+    truth (the per-plugin ``plugin.json``) instead of carrying a parallel
+    table inside the marketplace builder.
+    """
 
     name: str = Field(min_length=1, pattern=r"^[a-z][a-z0-9\-]*$")
     description: str = Field(min_length=1)
@@ -83,6 +100,25 @@ class PluginManifest(_Strict):
     license: str = Field(min_length=1)
     repository: str
     homepage: str
+    category: str = Field(
+        default="development",
+        min_length=1,
+        description=(
+            "Marketplace-UI category. Defaults to ``development`` for every "
+            "scalpel plugin we ship; keep here so future categories (e.g. "
+            "``testing``, ``ci``) can be opted into per-plugin without "
+            "touching the marketplace builder."
+        ),
+    )
+    tags: tuple[str, ...] = Field(
+        default_factory=tuple,
+        description=(
+            "Free-form marketplace-UI keyword tags. Order-preserving so the "
+            "generator can stable-sort by significance (language first, "
+            "then lsp cmd, then generic ``lsp``/``refactor``/``mcp``/"
+            "``scalpel``)."
+        ),
+    )
 
     @field_validator("version")
     @classmethod
@@ -105,40 +141,9 @@ class SkillFrontmatter(_Strict):
     type: Literal["skill"] = "skill"
 
 
-class PluginEntry(_Strict):
-    """One row in ``marketplace.json#plugins``."""
-
-    name: str = Field(min_length=1)
-    source: str = Field(min_length=1)
-    description: str | None = None
-
-
-class MarketplaceMetadata(_Strict):
-    """Optional ``marketplace.json#metadata`` payload."""
-
-    version: str = "1.0.0"
-    license: str = "MIT"
-
-
-class MarketplaceManifest(_Strict):
-    """Top-level ``marketplace.json`` aggregating all language plugins."""
-
-    schema_url: str = Field(
-        default="https://anthropic.com/claude-code/marketplace.schema.json",
-        alias="$schema",
-    )
-    name: str = Field(min_length=1)
-    metadata: MarketplaceMetadata = Field(default_factory=MarketplaceMetadata)
-    owner: OwnerInfo
-    plugins: list[PluginEntry] = Field(min_length=1)
-
-
 __all__ = [
     "AuthorInfo",
-    "MarketplaceManifest",
-    "MarketplaceMetadata",
     "OwnerInfo",
-    "PluginEntry",
     "PluginManifest",
     "SkillFrontmatter",
 ]
