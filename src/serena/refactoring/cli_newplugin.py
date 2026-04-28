@@ -153,6 +153,69 @@ _LANGUAGE_METADATA: dict[str, _StrategyView] = {
             ),
         ),
     ),
+    "go": _StrategyView(
+        # Stream 6 / Leaf B: gopls ``serve`` drives the LSP over stdio.
+        # gopls is the official Go language server maintained by the Go team
+        # (https://github.com/golang/tools/tree/master/gopls). Installed via
+        # Go toolchain: ``go install golang.org/x/tools/gopls@latest``.
+        language="go",
+        display_name="Go",
+        file_extensions=(".go",),
+        lsp_server_cmd=("gopls", "serve"),
+        facades=(
+            _Facade(
+                name="split_file",
+                summary="Split a Go file along symbol boundaries",
+                trigger_phrases=("split this file", "extract symbols"),
+                primitive_chain=(
+                    "textDocument/codeAction",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="extract",
+                summary="Extract selection into a function or variable",
+                trigger_phrases=("extract this", "extract function", "extract variable"),
+                primitive_chain=(
+                    "textDocument/codeAction[refactor.extract]",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="inline",
+                summary="Inline a function at all call sites",
+                trigger_phrases=("inline this", "inline function"),
+                primitive_chain=(
+                    "textDocument/codeAction[refactor.inline]",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="rename",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="organize_imports",
+                summary="Remove unused imports and sort import order",
+                trigger_phrases=("organize imports", "sort imports", "clean imports"),
+                primitive_chain=(
+                    "textDocument/codeAction[source.organizeImports]",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply all auto-fixable diagnostics (source.fixAll)",
+                trigger_phrases=("fix all", "fix lints", "auto fix"),
+                primitive_chain=(
+                    "textDocument/codeAction[source.fixAll]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
     "typescript": _StrategyView(
         # Stream 6 / Leaf A: vtsls ``--stdio`` drives the LSP over stdio.
         # vtsls wraps VSCode's TypeScript extension bundled language server
