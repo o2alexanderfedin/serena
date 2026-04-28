@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import os
 import pathlib
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 from overrides import override
 
@@ -26,6 +26,8 @@ log = logging.getLogger(__name__)
 
 class RuffServer(SolidLanguageServer):
     """ruff native LSP adapter (push-mode diagnostics)."""
+
+    server_id: ClassVar[str] = "ruff"
 
     def __init__(
         self,
