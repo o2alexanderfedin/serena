@@ -22,7 +22,6 @@ Facade → Driver method mapping (all from ``_McpDriver``):
 from __future__ import annotations
 
 import json
-import shutil
 import subprocess
 from pathlib import Path
 
