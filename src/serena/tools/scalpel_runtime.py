@@ -157,11 +157,31 @@ def _spawn_ruff(key: LspPoolKey) -> Any:
     return _AsyncAdapter(server)
 
 
+def _spawn_marksman(key: LspPoolKey) -> Any:
+    """v1.1.1 Leaf 02 — spawn marksman for ``MarkdownStrategy.build_servers``.
+
+    The strategy is single-LSP (markdown has only one credible LSP at the
+    moment), so the dispatch table key is the bare ``"markdown"`` tag —
+    no ``markdown:marksman`` subtag is needed today. If a second markdown
+    LSP ever joins the strategy, follow the Python pattern and split into
+    ``markdown:marksman`` / ``markdown:<other>`` tags then.
+    """
+    from solidlsp.language_servers.marksman_server import MarksmanLanguageServer
+    server = MarksmanLanguageServer(
+        config=_build_language_server_config("markdown"),
+        repository_root_path=key.project_root,
+        solidlsp_settings=_build_solidlsp_settings(),
+    )
+    server.start()
+    return _AsyncAdapter(server)
+
+
 _SPAWN_DISPATCH_TABLE: dict[str, Callable[[LspPoolKey], Any]] = {
     "rust": _spawn_rust_analyzer,
     "python:pylsp-rope": _spawn_pylsp,
     "python:basedpyright": _spawn_basedpyright,
     "python:ruff": _spawn_ruff,
+    "markdown": _spawn_marksman,
 }
 
 
