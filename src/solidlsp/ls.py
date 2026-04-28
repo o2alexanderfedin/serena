@@ -9,7 +9,7 @@ import subprocess
 import threading
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from collections.abc import Hashable, Iterator
+from collections.abc import Hashable, Iterator, Mapping
 from contextlib import contextmanager
 from copy import copy
 from pathlib import Path, PurePath
@@ -348,6 +348,11 @@ class SolidLanguageServer(ABC):
     ``"rust-analyzer"``). Empty string means "unknown server" and the base
     ``_handle_register_capability`` skips recording for that instance."""
 
+    _server_capabilities: Mapping[str, Any]
+    """Populated by ``_initialize_with_override`` once per connection lifetime.
+    Absent (not set) until the LSP ``initialize`` handshake completes; callers
+    MUST use ``server_capabilities()`` which returns ``{}`` as a safe default."""
+
     RAW_DOCUMENT_SYMBOLS_CACHE_VERSION = 1
     """
     global version identifier for raw symbol caches; an LS-specific version is defined separately and combined with this.
@@ -434,6 +439,25 @@ class SolidLanguageServer(ABC):
         Return whether this language server supports ``textDocument/implementation``.
         """
         return False
+
+    def server_capabilities(self) -> Mapping[str, Any]:
+        """Return the ``ServerCapabilities`` captured from the ``initialize`` response.
+
+        Safe to call at any point in the server's lifecycle:
+
+        * Before ``initialize`` completes (or if the server was never started) —
+          returns an empty dict so callers can safely attempt lookups without
+          ``AttributeError``.
+        * After ``initialize`` completes — returns the immutable dict captured
+          by ``_initialize_with_override``; shape mirrors the LSP 3.17
+          ``ServerCapabilities`` object (keys are camelCase, values are
+          ``bool | dict | None``).
+
+        The returned mapping is a shallow copy so callers cannot mutate the
+        stored state accidentally.
+        """
+        caps = getattr(self, "_server_capabilities", {})
+        return dict(caps)
 
     @classmethod
     def ls_resources_dir(cls, solidlsp_settings: SolidLSPSettings, mkdir: bool = True) -> str:
@@ -600,7 +624,14 @@ class SolidLanguageServer(ABC):
 
         def _initialize_with_override(params: InitializeParams) -> Any:
             mutated = self.override_initialize_params(cast(dict[str, Any], params))
-            return _original_initialize(cast(InitializeParams, mutated))
+            response = _original_initialize(cast(InitializeParams, mutated))
+            # Phase 0 DLP: capture ServerCapabilities once, before any subclass
+            # _start_server body runs.  Per LSP 3.17 §3.1, ServerCapabilities is
+            # immutable for the connection's lifetime; dynamic registrations are
+            # handled separately by _handle_register_capability.
+            raw_caps: Mapping[str, Any] = (response or {}).get("capabilities", {}) or {}
+            self._server_capabilities = dict(raw_caps)
+            return response
 
         self.server.send.initialize = _initialize_with_override  # type: ignore[method-assign]
 
