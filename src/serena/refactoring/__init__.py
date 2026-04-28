@@ -42,6 +42,7 @@ from .rust_strategy import RustStrategy
 from .transactions import TransactionStore
 from .golang_strategy import GolangStrategy
 from .typescript_strategy import TypescriptStrategy
+from .cpp_strategy import CppStrategy
 
 
 # Lazy-import the Language enum to keep refactoring/__init__.py free of
@@ -54,6 +55,7 @@ def _build_strategy_registry() -> dict:
         Language.MARKDOWN: MarkdownStrategy,
         Language.TYPESCRIPT: TypescriptStrategy,
         Language.GO: GolangStrategy,
+        Language.CPP: CppStrategy,
     }
 
 
@@ -90,6 +92,7 @@ __all__ = [
     "TransactionStore",
     "GolangStrategy",
     "TypescriptStrategy",
+    "CppStrategy",
     "WaitingForLspBudget",
     "build_capability_catalog",
     "default_cache_root",

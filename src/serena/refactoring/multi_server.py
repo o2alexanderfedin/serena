@@ -39,6 +39,7 @@ ProvenanceLiteral = Literal[
     "marksman",
     "vtsls",
     "gopls",
+    "clangd",
 ]
 
 # Tuple of valid provenance values, derived from ``ProvenanceLiteral`` so the
