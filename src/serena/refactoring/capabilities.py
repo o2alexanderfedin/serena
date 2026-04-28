@@ -40,6 +40,7 @@ _DEFAULT_SOURCE_SERVER_BY_LANGUAGE: dict[str, ProvenanceLiteral] = {
     "typescript": "vtsls",
     "go": "gopls",
     "cpp": "clangd",
+    "java": "jdtls",
 }
 
 
@@ -164,6 +165,7 @@ def _adapter_map() -> dict[ProvenanceLiteral, type]:
     from solidlsp.language_servers.basedpyright_server import BasedpyrightServer
     from solidlsp.language_servers.clangd_server import ClangdServer
     from solidlsp.language_servers.gopls_server import GoplsServer
+    from solidlsp.language_servers.jdtls_server import JdtlsServer
     from solidlsp.language_servers.pylsp_server import PylspServer
     from solidlsp.language_servers.ruff_server import RuffServer
     from solidlsp.language_servers.rust_analyzer import RustAnalyzer
@@ -176,6 +178,7 @@ def _adapter_map() -> dict[ProvenanceLiteral, type]:
         "vtsls": VtslsServer,
         "gopls": GoplsServer,
         "clangd": ClangdServer,
+        "jdtls": JdtlsServer,
     }
 
 
@@ -189,6 +192,7 @@ _ADAPTER_ATTRIBUTION_ORDER: dict[str, tuple[ProvenanceLiteral, ...]] = {
     "typescript": ("vtsls",),
     "go": ("gopls",),
     "cpp": ("clangd",),
+    "java": ("jdtls",),
 }
 
 
