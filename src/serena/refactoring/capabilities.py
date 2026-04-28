@@ -42,6 +42,9 @@ _DEFAULT_SOURCE_SERVER_BY_LANGUAGE: dict[str, ProvenanceLiteral] = {
     "cpp": "clangd",
     "java": "jdtls",
     "lean": "lean",
+    "smt2": "smt2-lsp",
+    "prolog": "swipl-lsp",
+    "problog": "problog-lsp",
 }
 
 
@@ -169,8 +172,11 @@ def _adapter_map() -> dict[ProvenanceLiteral, type]:
     from solidlsp.language_servers.jdtls_server import JdtlsServer
     from solidlsp.language_servers.lean_server import LeanServer
     from solidlsp.language_servers.pylsp_server import PylspServer
+    from solidlsp.language_servers.problog_server import ProblogServer
+    from solidlsp.language_servers.prolog_server import PrologServer
     from solidlsp.language_servers.ruff_server import RuffServer
     from solidlsp.language_servers.rust_analyzer import RustAnalyzer
+    from solidlsp.language_servers.smt2_server import Smt2Server
     from solidlsp.language_servers.vtsls_server import VtslsServer
     return {
         "pylsp-rope": PylspServer,
@@ -182,6 +188,9 @@ def _adapter_map() -> dict[ProvenanceLiteral, type]:
         "clangd": ClangdServer,
         "jdtls": JdtlsServer,
         "lean": LeanServer,
+        "smt2-lsp": Smt2Server,
+        "swipl-lsp": PrologServer,
+        "problog-lsp": ProblogServer,
     }
 
 
@@ -197,6 +206,9 @@ _ADAPTER_ATTRIBUTION_ORDER: dict[str, tuple[ProvenanceLiteral, ...]] = {
     "cpp": ("clangd",),
     "java": ("jdtls",),
     "lean": ("lean",),
+    "smt2": ("smt2-lsp",),
+    "prolog": ("swipl-lsp",),
+    "problog": ("problog-lsp",),
 }
 
 
