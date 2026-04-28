@@ -66,7 +66,7 @@ def test_detect_installed_returns_no_version_when_probe_fails(
 
 
 def test_install_command_returns_pipx_argv() -> None:
-    cmd = RuffInstaller()._install_command()
+    cmd = RuffInstaller()._install_command()  # pyright: ignore[reportPrivateUsage]
     assert cmd == ("pipx", "install", "ruff")
 
 

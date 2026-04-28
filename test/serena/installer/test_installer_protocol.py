@@ -81,16 +81,16 @@ def test_install_result_dry_run_default_is_safe() -> None:
 
 def test_lsp_installer_is_abstract_and_cannot_be_instantiated_directly() -> None:
     with pytest.raises(TypeError):
-        LspInstaller()  # type: ignore[abstract]
+        LspInstaller()  # type: ignore[abstract]  # pyright: ignore[reportAbstractUsage]
 
 
 def test_subclass_missing_required_methods_cannot_instantiate() -> None:
-    class _Incomplete(LspInstaller):
+    class _Incomplete(LspInstaller):  # pyright: ignore[reportImplicitAbstractClass]
         language = "x"
         binary_name = "x"
 
     with pytest.raises(TypeError):
-        _Incomplete()  # type: ignore[abstract]
+        _Incomplete()  # type: ignore[abstract]  # pyright: ignore[reportAbstractUsage]
 
 
 def test_concrete_subclass_can_instantiate_and_exposes_class_attributes() -> None:

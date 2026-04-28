@@ -61,7 +61,7 @@ def test_install_command_on_macos_uses_brew(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(platform, "system", lambda: "Darwin")
-    cmd = MarksmanInstaller()._install_command()
+    cmd = MarksmanInstaller()._install_command()  # pyright: ignore[reportPrivateUsage]
     assert cmd == ("brew", "install", "marksman")
 
 
@@ -69,7 +69,7 @@ def test_install_command_on_linux_uses_snap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(platform, "system", lambda: "Linux")
-    cmd = MarksmanInstaller()._install_command()
+    cmd = MarksmanInstaller()._install_command()  # pyright: ignore[reportPrivateUsage]
     assert cmd == ("snap", "install", "marksman")
 
 
@@ -78,7 +78,7 @@ def test_install_command_on_unknown_platform_raises(
 ) -> None:
     monkeypatch.setattr(platform, "system", lambda: "Plan9")
     with pytest.raises(NotImplementedError):
-        MarksmanInstaller()._install_command()
+        MarksmanInstaller()._install_command()  # pyright: ignore[reportPrivateUsage]
 
 
 # -----------------------------------------------------------------------------

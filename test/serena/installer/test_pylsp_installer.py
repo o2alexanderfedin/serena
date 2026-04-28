@@ -72,7 +72,7 @@ def test_detect_installed_falls_back_to_stderr_for_version(
 
 
 def test_install_command_returns_pipx_install_argv() -> None:
-    cmd = PylspInstaller()._install_command()
+    cmd = PylspInstaller()._install_command()  # pyright: ignore[reportPrivateUsage]
     assert cmd == ("pipx", "install", "python-lsp-server")
 
 
