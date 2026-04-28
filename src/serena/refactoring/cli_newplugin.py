@@ -279,6 +279,81 @@ _LANGUAGE_METADATA: dict[str, _StrategyView] = {
             ),
         ),
     ),
+    "java": _StrategyView(
+        # Stream 6 / Leaf D: jdtls (Eclipse JDT Language Server) drives the
+        # LSP over stdio. jdtls is the canonical Java LSP maintained by the
+        # Eclipse Foundation (https://github.com/eclipse-jdtls/eclipse.jdt.ls).
+        # It is the backend used by VSCode's Language Support for Java extension
+        # and the richest Java LSP available.
+        # Install (macOS): ``brew install jdtls``
+        # Install (Linux): ``snap install jdtls --classic``
+        language="java",
+        display_name="Java",
+        file_extensions=(".java",),
+        lsp_server_cmd=("jdtls",),
+        facades=(
+            _Facade(
+                name="split_file",
+                summary="Split a Java file along class/method boundaries",
+                trigger_phrases=("split this file", "extract class"),
+                primitive_chain=(
+                    "textDocument/codeAction",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="extract",
+                summary="Extract selection into a method or variable",
+                trigger_phrases=("extract this", "extract method", "extract variable"),
+                primitive_chain=(
+                    "textDocument/codeAction[refactor.extract]",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="inline",
+                summary="Inline a local variable or method at all call sites",
+                trigger_phrases=("inline this", "inline variable", "inline method"),
+                primitive_chain=(
+                    "textDocument/codeAction[refactor.inline]",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="rename",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="organize_imports",
+                summary="Remove unused imports and sort import order",
+                trigger_phrases=("organize imports", "sort imports", "clean imports"),
+                primitive_chain=(
+                    "textDocument/codeAction[source.organizeImports]",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="generate",
+                summary="Generate constructors, getters/setters, hashCode/equals, or toString",
+                trigger_phrases=("generate constructor", "generate getter", "generate setter", "generate equals"),
+                primitive_chain=(
+                    "textDocument/codeAction[source.generate]",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply all auto-fixable diagnostics (quickfix)",
+                trigger_phrases=("fix all", "fix lints", "auto fix"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
     "cpp": _StrategyView(
         # Stream 6 / Leaf C: clangd drives the LSP over stdio.
         # clangd is the canonical C/C++ language server from the LLVM project
