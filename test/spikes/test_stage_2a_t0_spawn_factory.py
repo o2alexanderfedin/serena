@@ -20,13 +20,35 @@ from serena.tools.scalpel_runtime import (
 )
 
 
-def test_dispatch_table_lists_exactly_four_tags():
+def test_dispatch_table_lists_exactly_five_tags():
+    """v1.1.1 Leaf 02 — markdown joins as the fifth language tag.
+
+    The four production-Python + Rust tags stay; the new ``markdown``
+    entry routes ``MarkdownStrategy.build_servers`` (single-LSP) to
+    ``MarksmanLanguageServer`` via the same ``_AsyncAdapter`` wrapping.
+    """
     assert set(_SPAWN_DISPATCH_TABLE.keys()) == {
         "rust",
         "python:pylsp-rope",
         "python:basedpyright",
         "python:ruff",
+        "markdown",
     }
+
+
+def test_markdown_tag_dispatches_to_marksman_language_server(tmp_path):
+    """v1.1.1 Leaf 02 — ``markdown`` resolves to MarksmanLanguageServer."""
+    key = LspPoolKey(language="markdown", project_root=str(tmp_path))
+    fake_server = MagicMock(name="marksman-instance")
+    with patch(
+        "solidlsp.language_servers.marksman_server.MarksmanLanguageServer"
+    ) as mock_cls:
+        mock_cls.return_value = fake_server
+        result = _default_spawn_fn(key)
+    assert isinstance(result, _AsyncAdapter)
+    assert result._inner is fake_server
+    assert mock_cls.called
+    fake_server.start.assert_called_once()
 
 
 def test_unknown_tag_raises_with_structured_message(tmp_path):
@@ -35,7 +57,10 @@ def test_unknown_tag_raises_with_structured_message(tmp_path):
         _default_spawn_fn(key)
     msg = str(exc.value)
     assert "ocaml" in msg
-    for valid in ("rust", "python:pylsp-rope", "python:basedpyright", "python:ruff"):
+    for valid in (
+        "rust", "python:pylsp-rope", "python:basedpyright",
+        "python:ruff", "markdown",
+    ):
         assert valid in msg
 
 

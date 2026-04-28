@@ -2505,6 +2505,375 @@ class ScalpelConvertFromRelativeImportsTool(Tool):
         ).model_dump_json(indent=2)
 
 
+# ---------------------------------------------------------------------------
+# v1.1.1 Leaf 02 — markdown facades (rename_heading + split_doc +
+# extract_section + organize_links). Single-LSP (marksman); split_doc /
+# extract_section / organize_links are pure-text ops that delegate to
+# ``serena.refactoring.markdown_doc_ops``. rename_heading drives marksman's
+# ``textDocument/rename`` via the ``MultiServerCoordinator.merge_rename``
+# pathway (single primary per language — see _RENAME_PRIMARY_BY_LANGUAGE).
+# ---------------------------------------------------------------------------
+
+
+import re as _re
+
+_HEADING_RE = _re.compile(r"^(#{1,6})\s+(.*\S)\s*$", _re.MULTILINE)
+
+
+def _find_heading_position(file_path: Path, heading_text: str) -> dict[str, int] | None:
+    """Locate the heading-text start position inside ``file_path``.
+
+    Returns ``{"line": int, "character": int}`` pointing at the first
+    character of the heading text (i.e. past the leading ``#`` markers
+    and the space). ``None`` when ``heading_text`` does not match any
+    ATX-style heading in the file.
+
+    Used by ``ScalpelRenameHeadingTool`` so callers can pass the
+    heading text directly (more ergonomic than name_path + position
+    coordinates for markdown).
+    """
+    try:
+        source = file_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    for match in _HEADING_RE.finditer(source):
+        if match.group(2).strip() != heading_text:
+            continue
+        # Convert offset of the heading text start to (line, character).
+        text_offset = match.start(2)
+        prefix = source[:text_offset]
+        line = prefix.count("\n")
+        last_newline = prefix.rfind("\n")
+        character = text_offset if last_newline == -1 else text_offset - last_newline - 1
+        return {"line": line, "character": character}
+    return None
+
+
+class ScalpelRenameHeadingTool(Tool):
+    """Rename a markdown heading and propagate to all wiki-links."""
+
+    def apply(
+        self,
+        file: str,
+        heading: str,
+        new_name: str,
+        dry_run: bool = False,
+        preview_token: str | None = None,
+        allow_out_of_workspace: bool = False,
+    ) -> str:
+        """Rename a heading and propagate to every wiki-link target.
+        Single-LSP (marksman). Atomic.
+
+        :param file: markdown file containing the heading.
+        :param heading: existing heading text (no leading ``#``).
+        :param new_name: replacement heading text.
+        :param dry_run: preview only.
+        :param preview_token: continuation from a prior dry-run.
+        :param allow_out_of_workspace: skip workspace-boundary check.
+        :return: JSON RefactorResult.
+        """
+        del preview_token
+        project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
+        guard = workspace_boundary_guard(
+            file=file, project_root=project_root,
+            allow_out_of_workspace=allow_out_of_workspace,
+        )
+        if guard is not None:
+            return guard.model_dump_json(indent=2)
+        # Resolve the heading text to a position before involving marksman —
+        # marksman's prepareRename rejects positions outside heading tokens
+        # so a wrong/missing heading should fail fast with SYMBOL_NOT_FOUND
+        # instead of routing through merge_rename.
+        target_path = (project_root / file).expanduser().resolve(strict=False)
+        position = _find_heading_position(target_path, heading)
+        if position is None:
+            return build_failure_result(
+                code=ErrorCode.SYMBOL_NOT_FOUND,
+                stage="scalpel_rename_heading",
+                reason=f"Heading {heading!r} not found in {file!r}.",
+                recoverable=False,
+            ).model_dump_json(indent=2)
+        coord = coordinator_for_facade(language="markdown", project_root=project_root)
+        try:
+            rel_path = str(Path(file).relative_to(project_root))
+        except ValueError:
+            rel_path = file
+        t0 = time.monotonic()
+        merge_out = _run_async(coord.merge_rename(
+            relative_file_path=rel_path,
+            line=int(position["line"]),
+            column=int(position["character"]),
+            new_name=new_name,
+            language="markdown",
+        ))
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        workspace_edit, _warnings = merge_out
+        if workspace_edit is None:
+            return build_failure_result(
+                code=ErrorCode.SYMBOL_NOT_FOUND,
+                stage="scalpel_rename_heading",
+                reason=(
+                    f"marksman returned no rename edit for heading {heading!r} "
+                    f"in {file!r}."
+                ),
+                recoverable=False,
+            ).model_dump_json(indent=2)
+        if dry_run:
+            return RefactorResult(
+                applied=False, no_op=False,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                preview_token=f"pv_rename_heading_{int(time.time())}",
+                duration_ms=elapsed_ms,
+            ).model_dump_json(indent=2)
+        _apply_workspace_edit_to_disk(workspace_edit)
+        cid = record_checkpoint_for_workspace_edit(
+            workspace_edit=workspace_edit, snapshot={},
+        )
+        return RefactorResult(
+            applied=True,
+            diagnostics_delta=_empty_diagnostics_delta(),
+            checkpoint_id=cid,
+            duration_ms=elapsed_ms,
+            lsp_ops=(LspOpStat(
+                method="textDocument/rename",
+                server="marksman",
+                count=1,
+                total_ms=elapsed_ms,
+            ),),
+        ).model_dump_json(indent=2)
+
+
+class ScalpelSplitDocTool(Tool):
+    """Split a long markdown doc along H1/H2 boundaries into linked sub-docs."""
+
+    def apply(
+        self,
+        file: str,
+        depth: int = 1,
+        dry_run: bool = False,
+        preview_token: str | None = None,
+        allow_out_of_workspace: bool = False,
+    ) -> str:
+        """Slice a markdown doc into one sub-doc per heading at depth <= N.
+        Source becomes a TOC. Atomic.
+
+        :param file: markdown file to split.
+        :param depth: maximum heading depth to split on (1 = H1 only).
+        :param dry_run: preview only.
+        :param preview_token: continuation from a prior dry-run.
+        :param allow_out_of_workspace: skip workspace-boundary check.
+        :return: JSON RefactorResult.
+        """
+        del preview_token
+        project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
+        guard = workspace_boundary_guard(
+            file=file, project_root=project_root,
+            allow_out_of_workspace=allow_out_of_workspace,
+        )
+        if guard is not None:
+            return guard.model_dump_json(indent=2)
+        from serena.refactoring.markdown_doc_ops import split_doc_along_headings
+        target_path = (project_root / file).expanduser().resolve(strict=False)
+        t0 = time.monotonic()
+        edit = split_doc_along_headings(target_path, depth=depth)
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        if not edit.get("documentChanges"):
+            return RefactorResult(
+                applied=False, no_op=True,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                duration_ms=elapsed_ms,
+            ).model_dump_json(indent=2)
+        if dry_run:
+            return RefactorResult(
+                applied=False, no_op=False,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                preview_token=f"pv_split_doc_{int(time.time())}",
+                duration_ms=elapsed_ms,
+            ).model_dump_json(indent=2)
+        _apply_markdown_workspace_edit(edit)
+        cid = record_checkpoint_for_workspace_edit(workspace_edit=edit, snapshot={})
+        return RefactorResult(
+            applied=True,
+            diagnostics_delta=_empty_diagnostics_delta(),
+            checkpoint_id=cid,
+            duration_ms=elapsed_ms,
+            lsp_ops=(LspOpStat(
+                method="workspace/applyEdit",
+                server="markdown_doc_ops",
+                count=len(edit["documentChanges"]),
+                total_ms=elapsed_ms,
+            ),),
+        ).model_dump_json(indent=2)
+
+
+class ScalpelExtractSectionTool(Tool):
+    """Extract one markdown section into a new file with a back-link."""
+
+    def apply(
+        self,
+        file: str,
+        heading: str,
+        target: str | None = None,
+        dry_run: bool = False,
+        preview_token: str | None = None,
+        allow_out_of_workspace: bool = False,
+    ) -> str:
+        """Pull one section into a new file, leaving a link in the source.
+        Atomic.
+
+        :param file: markdown file containing the section.
+        :param heading: heading text identifying the section.
+        :param target: explicit target file path (defaults to ``<slug>.md``).
+        :param dry_run: preview only.
+        :param preview_token: continuation from a prior dry-run.
+        :param allow_out_of_workspace: skip workspace-boundary check.
+        :return: JSON RefactorResult.
+        """
+        del preview_token
+        project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
+        guard = workspace_boundary_guard(
+            file=file, project_root=project_root,
+            allow_out_of_workspace=allow_out_of_workspace,
+        )
+        if guard is not None:
+            return guard.model_dump_json(indent=2)
+        from serena.refactoring.markdown_doc_ops import extract_section
+        target_path = (project_root / file).expanduser().resolve(strict=False)
+        explicit_target: Path | None = None
+        if target is not None:
+            explicit_target = (project_root / target).expanduser().resolve(strict=False)
+        t0 = time.monotonic()
+        try:
+            edit = extract_section(
+                target_path, heading_text=heading, target_path=explicit_target,
+            )
+        except KeyError:
+            return build_failure_result(
+                code=ErrorCode.SYMBOL_NOT_FOUND,
+                stage="scalpel_extract_section",
+                reason=f"Heading {heading!r} not found in {file!r}.",
+                recoverable=False,
+            ).model_dump_json(indent=2)
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        if dry_run:
+            return RefactorResult(
+                applied=False, no_op=False,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                preview_token=f"pv_extract_section_{int(time.time())}",
+                duration_ms=elapsed_ms,
+            ).model_dump_json(indent=2)
+        _apply_markdown_workspace_edit(edit)
+        cid = record_checkpoint_for_workspace_edit(workspace_edit=edit, snapshot={})
+        return RefactorResult(
+            applied=True,
+            diagnostics_delta=_empty_diagnostics_delta(),
+            checkpoint_id=cid,
+            duration_ms=elapsed_ms,
+            lsp_ops=(LspOpStat(
+                method="workspace/applyEdit",
+                server="markdown_doc_ops",
+                count=len(edit["documentChanges"]),
+                total_ms=elapsed_ms,
+            ),),
+        ).model_dump_json(indent=2)
+
+
+class ScalpelOrganizeLinksTool(Tool):
+    """Sort + dedup the links in a markdown file."""
+
+    def apply(
+        self,
+        file: str,
+        dry_run: bool = False,
+        preview_token: str | None = None,
+        allow_out_of_workspace: bool = False,
+    ) -> str:
+        """Sort wiki-links then markdown links alphabetically; dedup
+        duplicates. Idempotent.
+
+        :param file: markdown file to organize.
+        :param dry_run: preview only.
+        :param preview_token: continuation from a prior dry-run.
+        :param allow_out_of_workspace: skip workspace-boundary check.
+        :return: JSON RefactorResult.
+        """
+        del preview_token
+        project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
+        guard = workspace_boundary_guard(
+            file=file, project_root=project_root,
+            allow_out_of_workspace=allow_out_of_workspace,
+        )
+        if guard is not None:
+            return guard.model_dump_json(indent=2)
+        from serena.refactoring.markdown_doc_ops import organize_markdown_links
+        target_path = (project_root / file).expanduser().resolve(strict=False)
+        t0 = time.monotonic()
+        edit = organize_markdown_links(target_path)
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        if not edit.get("documentChanges"):
+            return RefactorResult(
+                applied=False, no_op=True,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                duration_ms=elapsed_ms,
+            ).model_dump_json(indent=2)
+        if dry_run:
+            return RefactorResult(
+                applied=False, no_op=False,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                preview_token=f"pv_organize_links_{int(time.time())}",
+                duration_ms=elapsed_ms,
+            ).model_dump_json(indent=2)
+        _apply_markdown_workspace_edit(edit)
+        cid = record_checkpoint_for_workspace_edit(workspace_edit=edit, snapshot={})
+        return RefactorResult(
+            applied=True,
+            diagnostics_delta=_empty_diagnostics_delta(),
+            checkpoint_id=cid,
+            duration_ms=elapsed_ms,
+            lsp_ops=(LspOpStat(
+                method="workspace/applyEdit",
+                server="markdown_doc_ops",
+                count=len(edit["documentChanges"]),
+                total_ms=elapsed_ms,
+            ),),
+        ).model_dump_json(indent=2)
+
+
+def _apply_markdown_workspace_edit(workspace_edit: dict[str, Any]) -> int:
+    """Apply a markdown_doc_ops WorkspaceEdit to disk.
+
+    Mirrors :func:`_apply_workspace_edit_to_disk` but supports the
+    ``CreateFile`` resource operations the markdown helpers emit. The
+    main applier intentionally skips resource ops (deferred per its
+    docstring), so markdown's split + extract paths need this thin
+    wrapper that:
+
+      1. Creates the target file (empty) for every ``{"kind": "create"}``
+         document change.
+      2. Defers to the standard text-edit applier for every
+         ``TextDocumentEdit``.
+    """
+    applied = 0
+    for dc in workspace_edit.get("documentChanges") or []:
+        if not isinstance(dc, dict):
+            continue
+        if dc.get("kind") == "create":
+            uri = dc.get("uri")
+            if isinstance(uri, str) and uri.startswith("file://"):
+                from urllib.parse import urlparse, unquote
+                target = Path(unquote(urlparse(uri).path))
+                target.parent.mkdir(parents=True, exist_ok=True)
+                if not target.exists():
+                    target.write_text("", encoding="utf-8")
+            continue
+        text_doc = dc.get("textDocument") or {}
+        uri = text_doc.get("uri")
+        if not isinstance(uri, str):
+            continue
+        applied += _apply_text_edits_to_file_uri(uri, dc.get("edits") or [])
+    return applied
+
+
 # Dispatch table for commit-time replay. Entries are bound at module load
 # from the facade Tool subclasses; tests patch this dict to inject mocks.
 _FACADE_DISPATCH: dict[str, Any] = {}
@@ -2556,6 +2925,11 @@ def _bind_facade_dispatch_table() -> None:
     _FACADE_DISPATCH["scalpel_convert_to_async"] = lambda **kw: ScalpelConvertToAsyncTool(none_agent).apply(**kw)
     _FACADE_DISPATCH["scalpel_annotate_return_type"] = lambda **kw: ScalpelAnnotateReturnTypeTool(none_agent).apply(**kw)
     _FACADE_DISPATCH["scalpel_convert_from_relative_imports"] = lambda **kw: ScalpelConvertFromRelativeImportsTool(none_agent).apply(**kw)
+    # v1.1.1 Leaf 02 — markdown facades (single-LSP marksman).
+    _FACADE_DISPATCH["scalpel_rename_heading"] = lambda **kw: ScalpelRenameHeadingTool(none_agent).apply(**kw)
+    _FACADE_DISPATCH["scalpel_split_doc"] = lambda **kw: ScalpelSplitDocTool(none_agent).apply(**kw)
+    _FACADE_DISPATCH["scalpel_extract_section"] = lambda **kw: ScalpelExtractSectionTool(none_agent).apply(**kw)
+    _FACADE_DISPATCH["scalpel_organize_links"] = lambda **kw: ScalpelOrganizeLinksTool(none_agent).apply(**kw)
 
 
 class ScalpelTransactionCommitTool(Tool):
@@ -2670,6 +3044,7 @@ __all__ = [
     "ScalpelExpandGlobImportsTool",
     "ScalpelExpandMacroTool",
     "ScalpelExtractLifetimeTool",
+    "ScalpelExtractSectionTool",
     "ScalpelExtractTool",
     "ScalpelFixLintsTool",
     "ScalpelGenerateFromUndefinedTool",
@@ -2680,7 +3055,10 @@ __all__ = [
     "ScalpelInlineTool",
     "ScalpelIntroduceParameterTool",
     "ScalpelLocalToFieldTool",
+    "ScalpelOrganizeLinksTool",
+    "ScalpelRenameHeadingTool",
     "ScalpelRenameTool",
+    "ScalpelSplitDocTool",
     "ScalpelSplitFileTool",
     "ScalpelTidyStructureTool",
     "ScalpelTransactionCommitTool",

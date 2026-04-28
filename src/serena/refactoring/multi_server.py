@@ -647,9 +647,14 @@ def _check_workspace_boundary(
 import difflib
 
 # Per-language primary server for textDocument/rename per §11.3.
+# v1.1.1 Leaf 02: markdown joins as a single-LSP entry — marksman is the
+# canonical heading/wiki-link rename driver. The strategy's
+# ``build_servers`` returns ``{"marksman": …}`` so the primary id matches
+# verbatim.
 _RENAME_PRIMARY_BY_LANGUAGE: dict[str, str] = {
     "python": "pylsp-rope",
     "rust": "rust-analyzer",
+    "markdown": "marksman",
 }
 
 
