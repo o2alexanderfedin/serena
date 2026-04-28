@@ -3,7 +3,7 @@
     "scalpel-python": {
       "args": [
         "--from",
-        "git+https://github.com/o2services/o2-scalpel.git#subdirectory=vendor/serena",
+        "git+https://github.com/o2alexanderfedin/o2-scalpel-engine.git",
         "serena-mcp",
         "--language",
         "python"

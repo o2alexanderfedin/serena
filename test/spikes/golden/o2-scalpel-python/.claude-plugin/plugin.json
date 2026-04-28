@@ -1,15 +1,15 @@
 {
   "author": {
-    "email": null,
-    "name": "AI Hive(R)",
-    "url": null
+    "email": "af@O2.services",
+    "name": "Alex Fedin & AI Hive®",
+    "url": "https://O2.services"
   },
   "category": "development",
   "description": "Scalpel refactor MCP server for Python via pylsp",
-  "homepage": "https://github.com/o2services/o2-scalpel",
+  "homepage": "https://github.com/o2alexanderfedin/o2-scalpel",
   "license": "MIT",
   "name": "o2-scalpel-python",
-  "repository": "https://github.com/o2services/o2-scalpel",
+  "repository": "https://github.com/o2alexanderfedin/o2-scalpel",
   "tags": [
     "python",
     "pylsp",

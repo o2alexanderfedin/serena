@@ -1055,6 +1055,7 @@ def _installer_registry() -> dict[str, type]:
     from serena.installer.pylsp_installer import PylspInstaller
     from serena.installer.ruff_installer import RuffInstaller
     from serena.installer.rust_analyzer_installer import RustAnalyzerInstaller
+    from serena.installer.vtsls_installer import VtslsInstaller
 
     return {
         "markdown": MarksmanInstaller,
@@ -1063,6 +1064,7 @@ def _installer_registry() -> dict[str, type]:
         "python-basedpyright": BasedpyrightInstaller,  # secondary Python LSP
         "python-ruff": RuffInstaller,                    # secondary Python LSP
         "rust-clippy": ClippyInstaller,                  # secondary Rust LSP
+        "typescript": VtslsInstaller,
     }
 
 

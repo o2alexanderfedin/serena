@@ -37,6 +37,7 @@ ProvenanceLiteral = Literal[
     "pylsp-mypy",
     "rust-analyzer",
     "marksman",
+    "vtsls",
 ]
 
 # Tuple of valid provenance values, derived from ``ProvenanceLiteral`` so the
