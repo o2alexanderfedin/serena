@@ -75,6 +75,28 @@ class Language(str, Enum):
     Discovered from system PATH or vshaxe VSCode extension, otherwise downloaded from Open VSX.
     """
     LEAN4 = "lean4"
+    SMT2 = "smt2"
+    """SMT-LIB 2 (SMT solver input format) — Stream 6 / Leaf F.
+    No stable LSP server exists as of 2026-04-27; the installer stub raises
+    NotImplementedError with guidance.  The seam is shipped so that the strategy
+    layer and plugin generator have a stable hook for when a server matures.
+    Constraint specification format; quickfix-only.
+    Extensions: .smt2, .smt
+    """
+    PROLOG = "prolog"
+    """SWI-Prolog via the lsp_server pack (jamesnvc/lsp_server) — Stream 6 / Leaf G.
+    Install: swipl -g "pack_install(lsp_server)" -t halt
+    Requires SWI-Prolog 8.1.5+.
+    Capabilities: quickfix + refactor.rename (predicate renaming is alpha-safe).
+    Extensions: .pl, .pro, .prolog
+    """
+    PROBLOG = "problog"
+    """ProbLog (probabilistic Prolog) — Stream 6 / Leaf H.
+    Research-mode language; no dedicated LSP.  Piggybacks on swipl + lsp_server pack.
+    Install: pip install problog (inference engine) + swipl lsp_server pack (LSP backend).
+    Capabilities: quickfix only (probabilistic semantics make rename/extract research-mode).
+    Extension: .problog
+    """
     GROOVY = "groovy"
     VUE = "vue"
     POWERSHELL = "powershell"
@@ -301,6 +323,12 @@ class Language(str, Enum):
                 return FilenameMatcher("*.hx")
             case self.LEAN4:
                 return FilenameMatcher("*.lean")
+            case self.SMT2:
+                return FilenameMatcher("*.smt2", "*.smt")
+            case self.PROLOG:
+                return FilenameMatcher("*.pl", "*.pro", "*.prolog")
+            case self.PROBLOG:
+                return FilenameMatcher("*.problog")
             case self.VUE:
                 path_patterns = ["*.vue"]
                 for prefix in ["c", "m", ""]:
@@ -533,6 +561,18 @@ class Language(str, Enum):
                 from solidlsp.language_servers.lean4_language_server import Lean4LanguageServer
 
                 return Lean4LanguageServer
+            case self.SMT2:
+                from solidlsp.language_servers.smt2_server import Smt2Server
+
+                return Smt2Server
+            case self.PROLOG:
+                from solidlsp.language_servers.prolog_server import PrologServer
+
+                return PrologServer
+            case self.PROBLOG:
+                from solidlsp.language_servers.problog_server import ProblogServer
+
+                return ProblogServer
             case self.FSHARP:
                 from solidlsp.language_servers.fsharp_language_server import FSharpLanguageServer
 
