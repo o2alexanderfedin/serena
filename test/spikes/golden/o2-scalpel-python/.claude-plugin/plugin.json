@@ -4,10 +4,19 @@
     "name": "AI Hive(R)",
     "url": null
   },
+  "category": "development",
   "description": "Scalpel refactor MCP server for Python via pylsp",
   "homepage": "https://github.com/o2services/o2-scalpel",
   "license": "MIT",
   "name": "o2-scalpel-python",
   "repository": "https://github.com/o2services/o2-scalpel",
+  "tags": [
+    "python",
+    "pylsp",
+    "lsp",
+    "refactor",
+    "mcp",
+    "scalpel"
+  ],
   "version": "1.0.0"
 }
