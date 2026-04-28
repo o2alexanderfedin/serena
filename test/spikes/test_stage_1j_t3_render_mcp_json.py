@@ -32,3 +32,23 @@ def test_mcp_json_is_deterministic(fake_strategy_rust) -> None:
     b = _render_mcp_json(fake_strategy_rust)
     assert a == b
     assert a.endswith("\n")
+
+
+# --- § 3.3 + § 3.4: correct engine URL (install-blockers Phase 0) -----------
+
+
+def test_mcp_json_points_at_engine_repo_not_parent(fake_strategy_rust) -> None:
+    """§ 3.3: .mcp.json must point at standalone engine, not vendor/serena subdir."""
+    out = _render_mcp_json(fake_strategy_rust)
+    data = json.loads(out)
+    args = data["mcpServers"]["scalpel-rust"]["args"]
+    source_idx = args.index("--from") + 1
+    source = args[source_idx]
+    assert "o2alexanderfedin/o2-scalpel-engine" in source
+    assert "subdirectory" not in source
+
+
+def test_mcp_json_no_o2services_in_url(fake_strategy_rust) -> None:
+    """§ 3.4: o2services owner must not appear in any generated URL."""
+    out = _render_mcp_json(fake_strategy_rust)
+    assert "o2services" not in out

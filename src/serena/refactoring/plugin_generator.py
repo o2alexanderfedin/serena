@@ -66,7 +66,7 @@ _INSTALL_HINTS: dict[str, str] = {
 # ever want to publish plugins under a different owner.
 _AUTHOR = "AI Hive(R)"
 _LICENSE = "MIT"
-_REPO = "https://github.com/o2services/o2-scalpel"
+_REPO = "https://github.com/o2alexanderfedin/o2-scalpel"
 _VERSION = "1.0.0"
 
 
@@ -151,7 +151,7 @@ def _render_mcp_json(strategy: _StrategyLike) -> str:
                 "command": "uvx",
                 "args": [
                     "--from",
-                    "git+https://github.com/o2services/o2-scalpel.git#subdirectory=vendor/serena",
+                    "git+https://github.com/o2alexanderfedin/o2-scalpel-engine.git",
                     "serena-mcp",
                     "--language",
                     strategy.language,
@@ -231,6 +231,33 @@ def _render_session_start_hook(strategy: _StrategyLike) -> str:
     )
 
 
+def _render_hooks_json(strategy: _StrategyLike) -> str:
+    """Render ``hooks/hooks.json`` binding the verify script to SessionStart.
+
+    Without this file Claude Code never discovers or runs the ``verify-scalpel-
+    <lang>.sh`` script — failure F4 from install-mechanics §5. The exit code
+    in the script must be ``2`` (blocking) for the SessionStart failure to halt
+    plugin load rather than silently warn.
+    """
+
+    hook_script = f"${{CLAUDE_PLUGIN_ROOT}}/hooks/verify-scalpel-{strategy.language}.sh"
+    payload = {
+        "hooks": {
+            "SessionStart": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": hook_script,
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+    return json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+
+
 @dataclass(frozen=True)
 class PluginGenerator:
     """Composes the six render helpers into a deterministic tree write.
@@ -288,6 +315,9 @@ class PluginGenerator:
             | _stat.S_IXGRP
             | _stat.S_IXOTH
         )
+        (root / "hooks" / "hooks.json").write_text(
+            _render_hooks_json(strategy), encoding="utf-8"
+        )
 
         for facade in strategy.facades:
             skill_path = root / "skills" / f"{_skill_name_for(strategy, facade)}.md"
@@ -301,6 +331,7 @@ class PluginGenerator:
 __all__ = [
     "PluginGenerator",
     "PluginManifest",  # re-export for callers
+    "_render_hooks_json",
     "_render_mcp_json",
     "_render_plugin_json",
     "_render_readme",
