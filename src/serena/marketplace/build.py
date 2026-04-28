@@ -24,6 +24,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 from serena.marketplace.schema import (
     AuthorInfo,
@@ -62,14 +63,14 @@ def _generator_banner(sha: str) -> str:
     return _GENERATOR_TEMPLATE.format(sha=sha[:12])
 
 
-def _read_plugin_json(plugin_dir: Path) -> dict:
+def _read_plugin_json(plugin_dir: Path) -> dict[str, Any]:
     """Read ``<plugin_dir>/.claude-plugin/plugin.json`` as a dict."""
 
     path = plugin_dir / ".claude-plugin" / "plugin.json"
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _author_from(payload: dict) -> AuthorInfo:
+def _author_from(payload: dict[str, Any]) -> AuthorInfo:
     """Build an :class:`AuthorInfo` from a ``plugin.json`` ``author`` block."""
 
     raw = payload.get("author") or {}
