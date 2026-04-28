@@ -14,9 +14,16 @@ Above: facades see merged ``MergedCodeAction`` lists with
 
 from __future__ import annotations
 
-from typing import Any, Iterator, Literal, cast, get_args
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Iterator, Literal, cast, get_args
 
 from pydantic import BaseModel, Field
+
+from solidlsp.capability_keys import PREPARE_RENAME, _METHOD_TO_PROVIDER_KEY
+from solidlsp.dynamic_capabilities import DynamicCapabilityRegistry
+
+if TYPE_CHECKING:
+    from serena.refactoring.capabilities import CapabilityCatalog
 
 # ---------------------------------------------------------------------------
 # §11.6 schemas — verbatim per scope report.
@@ -759,7 +766,13 @@ class MultiServerCoordinator:
     # of truth per CLAUDE.md).
     _AWAITED_SERVER_METHODS: tuple[str, ...] = AWAITED_SERVER_METHODS
 
-    def __init__(self, servers: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        servers: dict[str, Any],
+        *,
+        dynamic_registry: DynamicCapabilityRegistry | None = None,
+        catalog: "CapabilityCatalog | None" = None,
+    ) -> None:
         # Defensive contract check (v0.2.0 follow-up #03):
         # raw sync ``SolidLanguageServer`` adapters MUST be wrapped in
         # ``_AsyncAdapter`` before reaching this constructor. Without
@@ -774,9 +787,173 @@ class MultiServerCoordinator:
         self._servers = dict(servers)
         self._action_edits: dict[str, dict[str, Any]] = {}
 
+        # DI: dynamic registry + static catalog (spec § 4.4.0).
+        # When not provided, fall back to process-global singletons for
+        # backward compatibility with the 37 existing test call sites that
+        # use ``MultiServerCoordinator(servers=...)``.
+        if dynamic_registry is not None:
+            self._dynamic_registry: DynamicCapabilityRegistry = dynamic_registry
+        else:
+            from serena.tools.scalpel_runtime import ScalpelRuntime
+            self._dynamic_registry = ScalpelRuntime.instance().dynamic_capability_registry()
+
+        if catalog is not None:
+            self._catalog: CapabilityCatalog | None = catalog
+        else:
+            # Fall back to process-global ScalpelRuntime catalog for backward
+            # compatibility. Avoid importing from serena.refactoring here to
+            # prevent a circular import (multi_server is part of that package).
+            from serena.tools.scalpel_runtime import ScalpelRuntime
+            self._catalog = ScalpelRuntime.instance().catalog()
+
     @property
     def servers(self) -> dict[str, Any]:
         return dict(self._servers)
+
+    # -----------------------------------------------------------------------
+    # DLp2 — capability predicates (spec § 4.4)
+    # -----------------------------------------------------------------------
+
+    def supports_method(self, server_id: str, method: str) -> bool:
+        """Two-tier runtime check for arbitrary LSP method support.
+
+        Tier 1: dynamic registry — additive registrations from
+                ``client/registerCapability``.
+        Tier 2: captured ``ServerCapabilities`` provider field.
+
+        The static catalog is intentionally skipped for method-routed
+        gating — it indexes code-action *kinds*, not raw LSP method
+        strings.  Use :meth:`supports_kind` for the 3-tier code-action
+        path.
+
+        Special case: ``textDocument/prepareRename`` requires the
+        ``renameProvider`` options object to contain
+        ``prepareProvider: true`` (spec § R5).  A bare ``renameProvider:
+        true`` is insufficient for this method.
+        """
+        # Tier 1: dynamic registration wins (additive per spec § 4.4.1).
+        if self._dynamic_registry.has(server_id, method):
+            return True
+        # Tier 2: ServerCapabilities provider field.
+        server = self._servers.get(server_id)
+        if server is None:
+            return False
+        caps: Mapping[str, Any] = server.server_capabilities() if callable(
+            getattr(server, "server_capabilities", None)
+        ) else {}
+        provider_key = _METHOD_TO_PROVIDER_KEY.get(method)
+        if provider_key is None:
+            # Unknown method (e.g. custom extensions); gate denies.
+            # Custom methods require Tier-0 per-server allowlist (spec § R7).
+            return False
+        provider = caps.get(provider_key)
+        # Absent or explicit False means not supported.
+        # Empty dict (e.g. ``renameProvider: {}``) is still "present".
+        if provider is None or provider is False:
+            return False
+        # prepareRename sub-capability special case (spec § R5):
+        # renameProvider must carry prepareProvider: true in its options.
+        if method == PREPARE_RENAME:
+            if isinstance(provider, dict):
+                return bool(provider.get("prepareProvider", False))
+            # renameProvider: true without options dict — prepareRename unsupported.
+            return False
+        return True  # truthy provider means supported (bool True OR options dict)
+
+    def supports_kind(self, language: str, kind: str) -> bool:
+        """Three-tier code-action kind gate.
+
+        Tier 1: static catalog — eliminates kinds no strategy claims to
+                support before any per-server runtime check.
+        Tier 2: dynamic registry — the responsible server must have
+                ``textDocument/codeAction`` either statically advertised
+                or dynamically registered.
+        Tier 3: ``ServerCapabilities.codeActionProvider.codeActionKinds``
+                MUST contain the kind — or be absent/empty, which per
+                LSP 3.17 means "any kind is accepted".
+        """
+        # Tier 1: static catalog lookup.
+        catalog_record = None
+        if self._catalog is not None:
+            for rec in self._catalog.records:
+                if rec.language == language and rec.kind == kind:
+                    catalog_record = rec
+                    break
+        if catalog_record is None:
+            return False
+
+        sid = catalog_record.source_server
+
+        # Tier 2: textDocument/codeAction must be available on the responsible server.
+        # Track whether code-action availability came from dynamic registration only
+        # (i.e. the static caps have no codeActionProvider). When the registration
+        # carries no kind filter, any kind is implicitly accepted (no filter = no
+        # restriction).
+        dynamic_reg_has_code_action = self._dynamic_registry.has(sid, "textDocument/codeAction")
+        static_caps_has_code_action = self._server_advertises_method(sid, "textDocument/codeAction")
+        if not (dynamic_reg_has_code_action or static_caps_has_code_action):
+            return False
+
+        # Tier 3: codeActionKinds must include the kind (or be absent = any).
+        # When code-action availability is proven only by dynamic registration and
+        # the static caps have no codeActionProvider (hence no kind filter), treat
+        # it as "any kind" per the dynamic-registration-without-filter rule.
+        if dynamic_reg_has_code_action and not static_caps_has_code_action:
+            # Dynamic registration confirmed; no static kind filter — accept any kind.
+            return True
+        return self._server_advertises_kind(sid, kind)
+
+    def _server_advertises_method(self, server_id: str, method: str) -> bool:
+        """Check ``ServerCapabilities`` directly for *method* (Tier-2 inner helper).
+
+        Unlike :meth:`supports_method` this does NOT consult the dynamic
+        registry — it is called by :meth:`supports_kind` which already
+        performs a separate dynamic-registry check.
+
+        An empty-dict options object (e.g. ``codeActionProvider: {}``) is
+        treated as "present" — the field exists in the ServerCapabilities
+        response, the server just chose not to enumerate sub-options.  Only
+        an absent field or an explicit ``false`` value counts as "not present".
+        """
+        server = self._servers.get(server_id)
+        if server is None:
+            return False
+        caps: Mapping[str, Any] = server.server_capabilities() if callable(
+            getattr(server, "server_capabilities", None)
+        ) else {}
+        provider_key = _METHOD_TO_PROVIDER_KEY.get(method)
+        if provider_key is None:
+            return False
+        provider = caps.get(provider_key)
+        # Explicitly False/None means not supported.
+        # Everything else (True, non-empty dict, empty dict) means supported.
+        return provider is not None and provider is not False
+
+    def _server_advertises_kind(self, server_id: str, kind: str) -> bool:
+        """Check ``ServerCapabilities.codeActionProvider.codeActionKinds`` for *kind*.
+
+        Per LSP 3.17: an absent or empty ``codeActionKinds`` list means the
+        server accepts *any* kind; a non-empty list is an explicit allowlist.
+        """
+        server = self._servers.get(server_id)
+        if server is None:
+            return False
+        caps: Mapping[str, Any] = server.server_capabilities() if callable(
+            getattr(server, "server_capabilities", None)
+        ) else {}
+        ca = caps.get("codeActionProvider")
+        if ca is None or ca is False:
+            return False
+        if ca is True:
+            # Provider is boolean True — any kind is accepted per LSP 3.17.
+            return True
+        if isinstance(ca, dict):
+            kinds_list = ca.get("codeActionKinds")
+            if not kinds_list:
+                # Absent or empty list means "any kind" per LSP 3.17.
+                return True
+            return kind in kinds_list
+        return False
 
     async def broadcast(
         self,

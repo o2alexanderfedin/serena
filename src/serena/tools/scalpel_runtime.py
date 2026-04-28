@@ -403,7 +403,11 @@ class ScalpelRuntime:
         strategy_cls = STRATEGY_REGISTRY[language]
         strategy = strategy_cls(pool=pool)
         servers = strategy.build_servers(canon_root)
-        coord = MultiServerCoordinator(servers=servers)
+        coord = MultiServerCoordinator(
+            servers=servers,
+            dynamic_registry=self.dynamic_capability_registry(),
+            catalog=self.catalog(),
+        )
         with self._lock:
             # Re-check under lock in case another thread won the race.
             existing = self._coordinators.get(key)
