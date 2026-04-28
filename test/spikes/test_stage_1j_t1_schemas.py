@@ -1,9 +1,15 @@
-"""Stage 1J T1 — pydantic v2 schemas for emitted artefacts.
+"""Stage 1J T1 — pydantic v2 schemas for per-plugin artefacts.
 
-Validates the three boundary models that gate every Stage 1J render:
-``PluginManifest`` (boostvolt-shape ``plugin.json``), ``SkillFrontmatter``
-(YAML head of each ``skills/*.md``), and ``MarketplaceManifest``
-(top-level aggregator).
+Validates the two boundary models that gate every Stage 1J render of a
+single plugin tree: ``PluginManifest`` (boostvolt-shape ``plugin.json``)
+and ``SkillFrontmatter`` (YAML head of each ``skills/*.md``).
+
+The top-level ``marketplace.json`` aggregator is now modelled by
+:mod:`serena.marketplace.schema` (v1.2 reconciliation) and exercised by
+``test/serena/marketplace/test_schema.py``; the legacy
+``MarketplaceManifest``/``PluginEntry``/``MarketplaceMetadata`` shapes
+that used to live here were removed when the parallel surface file
+collapsed into the unified ``marketplace.json``.
 """
 
 from __future__ import annotations
@@ -13,9 +19,6 @@ from pydantic import ValidationError
 
 from serena.refactoring.plugin_schemas import (
     AuthorInfo,
-    MarketplaceManifest,
-    OwnerInfo,
-    PluginEntry,
     PluginManifest,
     SkillFrontmatter,
 )
@@ -67,16 +70,3 @@ def test_skill_frontmatter_default_type_is_skill() -> None:
         description="When user asks to split a file, use scalpel_split_file",
     )
     assert sf.type == "skill"
-
-
-def test_marketplace_manifest_with_two_plugins() -> None:
-    mm = MarketplaceManifest(
-        name="o2-scalpel",
-        owner=OwnerInfo(name="AI Hive(R)"),
-        plugins=[
-            PluginEntry(name="o2-scalpel-rust", source="./o2-scalpel-rust"),
-            PluginEntry(name="o2-scalpel-python", source="./o2-scalpel-python"),
-        ],
-    )
-    assert len(mm.plugins) == 2
-    assert mm.schema_url.endswith("marketplace.schema.json")

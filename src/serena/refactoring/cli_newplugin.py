@@ -5,16 +5,16 @@ for the given ``--language``. The strategy resolver is split out as
 :func:`_resolve_strategy` so tests can monkey-patch it without touching
 the registry.
 
-Stream 5 / Leaf 01 Task 4 extends this CLI with an opt-in ``--repo-root``
-flag: when supplied, the generator regenerates
-``<repo-root>/marketplace.surface.json`` after the plugin tree write so
-the schema-driven publication surface stays in lockstep with the trees
-it lists. Drift-CI gates the surface file, so any plugin emit that
-forgets ``--repo-root`` is caught at CI time. The ``--repo-root`` flag is
-intentionally opt-in (rather than defaulting to ``--out``) so callers
-emitting plugins to scratch dirs don't pollute those dirs with surface
-files; the production caller (``Makefile`` ``generate-plugins`` target)
-must be updated to pass it explicitly.
+Stream 5 / Leaf 01 Task 4 added the opt-in ``--repo-root`` flag: when
+supplied, the generator regenerates the parent ``marketplace.json`` after
+the plugin tree write so the unified manifest stays in lockstep with the
+trees it lists. Drift-CI gates the file, so any plugin emit that forgets
+``--repo-root`` is caught at CI time.
+
+v1.2 reconciliation collapsed the previous ``marketplace.surface.json``
+(schema-driven, engine-internal) into the boostvolt-shape
+``marketplace.json``: the refresh hook now writes a single file, sourced
+from per-plugin ``plugin.json`` metadata.
 """
 
 from __future__ import annotations
@@ -196,26 +196,34 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help=(
-            "Parent o2-scalpel repo root. When supplied, "
-            "marketplace.surface.json is regenerated under this directory "
-            "in the same run as the plugin tree write. Drift-CI requires "
-            "the regenerated marketplace.surface.json to land in the same "
-            "commit as the plugin-tree change — otherwise the gate fails."
+            "Parent o2-scalpel repo root. When supplied, marketplace.json "
+            "is regenerated under this directory in the same run as the "
+            "plugin tree write. Drift-CI requires the regenerated "
+            "marketplace.json to land in the same commit as the plugin-tree "
+            "change — otherwise the gate fails."
         ),
     )
     return p
 
 
 def _refresh_marketplace_surface(repo_root: Path) -> None:
-    """Regenerate ``<repo_root>/marketplace.surface.json`` from plugin trees.
+    """Regenerate ``<repo_root>/marketplace.json`` from plugin trees.
 
     Imports the marketplace builder lazily so a ``serena.refactoring`` import
     doesn't pull the marketplace package eagerly (cheap layering hygiene).
+
+    Function name preserved for backward call-site compatibility; the file
+    written is now the unified ``marketplace.json`` (v1.2 reconciliation
+    collapsed the previous parallel ``marketplace.surface.json``).
     """
 
-    from serena.marketplace.build import build_manifest, write_manifest
+    from serena.marketplace.build import (
+        _resolve_engine_sha,
+        build_manifest,
+        write_manifest,
+    )
 
-    manifest = build_manifest(repo_root)
+    manifest = build_manifest(repo_root, generator_sha=_resolve_engine_sha())
     write_manifest(repo_root, manifest)
 
 

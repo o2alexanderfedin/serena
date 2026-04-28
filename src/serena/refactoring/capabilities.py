@@ -36,6 +36,7 @@ from .multi_server import ProvenanceLiteral
 _DEFAULT_SOURCE_SERVER_BY_LANGUAGE: dict[str, ProvenanceLiteral] = {
     "python": "pylsp-rope",
     "rust": "rust-analyzer",
+    "markdown": "marksman",
 }
 
 
