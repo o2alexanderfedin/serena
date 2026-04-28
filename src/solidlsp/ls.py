@@ -689,10 +689,11 @@ class SolidLanguageServer(ABC):
     def _handle_register_capability(self, params: dict[str, Any]) -> None:
         """LSP `client/registerCapability` request: ACK with null per spec.
 
-        Side effect (Stage v0.2.0-followup-01c): for servers with a known
-        ``server_id``, record each registration's ``method`` into the
-        process-global ``DynamicCapabilityRegistry`` exposed by
-        ``ScalpelRuntime``. ``workspace_health`` then surfaces them in
+        Side effect (Stage v0.2.0-followup-01c, extended DLp1): for servers
+        with a known ``server_id``, record each registration's ``id``,
+        ``method``, and ``registerOptions`` into the process-global
+        ``DynamicCapabilityRegistry`` exposed by ``ScalpelRuntime``.
+        ``workspace_health`` then surfaces the methods via
         ``LanguageHealth.dynamic_capabilities``.
 
         rust-analyzer dynamically registers workspace/didChangeWatchedFiles
@@ -709,13 +710,36 @@ class SolidLanguageServer(ABC):
                 # Standalone solidlsp tests may not have a runtime; ACK silently.
                 return None
             for reg in params.get("registrations", []) or []:
-                method = reg.get("method") if isinstance(reg, dict) else None
-                if isinstance(method, str):
-                    registry.register(sid, method)
+                if not isinstance(reg, dict):
+                    continue
+                reg_id = reg.get("id")
+                method = reg.get("method")
+                if isinstance(reg_id, str) and isinstance(method, str):
+                    register_options = reg.get("registerOptions") or {}
+                    registry.register(sid, reg_id, method, register_options)
         return None
 
     def _handle_unregister_capability(self, params: dict[str, Any]) -> None:
-        """LSP `client/unregisterCapability` request: ACK with null per spec."""
+        """LSP `client/unregisterCapability` request: ACK with null per spec.
+
+        Side effect (DLp1): for servers with a known ``server_id``, remove
+        each unregistration's ``id`` from the process-global
+        ``DynamicCapabilityRegistry`` so that :meth:`DynamicCapabilityRegistry.has`
+        accurately reflects the live state.
+        """
+        sid = type(self).server_id
+        if sid:
+            try:
+                from serena.tools.scalpel_runtime import ScalpelRuntime  # noqa: PLC0415
+                registry = ScalpelRuntime.instance().dynamic_capability_registry()
+            except Exception:  # noqa: BLE001
+                return None
+            for unreg in params.get("unregisterations", []) or []:
+                if not isinstance(unreg, dict):
+                    continue
+                reg_id = unreg.get("id")
+                if isinstance(reg_id, str):
+                    registry.unregister(sid, reg_id)
         return None
 
     def _handle_show_message_request(self, params: dict[str, Any]) -> dict[str, Any] | None:
