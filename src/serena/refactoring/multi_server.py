@@ -38,6 +38,7 @@ ProvenanceLiteral = Literal[
     "rust-analyzer",
     "marksman",
     "vtsls",
+    "gopls",
 ]
 
 # Tuple of valid provenance values, derived from ``ProvenanceLiteral`` so the
