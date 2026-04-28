@@ -834,11 +834,13 @@ class ScalpelWorkspaceHealthTool(Tool):
 # ---------------------------------------------------------------------------
 
 
-# Per-language allow-list of executeCommand verbs. Stage 1G ships a
-# conservative whitelist; Stage 1H expands it as the deferred specialty
-# tools land. Anything outside the list is refused with
-# CAPABILITY_NOT_AVAILABLE so the LLM gets a structured candidate list.
-_EXECUTE_COMMAND_WHITELIST: dict[str, frozenset[str]] = {
+# Per-language fallback allow-list of executeCommand verbs.
+# Consulted only when a server's ``executeCommandProvider.commands`` field
+# is absent or empty (spec § 4.6 / DLp5: R2 — under-advertising servers).
+# The live allowlist is read at request time from each server's
+# ServerCapabilities and dynamic registrations via
+# MultiServerCoordinator.execute_command_allowlist().
+_EXECUTE_COMMAND_FALLBACK: dict[str, frozenset[str]] = {
     "python": frozenset({
         "pylsp.executeCommand",
         "rope.refactor.extract",
@@ -906,7 +908,15 @@ def _execute_via_coordinator(
 
 
 class ScalpelExecuteCommandTool(Tool):
-    """Server-specific JSON-RPC pass-through, whitelisted per language."""
+    """Server-specific JSON-RPC pass-through, allowlisted per language.
+
+    The live allowlist is read at request time from each server's
+    ``executeCommandProvider.commands`` (ServerCapabilities) and from
+    dynamic registrations (``client/registerCapability`` events with
+    method ``workspace/executeCommand``).  The static
+    ``_EXECUTE_COMMAND_FALLBACK`` is used only when a server has not
+    populated either source (spec § 4.6 / DLp5).
+    """
 
     DEFAULT_LANGUAGE: str = "python"  # cluster-prefix discipline §5.3
 
@@ -917,7 +927,7 @@ class ScalpelExecuteCommandTool(Tool):
         language: Literal["rust", "python"] | None = None,
         allow_out_of_workspace: bool = False,
     ) -> str:
-        """Server-specific JSON-RPC pass-through, whitelisted per
+        """Server-specific JSON-RPC pass-through, allowlisted per
         LanguageStrategy. Power-user escape hatch.
 
         :param command: the workspace/executeCommand verb (e.g.
@@ -932,33 +942,18 @@ class ScalpelExecuteCommandTool(Tool):
 
         arguments = arguments or []
         chosen_language = language or self.DEFAULT_LANGUAGE
-        if chosen_language not in _EXECUTE_COMMAND_WHITELIST:
+        if chosen_language not in _EXECUTE_COMMAND_FALLBACK:
             return _failure_result(
                 ErrorCode.INVALID_ARGUMENT,
                 "scalpel_execute_command",
                 f"Unknown language {chosen_language!r}; "
-                f"expected one of {sorted(_EXECUTE_COMMAND_WHITELIST)}.",
+                f"expected one of {sorted(_EXECUTE_COMMAND_FALLBACK)}.",
                 recoverable=False,
             ).model_dump_json(indent=2)
-        whitelist = _EXECUTE_COMMAND_WHITELIST[chosen_language]
-        if command not in whitelist:
-            failure = FailureInfo(
-                stage="scalpel_execute_command",
-                reason=(
-                    f"Command {command!r} is not in the {chosen_language!r} "
-                    "whitelist; expand "
-                    "vendor/serena/src/serena/tools/scalpel_primitives.py:"
-                    "_EXECUTE_COMMAND_WHITELIST to add it."
-                ),
-                code=ErrorCode.CAPABILITY_NOT_AVAILABLE,
-                recoverable=True,
-                candidates=tuple(sorted(whitelist)[:5]),
-            )
-            return RefactorResult(
-                applied=False,
-                diagnostics_delta=_empty_diagnostics_delta(),
-                failure=failure,
-            ).model_dump_json(indent=2)
+
+        # Build the live allowlist: union of all servers' live commands
+        # (ServerCapabilities + dynamic registrations), falling back to
+        # the static _EXECUTE_COMMAND_FALLBACK when no live data is found.
         project_root = Path(self.get_project_root())
         try:
             lang_enum = Language(chosen_language)
@@ -968,6 +963,40 @@ class ScalpelExecuteCommandTool(Tool):
                 "scalpel_execute_command",
                 f"Language {chosen_language!r} is not registered.",
                 recoverable=False,
+            ).model_dump_json(indent=2)
+
+        runtime = ScalpelRuntime.instance()
+        coord = runtime.coordinator_for(lang_enum, project_root)
+        per_language_fallback = _EXECUTE_COMMAND_FALLBACK[chosen_language]
+        # Union allowlists from all servers in the pool.
+        allowlist: frozenset[str] = frozenset()
+        for server_id in coord.servers:
+            allowlist = allowlist | coord.execute_command_allowlist(
+                server_id, per_language_fallback
+            )
+        # If no server returned commands, fall back to the static set.
+        if not allowlist:
+            allowlist = per_language_fallback
+
+        if command not in allowlist:
+            failure = FailureInfo(
+                stage="scalpel_execute_command",
+                reason=(
+                    f"Command {command!r} is not in the {chosen_language!r} "
+                    "allowlist.  The live allowlist is derived from "
+                    "executeCommandProvider.commands in each server's "
+                    "ServerCapabilities; the fallback is "
+                    "vendor/serena/src/serena/tools/scalpel_primitives.py:"
+                    "_EXECUTE_COMMAND_FALLBACK."
+                ),
+                code=ErrorCode.CAPABILITY_NOT_AVAILABLE,
+                recoverable=True,
+                candidates=tuple(sorted(allowlist)[:5]),
+            )
+            return RefactorResult(
+                applied=False,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                failure=failure,
             ).model_dump_json(indent=2)
         result = _execute_via_coordinator(
             language=lang_enum,
