@@ -83,8 +83,10 @@ def inverse_workspace_edit(
             uri = change["uri"]
             original = snapshot.get(uri, "")
             if original == _SNAPSHOT_DIRECTORY:
-                # Best effort: re-create empty directory marker; deep tree
-                # restoration is out of scope (deferred to v1.1 disk checkpoints).
+                # Best effort: re-create empty directory marker. Deep-tree
+                # restoration (recursive snapshot of files inside the
+                # directory at delete time) is deferred to v1.6 (LO-3) —
+                # ``scalpel_undo_last`` only re-creates an empty placeholder.
                 inv.append({"kind": "create", "uri": uri})
             else:
                 inv.append({"kind": "create", "uri": uri, "options": {"overwrite": True}})
