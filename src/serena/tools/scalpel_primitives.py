@@ -1067,6 +1067,7 @@ def _installer_registry() -> dict[str, type]:
     from serena.installer.basedpyright_installer import BasedpyrightInstaller
     from serena.installer.clangd_installer import ClangdInstaller
     from serena.installer.clippy_installer import ClippyInstaller
+    from serena.installer.csharp_ls_installer import CsharpLsInstaller
     from serena.installer.gopls_installer import GoplsInstaller
     from serena.installer.jdtls_installer import JdtlsInstaller
     from serena.installer.lean_installer import LeanInstaller
@@ -1094,6 +1095,7 @@ def _installer_registry() -> dict[str, type]:
         "smt2": Smt2Installer,
         "prolog": PrologInstaller,
         "problog": ProblogInstaller,
+        "csharp": CsharpLsInstaller,
     }
 
 
