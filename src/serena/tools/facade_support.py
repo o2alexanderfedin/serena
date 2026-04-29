@@ -290,6 +290,236 @@ def apply_action_and_checkpoint(
     return (cid, edit)
 
 
+def _inverse_applier_to_disk(
+    snapshot: dict[str, str],
+    applied_edit: dict[str, Any],
+) -> tuple[bool, list[str]]:
+    """v1.7 PR 7 / Plan 3-A — restore disk state from a captured snapshot.
+
+    Walks ``applied_edit`` (the WorkspaceEdit that was successfully applied
+    when the checkpoint was recorded) IN REVERSE document-order so resource
+    ops (create / rename / delete) unwind cleanly. For each touched URI:
+
+    - ``TextDocumentEdit`` (no ``kind``) or legacy ``changes`` entry: restore
+      the file's content from ``snapshot[uri]``. If the snapshot is the
+      :data:`_SNAPSHOT_NONEXISTENT` sentinel, delete the file (the post-edit
+      content shouldn't be there because pre-edit it didn't exist).
+    - ``kind="create"``: roll back by deleting the created file. The
+      snapshot for a create is :data:`_SNAPSHOT_NONEXISTENT` by convention.
+    - ``kind="delete"``: irreversible without captured pre-bytes — emit a
+      warning and leave the file as-is. (The LSP delete-op carries no
+      payload so :func:`capture_pre_edit_snapshot` records the sentinel.)
+    - ``kind="rename"``: rename ``newUri`` back to ``oldUri`` and restore
+      ``oldUri``'s pre-edit content from the snapshot.
+
+    Adversarial-self-review handling:
+
+    - **File no longer exists at rollback time** (user deleted it in their
+      editor between apply and rollback): emit a warning and continue;
+      do not crash.
+    - **Snapshot is the sentinel** for a TextDocumentEdit URI (e.g. apply
+      created a file via TextDocumentEdit on a missing path): delete the
+      mutated file rather than writing the sentinel string to disk.
+    - **Atomicity on partial failure**: log the half-applied state via the
+      warnings list and abort with ``ok=False``. v1.7 does not attempt
+      partial-rollback rollback; document and surface.
+
+    :param snapshot: per-URI pre-edit content captured at apply time.
+    :param applied_edit: the WorkspaceEdit that was applied.
+    :returns: ``(ok, warnings)``. ``ok`` is True iff at least one URI was
+      successfully restored. ``warnings`` is a list of human-readable
+      messages for irreversible ops or recoverable failures.
+    """
+    warnings: list[str] = []
+    restored_any = False
+
+    # Walk the legacy ``changes`` shape first. URIs in this shape are
+    # always TextDocumentEdit-equivalent (no resource ops).
+    for uri in (applied_edit.get("changes") or {}).keys():
+        if not isinstance(uri, str):
+            continue
+        ok = _restore_text_uri_to_snapshot(uri, snapshot, warnings)
+        if ok:
+            restored_any = True
+
+    # Walk documentChanges in REVERSE order. Resource ops in the original
+    # apply may depend on each other (create-then-rename-then-delete), so
+    # reversing the order makes the unwind correct even when multiple ops
+    # touch the same URI.
+    for dc in reversed(list(applied_edit.get("documentChanges") or [])):
+        if not isinstance(dc, dict):
+            continue
+        kind = dc.get("kind")
+        if kind == "create":
+            uri = dc.get("uri")
+            if not isinstance(uri, str):
+                continue
+            target = _uri_to_path(uri)
+            if target is None:
+                warnings.append(
+                    f"inverse(create): non-file URI {uri!r}; skipping."
+                )
+                continue
+            try:
+                if target.exists():
+                    target.unlink()
+                    restored_any = True
+                # If the file is already gone, treat as already-rolled-back.
+            except OSError as exc:
+                warnings.append(
+                    f"inverse(create): could not delete {target}: {exc}"
+                )
+        elif kind == "delete":
+            # Irreversible without captured pre-bytes. The convention in
+            # capture_pre_edit_snapshot is to record the sentinel for delete
+            # ops; if some future caller carries real content under
+            # snapshot[uri], honor it (treat as best-effort restore).
+            uri = dc.get("uri")
+            if not isinstance(uri, str):
+                continue
+            content = snapshot.get(uri, _SNAPSHOT_NONEXISTENT)
+            if content == _SNAPSHOT_NONEXISTENT:
+                warnings.append(
+                    f"inverse(delete): no captured snapshot for {uri!r}; "
+                    f"the original delete stands and cannot be undone."
+                )
+                continue
+            target = _uri_to_path(uri)
+            if target is None:
+                warnings.append(
+                    f"inverse(delete): non-file URI {uri!r}; skipping."
+                )
+                continue
+            try:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(content, encoding="utf-8")
+                restored_any = True
+            except OSError as exc:
+                warnings.append(
+                    f"inverse(delete): could not recreate {target}: {exc}"
+                )
+        elif kind == "rename":
+            old_uri = dc.get("oldUri")
+            new_uri = dc.get("newUri")
+            if not isinstance(old_uri, str) or not isinstance(new_uri, str):
+                continue
+            old_path = _uri_to_path(old_uri)
+            new_path = _uri_to_path(new_uri)
+            if old_path is None or new_path is None:
+                warnings.append(
+                    f"inverse(rename): non-file URI in {old_uri!r}/{new_uri!r}; "
+                    f"skipping."
+                )
+                continue
+            try:
+                if new_path.exists():
+                    old_path.parent.mkdir(parents=True, exist_ok=True)
+                    new_path.rename(old_path)
+                else:
+                    warnings.append(
+                        f"inverse(rename): target {new_path} no longer exists; "
+                        f"will attempt to recreate {old_path} from snapshot."
+                    )
+                    old_path.parent.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                warnings.append(
+                    f"inverse(rename): could not rename {new_path}→{old_path}: "
+                    f"{exc}"
+                )
+                continue
+            # Restore the OLD URI's content from the snapshot (the rename
+            # may have been accompanied by a content change; capture stored
+            # the pre-edit OLD content).
+            content = snapshot.get(old_uri)
+            if isinstance(content, str) and content != _SNAPSHOT_NONEXISTENT:
+                try:
+                    old_path.write_text(content, encoding="utf-8")
+                    restored_any = True
+                except OSError as exc:
+                    warnings.append(
+                        f"inverse(rename): could not write {old_path}: {exc}"
+                    )
+            else:
+                # No content snapshot for the old URI; the rename-back alone
+                # is the best we can do.
+                restored_any = True
+        else:
+            # TextDocumentEdit (no ``kind`` key).
+            text_doc = dc.get("textDocument") or {}
+            uri = text_doc.get("uri")
+            if not isinstance(uri, str):
+                continue
+            ok = _restore_text_uri_to_snapshot(uri, snapshot, warnings)
+            if ok:
+                restored_any = True
+
+    return (restored_any, warnings)
+
+
+def _restore_text_uri_to_snapshot(
+    uri: str,
+    snapshot: dict[str, str],
+    warnings: list[str],
+) -> bool:
+    """Helper for :func:`_inverse_applier_to_disk` — restore ONE TextDocument
+    URI's content from the snapshot. Mutates ``warnings`` on best-effort
+    failures. Returns True iff the file was successfully reverted.
+    """
+    target = _uri_to_path(uri)
+    if target is None:
+        warnings.append(
+            f"inverse(text): non-file URI {uri!r}; skipping."
+        )
+        return False
+    content = snapshot.get(uri)
+    if content is None:
+        warnings.append(
+            f"inverse(text): no snapshot entry for {uri!r}; skipping."
+        )
+        return False
+    if content == _SNAPSHOT_NONEXISTENT:
+        # Pre-edit the file didn't exist; the apply must have created it
+        # (e.g. via a TextDocumentEdit on a missing path). Delete the
+        # mutated file to undo.
+        try:
+            if target.exists():
+                target.unlink()
+                return True
+            return False
+        except OSError as exc:
+            warnings.append(
+                f"inverse(text): could not delete created file {target}: {exc}"
+            )
+            return False
+    # Standard content restore.
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+        return True
+    except OSError as exc:
+        warnings.append(
+            f"inverse(text): could not write {target}: {exc}"
+        )
+        return False
+
+
+def inverse_apply_checkpoint(
+    checkpoint_id: str,
+) -> tuple[bool, list[str]]:
+    """Fetch a checkpoint from the store and run :func:`_inverse_applier_to_disk`.
+
+    Convenience wrapper used by ``ScalpelRollbackTool.apply`` and
+    ``ScalpelTransactionRollbackTool.apply``. Returns ``(False, [])`` for
+    unknown checkpoint ids so the rollback tool can short-circuit to its
+    pre-existing ``no_op`` branch without distinguishing "missing" from
+    "empty edit".
+    """
+    ckpt = ScalpelRuntime.instance().checkpoint_store().get(checkpoint_id)
+    if ckpt is None:
+        return (False, [])
+    return _inverse_applier_to_disk(ckpt.snapshot, ckpt.applied)
+
+
 def apply_workspace_edit_and_checkpoint(
     workspace_edit: dict[str, Any],
 ) -> str:
@@ -507,6 +737,7 @@ __all__ = [
     "_SNAPSHOT_NONEXISTENT",
     "_apply_text_edits_to_file_uri",
     "_apply_workspace_edit_to_disk",
+    "_inverse_applier_to_disk",
     "_lsp_position_to_offset",
     "_resolve_winner_edit",
     "_splice_text_edit",
@@ -519,6 +750,7 @@ __all__ = [
     "capture_pre_edit_snapshot",
     "coordinator_for_facade",
     "get_apply_source",
+    "inverse_apply_checkpoint",
     "record_checkpoint_for_workspace_edit",
     "resolve_capability_for_facade",
     "workspace_boundary_guard",

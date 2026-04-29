@@ -11,19 +11,22 @@ Three families of assertions on the Scalpel* tool docstrings:
    ``generate_constructor.include_fields``,
    ``override_methods.method_names``, and ``rename.also_in_strings``.
 
-2. **2 rollback ``WARNING:`` tests**: ``ScalpelRollbackTool`` and
-   ``ScalpelTransactionRollbackTool`` docstrings each MUST contain
-   ``WARNING:`` and the phrase ``does NOT undo`` so the LLM caller is
-   warned that rollback is checkpoint-bookkeeping, not on-disk inverse.
+2. **2 rollback success-contract tests**: ``ScalpelRollbackTool`` and
+   ``ScalpelTransactionRollbackTool`` docstrings each MUST contain the
+   phrase ``Restores edits to disk`` and the word ``snapshot`` so the LLM
+   caller knows rollback writes pre-edit content back to disk (v1.7 P7
+   landed the on-disk inverse-applier — replaced the v1.6 ``WARNING:``
+   block).
 
 3. **Drift-CI gate** (``test_dropped_params_carry_informational_tag``):
    AST-scan every ``Scalpel*Tool.apply()`` body for ``del <name>``
    statements. For every dropped name that is NOT a recognised technical
    parameter (``preview_token``, ``language``, ``dry_run``), assert the
-   class docstring contains the parameter name AND ``informational``
-   (or ``WARNING:`` for the rollback pair). This gate prevents future
-   regressions where a maintainer adds a new ``del <param>`` without
-   the corresponding docstring honesty.
+   class docstring contains the parameter name AND ``informational``.
+   This gate prevents future regressions where a maintainer adds a new
+   ``del <param>`` without the corresponding docstring honesty. (The
+   rollback pair carries no ``del`` statements after v1.7 P7, so the
+   special-case ``WARNING:`` opener-tag exception was retired.)
 
 Plan source: docs/superpowers/plans/2026-04-29-stub-facade-fix/IMPLEMENTATION-PLANS.md  Plan 5
 """
@@ -105,7 +108,9 @@ def test_facade_informational_tag(qualified: str, param: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Rollback WARNING tests (2)
+# Rollback success-contract tests (2) — v1.7 P7 replaced the v1.6 ``WARNING:``
+# block with a real on-disk inverse-applier; the gate now asserts the new
+# success-contract phrasing.
 # ---------------------------------------------------------------------------
 
 _ROLLBACK_TOOLS: tuple[type, ...] = (
@@ -115,13 +120,24 @@ _ROLLBACK_TOOLS: tuple[type, ...] = (
 
 
 @pytest.mark.parametrize("cls", _ROLLBACK_TOOLS)
-def test_rollback_warning_block_present(cls: type) -> None:
+def test_rollback_success_contract_phrasing_present(cls: type) -> None:
+    """v1.7 P7 — rollback docstrings must advertise the on-disk restore
+    contract (replaced the v1.6 ``WARNING: does NOT undo`` block)."""
     doc = _full_docstring(cls)
-    assert "WARNING:" in doc, (
-        f"{cls.__name__} docstring missing the 'WARNING:' opener"
+    assert "Restores edits to disk" in doc, (
+        f"{cls.__name__} docstring missing the 'Restores edits to disk' "
+        f"success-contract phrase introduced by v1.7 P7."
     )
-    assert "does NOT undo" in doc, (
-        f"{cls.__name__} docstring missing the 'does NOT undo' phrasing"
+    assert "snapshot" in doc.lower(), (
+        f"{cls.__name__} docstring missing the 'snapshot' wording — the "
+        f"caller needs to know rollback uses the captured pre-edit snapshot."
+    )
+    # Defence in depth: the v1.6 ``WARNING: does NOT undo`` lie must NOT
+    # creep back in after the v1.7 P7 fix.
+    assert "does NOT undo" not in doc, (
+        f"{cls.__name__} docstring still carries the v1.6 'does NOT undo' "
+        f"phrasing; v1.7 P7 made rollback restore to disk — update the "
+        f"docstring to match the new contract."
     )
 
 
@@ -187,11 +203,6 @@ def _all_dropped_user_params() -> list[tuple[type, str]]:
     return items
 
 
-_ROLLBACK_TOOL_NAMES: frozenset[str] = frozenset({
-    "ScalpelRollbackTool", "ScalpelTransactionRollbackTool",
-})
-
-
 @pytest.mark.parametrize(
     "cls,param",
     _all_dropped_user_params(),
@@ -199,18 +210,19 @@ _ROLLBACK_TOOL_NAMES: frozenset[str] = frozenset({
 )
 def test_dropped_params_carry_informational_tag(cls: type, param: str) -> None:
     """Drift gate: every user-facing ``del <name>`` must be opener-tagged
-    in the class docstring as ``informational`` (or ``WARNING:`` for the
-    rollback pair).
+    in the class docstring as ``informational``.
+
+    v1.7 P7 retired the rollback-pair ``WARNING:`` exception because those
+    tools no longer drop user-facing params after the on-disk inverse-applier
+    landed. Should a future rollback tool introduce a ``del <param>``, the
+    standard ``informational`` tag applies.
     """
     doc = _full_docstring(cls)
     assert param in doc, (
         f"{cls.__name__}.apply() drops user-facing param {param!r} but "
         f"the docstring never mentions it. Add an 'informational' note."
     )
-    expected_tag = (
-        "WARNING:" if cls.__name__ in _ROLLBACK_TOOL_NAMES else "informational"
-    )
-    assert expected_tag.lower() in doc.lower(), (
+    assert "informational" in doc.lower(), (
         f"{cls.__name__}.apply() drops user-facing param {param!r} but "
-        f"the docstring lacks the expected {expected_tag!r} opener-tag."
+        f"the docstring lacks the expected 'informational' opener-tag."
     )
