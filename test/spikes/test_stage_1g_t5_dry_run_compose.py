@@ -60,54 +60,48 @@ def test_apply_records_per_step_preview(tmp_path: Path) -> None:
     assert payload["per_step"][0]["step_index"] == 0
 
 
+def _zero_diagnostics_dict() -> dict:
+    zero = {"error": 0, "warning": 0, "information": 0, "hint": 0}
+    return {
+        "before": zero,
+        "after": zero,
+        "new_findings": [],
+        "severity_breakdown": zero,
+    }
+
+
+def _ok_payload() -> str:
+    return json.dumps({
+        "applied": True, "no_op": False, "changes": [],
+        "diagnostics_delta": _zero_diagnostics_dict(),
+    })
+
+
+def _failure_payload(reason: str, recoverable: bool = False) -> str:
+    return json.dumps({
+        "applied": False, "no_op": False, "changes": [],
+        "diagnostics_delta": _zero_diagnostics_dict(),
+        "failure": {
+            "stage": "dry_run", "reason": reason,
+            "code": "INTERNAL_ERROR", "recoverable": recoverable,
+            "candidates": [],
+        },
+    })
+
+
 def test_apply_fail_fast_default_aborts_at_first_failure(tmp_path: Path) -> None:
     tool = _build_tool(tmp_path)
-    with patch(
-        "serena.tools.scalpel_primitives._dry_run_one_step",
-    ) as mock_step:
-        from serena.tools.scalpel_schemas import (
-            DiagnosticsDelta,
-            DiagnosticSeverityBreakdown,
-            ErrorCode,
-            FailureInfo,
-            StepPreview,
-        )
-        zero = DiagnosticSeverityBreakdown()
-        mock_step.side_effect = [
-            StepPreview(
-                step_index=0,
-                tool="ok_tool",
-                changes=(),
-                diagnostics_delta=DiagnosticsDelta(
-                    before=zero, after=zero, new_findings=(),
-                    severity_breakdown=zero,
-                ),
-                failure=None,
-            ),
-            StepPreview(
-                step_index=1,
-                tool="fail_tool",
-                changes=(),
-                diagnostics_delta=DiagnosticsDelta(
-                    before=zero, after=zero, new_findings=(),
-                    severity_breakdown=zero,
-                ),
-                failure=FailureInfo(
-                    stage="dry_run", reason="boom",
-                    code=ErrorCode.INTERNAL_ERROR, recoverable=False,
-                ),
-            ),
-            StepPreview(
-                step_index=2,
-                tool="never_run",
-                changes=(),
-                diagnostics_delta=DiagnosticsDelta(
-                    before=zero, after=zero, new_findings=(),
-                    severity_breakdown=zero,
-                ),
-                failure=None,
-            ),
-        ]
+    # Plan 4 (PR 5): drive _dry_run_one_step through real _FACADE_DISPATCH
+    # rather than monkey-patching the function out. Each fake returns a
+    # RefactorResult.model_dump_json() blob the body now projects.
+    fake_ok = MagicMock(return_value=_ok_payload())
+    fake_fail = MagicMock(return_value=_failure_payload("boom", recoverable=False))
+    fake_never = MagicMock(return_value=_ok_payload())
+    with patch.dict(
+        "serena.tools.scalpel_facades._FACADE_DISPATCH",
+        {"ok_tool": fake_ok, "fail_tool": fake_fail, "never_run": fake_never},
+        clear=False,
+    ):
         raw = tool.apply(
             steps=[
                 {"tool": "ok_tool", "args": {}},
@@ -120,48 +114,20 @@ def test_apply_fail_fast_default_aborts_at_first_failure(tmp_path: Path) -> None
     assert len(payload["per_step"]) == 2
     assert payload["per_step"][1]["failure"]["code"] == "INTERNAL_ERROR"
     assert any("TRANSACTION_ABORTED" in w for w in payload["warnings"])
+    # Fail-fast: third facade must never be invoked.
+    fake_never.assert_not_called()
 
 
 def test_apply_fail_fast_false_continues_through_failures(tmp_path: Path) -> None:
     tool = _build_tool(tmp_path)
-    with patch(
-        "serena.tools.scalpel_primitives._dry_run_one_step",
-    ) as mock_step:
-        from serena.tools.scalpel_schemas import (
-            DiagnosticsDelta,
-            DiagnosticSeverityBreakdown,
-            ErrorCode,
-            FailureInfo,
-            StepPreview,
-        )
-        zero = DiagnosticSeverityBreakdown()
-        mock_step.side_effect = [
-            StepPreview(
-                step_index=0, tool="ok", changes=(),
-                diagnostics_delta=DiagnosticsDelta(
-                    before=zero, after=zero, new_findings=(),
-                    severity_breakdown=zero,
-                ), failure=None,
-            ),
-            StepPreview(
-                step_index=1, tool="fail", changes=(),
-                diagnostics_delta=DiagnosticsDelta(
-                    before=zero, after=zero, new_findings=(),
-                    severity_breakdown=zero,
-                ),
-                failure=FailureInfo(
-                    stage="dry_run", reason="boom",
-                    code=ErrorCode.INTERNAL_ERROR, recoverable=True,
-                ),
-            ),
-            StepPreview(
-                step_index=2, tool="ok2", changes=(),
-                diagnostics_delta=DiagnosticsDelta(
-                    before=zero, after=zero, new_findings=(),
-                    severity_breakdown=zero,
-                ), failure=None,
-            ),
-        ]
+    fake_ok = MagicMock(return_value=_ok_payload())
+    fake_fail = MagicMock(return_value=_failure_payload("boom", recoverable=True))
+    fake_ok2 = MagicMock(return_value=_ok_payload())
+    with patch.dict(
+        "serena.tools.scalpel_facades._FACADE_DISPATCH",
+        {"ok": fake_ok, "fail": fake_fail, "ok2": fake_ok2},
+        clear=False,
+    ):
         raw = tool.apply(
             steps=[{"tool": "ok", "args": {}},
                    {"tool": "fail", "args": {}},
@@ -170,6 +136,10 @@ def test_apply_fail_fast_false_continues_through_failures(tmp_path: Path) -> Non
         )
     payload = json.loads(raw)
     assert len(payload["per_step"]) == 3
+    # fail_fast=False: every facade is invoked even if middle one fails.
+    fake_ok.assert_called_once()
+    fake_fail.assert_called_once()
+    fake_ok2.assert_called_once()
 
 
 def test_apply_invalid_step_payload_returns_invalid_argument(tmp_path: Path) -> None:
