@@ -17,6 +17,9 @@ from typing import Any, Literal
 from serena.refactoring import STRATEGY_REGISTRY
 from serena.refactoring.capabilities import CapabilityRecord
 from serena.refactoring.pending_tx import AnnotationGroup, PendingTransaction
+from serena.tools.facade_support import (
+    _apply_workspace_edit_to_disk,
+)
 from serena.tools.scalpel_runtime import ScalpelRuntime
 from serena.tools.scalpel_schemas import (
     CapabilityDescriptor,
@@ -612,10 +615,10 @@ class ScalpelConfirmAnnotationsTool(Tool):
         :return: JSON {transaction_id, applied_groups, rejected_groups,
             applied_edits, error_code?}.
         """
-        # Local imports avoid pulling the facade module into every consumer
-        # of scalpel_primitives at import time (Stage 1G — primitives must
-        # stay light to keep MCP startup snappy).
-        from serena.tools.scalpel_facades import _apply_workspace_edit_to_disk
+        # ``_apply_workspace_edit_to_disk`` is imported at module top via
+        # ``serena.tools.facade_support`` (v1.6 Plan 0) — the prior lazy
+        # import was kept to avoid the ``scalpel_primitives <->
+        # scalpel_facades`` cycle, which is now broken.
         import json as _json
 
         runtime = ScalpelRuntime.instance()
