@@ -1848,7 +1848,7 @@ class ScalpelExpandMacroTool(Tool):
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult with the expansion in language_findings.
         """
-        del preview_token, dry_run
+        del preview_token
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -1863,6 +1863,16 @@ class ScalpelExpandMacroTool(Tool):
                 stage="scalpel_expand_macro",
                 reason="expand_macro is rust-analyzer-only.",
                 recoverable=False,
+            ).model_dump_json(indent=2)
+        # v1.5 G2 (HI-12 safety): honor dry_run BEFORE invoking the LSP.
+        # rust-analyzer's expandMacro is read-only on disk but kicks off
+        # background work; dry_run=True must be a true no-side-effect preview.
+        if dry_run:
+            return RefactorResult(
+                applied=False, no_op=False,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                preview_token=f"pv_expand_macro_{int(time.time())}",
+                duration_ms=0,
             ).model_dump_json(indent=2)
         coord = coordinator_for_facade(language="rust", project_root=project_root)
         t0 = time.monotonic()
@@ -1912,7 +1922,7 @@ class ScalpelVerifyAfterRefactorTool(Tool):
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult with a verify_summary in language_findings.
         """
-        del preview_token, dry_run
+        del preview_token
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -1927,6 +1937,16 @@ class ScalpelVerifyAfterRefactorTool(Tool):
                 stage="scalpel_verify_after_refactor",
                 reason="verify_after_refactor is rust-analyzer-only.",
                 recoverable=False,
+            ).model_dump_json(indent=2)
+        # v1.5 G2 (HI-12 safety): honor dry_run BEFORE invoking flycheck.
+        # flycheck triggers ``cargo check`` on disk; dry_run=True must
+        # short-circuit the side effect entirely.
+        if dry_run:
+            return RefactorResult(
+                applied=False, no_op=False,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                preview_token=f"pv_verify_after_refactor_{int(time.time())}",
+                duration_ms=0,
             ).model_dump_json(indent=2)
         coord = coordinator_for_facade(language="rust", project_root=project_root)
         t0 = time.monotonic()
