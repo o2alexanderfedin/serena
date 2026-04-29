@@ -752,7 +752,7 @@
       "language": "smt2",
       "params_schema": {},
       "preferred_facade": null,
-      "source_server": "smt2-lsp"
+      "source_server": "dolmenls"
     },
     {
       "extension_allow_list": [
