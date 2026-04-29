@@ -889,12 +889,24 @@ class SolidLanguageServer(ABC):
 
         If the server returns None or a non-dict response (e.g.,
         unsupported), return the input action unchanged so callers can
-        use the response uniformly.
+        use the response uniformly. Servers that reject the method with
+        ``-32601 Method Not Found`` (pylsp >=1.14 lacks ``codeAction/
+        resolve`` advertisement when no plugin opts in) are handled the
+        same way — input action is returned unchanged so the caller's
+        ``edit is None`` skip path triggers.
 
         Per-call timeout is governed by the instance-level
         ``set_request_timeout()``.
         """
-        response = self.server.send_request("codeAction/resolve", action)
+        from solidlsp.ls_exceptions import SolidLSPException
+        try:
+            response = self.server.send_request("codeAction/resolve", action)
+        except SolidLSPException as exc:
+            cause = getattr(exc, "__cause__", None)
+            blob = repr(cause) if cause is not None else str(exc)
+            if "-32601" in blob or "Method Not Found" in blob:
+                return action
+            raise
         if not isinstance(response, dict):
             return action
         return response
