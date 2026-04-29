@@ -613,7 +613,7 @@
       "kind": "refactor.extract",
       "language": "python",
       "params_schema": {},
-      "preferred_facade": null,
+      "preferred_facade": "scalpel_extract",
       "source_server": "pylsp-rope"
     },
     {
@@ -625,7 +625,7 @@
       "kind": "refactor.inline",
       "language": "python",
       "params_schema": {},
-      "preferred_facade": null,
+      "preferred_facade": "scalpel_inline",
       "source_server": "pylsp-rope"
     },
     {
@@ -661,7 +661,7 @@
       "kind": "source.fixAll",
       "language": "python",
       "params_schema": {},
-      "preferred_facade": null,
+      "preferred_facade": "scalpel_fix_lints",
       "source_server": "ruff"
     },
     {
@@ -673,7 +673,7 @@
       "kind": "source.organizeImports",
       "language": "python",
       "params_schema": {},
-      "preferred_facade": null,
+      "preferred_facade": "scalpel_imports_organize",
       "source_server": "ruff"
     },
     {
@@ -695,7 +695,7 @@
       "kind": "refactor.extract",
       "language": "rust",
       "params_schema": {},
-      "preferred_facade": null,
+      "preferred_facade": "scalpel_extract",
       "source_server": "rust-analyzer"
     },
     {
@@ -706,7 +706,7 @@
       "kind": "refactor.inline",
       "language": "rust",
       "params_schema": {},
-      "preferred_facade": null,
+      "preferred_facade": "scalpel_inline",
       "source_server": "rust-analyzer"
     },
     {
@@ -728,7 +728,7 @@
       "kind": "refactor.rewrite",
       "language": "rust",
       "params_schema": {},
-      "preferred_facade": null,
+      "preferred_facade": "scalpel_change_visibility",
       "source_server": "rust-analyzer"
     },
     {
@@ -739,7 +739,7 @@
       "kind": "source.organizeImports",
       "language": "rust",
       "params_schema": {},
-      "preferred_facade": null,
+      "preferred_facade": "scalpel_imports_organize",
       "source_server": "rust-analyzer"
     },
     {

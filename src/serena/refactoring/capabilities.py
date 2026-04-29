@@ -316,8 +316,34 @@ def build_capability_catalog(
                     kind=kind,
                     source_server=attributed,
                     params_schema={},
-                    preferred_facade=None,
+                    preferred_facade=KIND_TO_FACADE.get((attributed, kind)),
                     extension_allow_list=strategy_cls.extension_allow_list,
                 )
             )
     return CapabilityCatalog(records=tuple(records))
+
+
+# v1.5 Phase 1 — populates the previously-null `preferred_facade` schema field.
+# Tuple-keyed on (source_server, kind) because kind strings collide across LSPs.
+# Spec: docs/superpowers/specs/2026-04-29-lsp-feature-coverage-spec.md § 3.2
+#
+# Reconciliation note: the catalog stores FAMILY-level kinds (e.g.
+# ``refactor.extract``); LSP §3.18.1 prefix matching means rust-analyzer's
+# ``refactor.extract.function`` auto-matches the family entry at runtime.
+# Subfamily-only routing (changeVisibility, expandMacro, localToField,
+# useFunction, deriveImpl, basedpyright source.organizeImports) is handled
+# at dispatch time by the dynamic-capability registry, not by this static
+# routing-hint table — those subfamilies have no catalog row to populate.
+KIND_TO_FACADE: dict[tuple[ProvenanceLiteral, str], str] = {
+    # rust-analyzer (family-level)
+    ("rust-analyzer", "refactor.extract"): "scalpel_extract",
+    ("rust-analyzer", "refactor.inline"): "scalpel_inline",
+    ("rust-analyzer", "refactor.rewrite"): "scalpel_change_visibility",
+    ("rust-analyzer", "source.organizeImports"): "scalpel_imports_organize",
+    # pylsp-rope (Python)
+    ("pylsp-rope", "refactor.extract"): "scalpel_extract",
+    ("pylsp-rope", "refactor.inline"): "scalpel_inline",
+    # ruff (Python)
+    ("ruff", "source.fixAll"): "scalpel_fix_lints",
+    ("ruff", "source.organizeImports"): "scalpel_imports_organize",
+}
