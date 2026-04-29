@@ -21,8 +21,10 @@ from serena.tools.facade_support import (
     _resolve_winner_edit,
     _splice_text_edit,
     _uri_to_path,
+    apply_action_and_checkpoint,
     attach_apply_source,
     build_failure_result,
+    capture_pre_edit_snapshot,
     coordinator_for_facade,
     record_checkpoint_for_workspace_edit,
     workspace_boundary_guard,
@@ -274,13 +276,10 @@ class ScalpelSplitFileTool(Tool):
                 preview_token=f"pv_split_{int(time.time())}",
                 duration_ms=elapsed_ms,
             )
-        # v0.3.0 facade-application: apply the resolved WorkspaceEdit if available.
-        edit = _resolve_winner_edit(coord, actions[0])
-        if isinstance(edit, dict) and edit:
-            _apply_workspace_edit_to_disk(edit)
-        else:
-            edit = {"changes": {}}
-        cid = record_checkpoint_for_workspace_edit(workspace_edit=edit, snapshot={})
+        # v1.6 P1: apply_action_and_checkpoint resolves, snapshots, applies,
+        # and records the checkpoint in one call. Pre-edit snapshot is real
+        # content (not the v0.2.0 ``snapshot={}`` placeholder).
+        cid, _edit = apply_action_and_checkpoint(coord, actions[0])
         return RefactorResult(
             applied=True,
             diagnostics_delta=_empty_diagnostics_delta(),
@@ -449,13 +448,8 @@ class ScalpelExtractTool(Tool):
                 preview_token=f"pv_extract_{int(time.time())}",
                 duration_ms=elapsed_ms,
             ).model_dump_json(indent=2)
-        # v0.3.0 facade-application: apply the resolved WorkspaceEdit if available.
-        edit = _resolve_winner_edit(coord, actions[0])
-        if isinstance(edit, dict) and edit:
-            _apply_workspace_edit_to_disk(edit)
-        else:
-            edit = {"changes": {}}
-        cid = record_checkpoint_for_workspace_edit(workspace_edit=edit, snapshot={})
+        # v1.6 P1: real-snapshot apply + checkpoint via the consolidated helper.
+        cid, _edit = apply_action_and_checkpoint(coord, actions[0])
         return RefactorResult(
             applied=True,
             diagnostics_delta=_empty_diagnostics_delta(),
@@ -571,13 +565,8 @@ class ScalpelInlineTool(Tool):
                 preview_token=f"pv_inline_{int(time.time())}",
                 duration_ms=elapsed_ms,
             ).model_dump_json(indent=2)
-        # v0.3.0 facade-application: apply the resolved WorkspaceEdit if available.
-        edit = _resolve_winner_edit(coord, actions[0])
-        if isinstance(edit, dict) and edit:
-            _apply_workspace_edit_to_disk(edit)
-        else:
-            edit = {"changes": {}}
-        cid = record_checkpoint_for_workspace_edit(workspace_edit=edit, snapshot={})
+        # v1.6 P1: real-snapshot apply + checkpoint via the consolidated helper.
+        cid, _edit = apply_action_and_checkpoint(coord, actions[0])
         return RefactorResult(
             applied=True,
             diagnostics_delta=_empty_diagnostics_delta(),
@@ -949,19 +938,30 @@ class ScalpelImportsOrganizeTool(Tool):
                 duration_ms=elapsed_ms,
                 warnings=tuple(warnings),
             ).model_dump_json(indent=2)
-        # v0.3.0 facade-application: apply every action's resolved edit
-        # (multi-file imports_organize touches every file passed in).
+        # v1.6 P1: multi-action variant — capture pre-edit snapshots BEFORE
+        # any apply (so the snapshot reflects the true pre-state of every
+        # touched URI, not the post-state of an earlier sibling action),
+        # then apply each action's resolved edit, then record one merged
+        # checkpoint with the real snapshot.
         merged_changes: dict[str, list[dict[str, Any]]] = {}
+        merged_snapshot: dict[str, str] = {}
+        resolved_edits: list[dict[str, Any]] = []
         for a in all_actions:
             edit = _resolve_winner_edit(coord, a)
             if not (isinstance(edit, dict) and edit):
                 continue
+            for uri, content in capture_pre_edit_snapshot(edit).items():
+                # First pre-edit content wins so we don't overwrite the
+                # original-pre-state with a sibling action's intermediate state.
+                merged_snapshot.setdefault(uri, content)
+            resolved_edits.append(edit)
+        for edit in resolved_edits:
             _apply_workspace_edit_to_disk(edit)
             for uri, hunks in (edit.get("changes") or {}).items():
                 merged_changes.setdefault(uri, []).extend(hunks or [])
         cid_edit = {"changes": merged_changes} if merged_changes else {"changes": {}}
         cid = record_checkpoint_for_workspace_edit(
-            workspace_edit=cid_edit, snapshot={},
+            workspace_edit=cid_edit, snapshot=merged_snapshot,
         )
         return RefactorResult(
             applied=True,
@@ -1076,18 +1076,12 @@ def _dispatch_single_kind_facade(
             preview_token=f"pv_{stage_name}_{int(time.time())}",
             duration_ms=elapsed_ms,
         ).model_dump_json(indent=2)
-    # v0.3.0 facade-application: pull the resolved WorkspaceEdit for the
-    # winner and write it to disk. ``get_action_edit`` returns ``None`` when
-    # the action wasn't tracked (synthetic ids in legacy tests, or when
-    # resolve failed); in that case fall back to the v0.2.0 empty checkpoint.
-    workspace_edit = _resolve_winner_edit(coord, actions[0])
-    if isinstance(workspace_edit, dict) and workspace_edit:
-        _apply_workspace_edit_to_disk(workspace_edit)
-    else:
-        workspace_edit = {"changes": {}}
-    cid = record_checkpoint_for_workspace_edit(
-        workspace_edit=workspace_edit, snapshot={},
-    )
+    # v1.6 P1: real-snapshot apply + checkpoint via the consolidated helper.
+    # When the action wasn't tracked (synthetic ids in legacy tests, or when
+    # resolve failed) the helper returns ``("", {"changes": {}})`` and the
+    # facade still reports ``applied=True`` with an empty ``checkpoint_id``
+    # — the v0.2.0 contract for legacy fakes.
+    cid, _edit = apply_action_and_checkpoint(coord, actions[0])
     return RefactorResult(
         applied=True,
         diagnostics_delta=_empty_diagnostics_delta(),
@@ -1279,18 +1273,26 @@ class ScalpelTidyStructureTool(Tool):
                 preview_token=f"pv_tidy_{int(time.time())}",
                 duration_ms=elapsed_ms,
             ).model_dump_json(indent=2)
-        # v0.3.0 facade-application: apply every action's resolved edit.
+        # v1.6 P1: multi-action variant — capture pre-edit snapshots BEFORE
+        # any apply, then apply, then record one merged checkpoint with
+        # the real snapshot.
         merged_changes: dict[str, list[dict[str, Any]]] = {}
+        merged_snapshot: dict[str, str] = {}
+        resolved_edits: list[dict[str, Any]] = []
         for a in all_actions:
             edit = _resolve_winner_edit(coord, a)
             if not (isinstance(edit, dict) and edit):
                 continue
+            for uri, content in capture_pre_edit_snapshot(edit).items():
+                merged_snapshot.setdefault(uri, content)
+            resolved_edits.append(edit)
+        for edit in resolved_edits:
             _apply_workspace_edit_to_disk(edit)
             for uri, hunks in (edit.get("changes") or {}).items():
                 merged_changes.setdefault(uri, []).extend(hunks or [])
         cid_edit = {"changes": merged_changes} if merged_changes else {"changes": {}}
         cid = record_checkpoint_for_workspace_edit(
-            workspace_edit=cid_edit, snapshot={},
+            workspace_edit=cid_edit, snapshot=merged_snapshot,
         )
         return RefactorResult(
             applied=True,
@@ -1815,15 +1817,8 @@ def _python_dispatch_single_kind(
             preview_token=f"pv_{stage_name}_{int(time.time())}",
             duration_ms=elapsed_ms,
         ).model_dump_json(indent=2)
-    # v0.3.0 facade-application: same pattern as the Rust dispatcher.
-    workspace_edit = _resolve_winner_edit(coord, actions[0])
-    if isinstance(workspace_edit, dict) and workspace_edit:
-        _apply_workspace_edit_to_disk(workspace_edit)
-    else:
-        workspace_edit = {"changes": {}}
-    cid = record_checkpoint_for_workspace_edit(
-        workspace_edit=workspace_edit, snapshot={},
-    )
+    # v1.6 P1: real-snapshot apply + checkpoint via the consolidated helper.
+    cid, _edit = apply_action_and_checkpoint(coord, actions[0])
     return RefactorResult(
         applied=True,
         diagnostics_delta=_empty_diagnostics_delta(),
@@ -2159,13 +2154,8 @@ class ScalpelFixLintsTool(Tool):
                 preview_token=f"pv_fix_lints_{int(time.time())}",
                 duration_ms=elapsed_ms,
             ).model_dump_json(indent=2)
-        # v0.3.0 facade-application: apply the resolved edit (closes E13-py).
-        edit = _resolve_winner_edit(coord, actions[0])
-        if isinstance(edit, dict) and edit:
-            _apply_workspace_edit_to_disk(edit)
-        else:
-            edit = {"changes": {}}
-        cid = record_checkpoint_for_workspace_edit(workspace_edit=edit, snapshot={})
+        # v1.6 P1: real-snapshot apply + checkpoint via the consolidated helper.
+        cid, _edit = apply_action_and_checkpoint(coord, actions[0])
         return RefactorResult(
             applied=True,
             diagnostics_delta=_empty_diagnostics_delta(),
@@ -2956,14 +2946,8 @@ def _java_generate_dispatch(
             preview_token=f"pv_{stage_name}_{int(time.time())}",
             duration_ms=elapsed_ms,
         ).model_dump_json(indent=2)
-    workspace_edit = _resolve_winner_edit(coord, actions[0])
-    if isinstance(workspace_edit, dict) and workspace_edit:
-        _apply_workspace_edit_to_disk(workspace_edit)
-    else:
-        workspace_edit = {"changes": {}}
-    cid = record_checkpoint_for_workspace_edit(
-        workspace_edit=workspace_edit, snapshot={},
-    )
+    # v1.6 P1: real-snapshot apply + checkpoint via the consolidated helper.
+    cid, _edit = apply_action_and_checkpoint(coord, actions[0])
     return RefactorResult(
         applied=True,
         diagnostics_delta=_empty_diagnostics_delta(),
