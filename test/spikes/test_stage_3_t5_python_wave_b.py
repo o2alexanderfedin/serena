@@ -208,11 +208,14 @@ def test_ignore_diagnostic_pyright_dispatches(tmp_path: Path):
     src = tmp_path / "module.py"
     src.write_text("undefined_name\n")
     tool = _make_tool(ScalpelIgnoreDiagnosticTool, tmp_path)
-    coord = _fake_coord({
-        "quickfix.pyright_ignore": [_fake_action(
-            "quickfix.pyright_ignore", provenance="basedpyright",
-        )],
-    })
+    # v1.5 G4-10 — `rule` now flows into the dispatcher's title_match
+    # substring; the fake action's title must contain the rule code for
+    # the candidate to be selected.
+    action = _fake_action(
+        "quickfix.pyright_ignore", provenance="basedpyright",
+    )
+    action.title = "Pyright: ignore reportUndefinedVariable"
+    coord = _fake_coord({"quickfix.pyright_ignore": [action]})
     with patch("serena.tools.scalpel_facades.coordinator_for_facade", return_value=coord):
         out = tool.apply(
             file=str(src), position={"line": 0, "character": 0},
@@ -227,11 +230,11 @@ def test_ignore_diagnostic_ruff_dispatches(tmp_path: Path):
     src = tmp_path / "module.py"
     src.write_text("import sys\n")
     tool = _make_tool(ScalpelIgnoreDiagnosticTool, tmp_path)
-    coord = _fake_coord({
-        "quickfix.ruff_noqa": [_fake_action(
-            "quickfix.ruff_noqa", provenance="ruff",
-        )],
-    })
+    # v1.5 G4-10 — title must contain the caller's rule code for the
+    # title_match substring to accept this action.
+    action = _fake_action("quickfix.ruff_noqa", provenance="ruff")
+    action.title = "Disable F401: unused-import"
+    coord = _fake_coord({"quickfix.ruff_noqa": [action]})
     with patch("serena.tools.scalpel_facades.coordinator_for_facade", return_value=coord):
         out = tool.apply(
             file=str(src), position={"line": 0, "character": 0},
