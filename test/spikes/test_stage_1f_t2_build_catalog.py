@@ -87,7 +87,7 @@ def test_factory_python_source_server_is_one_of_python_servers() -> None:
     from serena.refactoring.capabilities import build_capability_catalog
 
     legal_python_servers = {"pylsp-rope", "basedpyright", "ruff"}
-    # Single-source-server languages introduced in Stream 6 and earlier.
+    # Single-source-server languages introduced in Stream 6 / v1.4 / v1.4.1.
     single_server_languages: dict[str, str] = {
         "rust": "rust-analyzer",
         "typescript": "vtsls",
@@ -95,6 +95,10 @@ def test_factory_python_source_server_is_one_of_python_servers() -> None:
         "cpp": "clangd",
         "java": "jdtls",
         "lean": "lean",
+        "smt2": "dolmenls",
+        "prolog": "swipl-lsp",
+        "problog": "problog-lsp",
+        "csharp": "csharp-ls",
     }
     cat = build_capability_catalog(STRATEGY_REGISTRY)
     for rec in cat.records:
