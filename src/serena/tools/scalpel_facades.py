@@ -1525,6 +1525,19 @@ class ScalpelConvertModuleLayoutTool(Tool):
 
 _VISIBILITY_KIND = "refactor.rewrite.change_visibility"
 
+# v1.5 G4-4 — map caller's `target_visibility` enum to rust-analyzer's
+# stable code-action title format. The dispatcher's title-substring
+# disambiguator (G1) selects the matching action. Note: ``"pub"`` is a
+# substring of ``"pub(crate)"`` and ``"pub(super)"`` — when RA surfaces
+# multiple tiers and the caller asks for ``"pub"``, the G1 envelope
+# returns MULTIPLE_CANDIDATES so the caller can refine via a tighter tier.
+_VISIBILITY_TITLE_MATCH: dict[str, str] = {
+    "pub_crate": "pub(crate)",
+    "pub_super": "pub(super)",
+    "private": "private",
+    "pub": "pub",
+}
+
 
 class ScalpelChangeVisibilityTool(Tool):
     """PREFERRED: toggle a Rust item's visibility (pub / pub(crate) / pub(super) / private)."""
@@ -1543,14 +1556,21 @@ class ScalpelChangeVisibilityTool(Tool):
 
         :param file: source file containing the item.
         :param position: LSP cursor on the item keyword.
-        :param target_visibility: requested new visibility tier.
+        :param target_visibility: requested new visibility tier. v1.5 G4-4
+            maps this to rust-analyzer's stable
+            ``Change visibility to <tier>`` title and threads the tier
+            string into the shared dispatcher's ``title_match`` so the
+            correct candidate is selected. ``target_visibility="pub"``
+            substring-matches ``pub(crate)`` / ``pub(super)`` too — when
+            multiple tiers surface, the G1 ``MULTIPLE_CANDIDATES`` envelope
+            is returned and the caller can refine to a specific tier.
         :param dry_run: preview only.
         :param preview_token: continuation from a prior dry-run.
         :param language: 'rust' or 'python'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
-        del preview_token, target_visibility
+        del preview_token
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -1563,6 +1583,7 @@ class ScalpelChangeVisibilityTool(Tool):
             file=file, position=position, kind=_VISIBILITY_KIND,
             project_root=project_root,
             dry_run=dry_run, language=language,
+            title_match=_VISIBILITY_TITLE_MATCH.get(target_visibility),
         )
 
 
