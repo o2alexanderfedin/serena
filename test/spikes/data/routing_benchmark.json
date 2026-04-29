@@ -1,0 +1,96 @@
+{
+  "_comment": "v1.5 Phase 1 routing benchmark fixture. 5 prompts x 3 paraphrases x 2 languages (rust+python) = 30 entries. Spec § 3.4. Used by test_routing_benchmark.py to measure routing_accuracy = correct_top_1 / total_prompts. The recorded baseline is the Phase 4 gate floor (§4.5).",
+  "schema_version": 1,
+  "entries": [
+    {
+      "language": "rust",
+      "prompt": "Extract this block into a helper function",
+      "paraphrases": [
+        "Pull this code into its own function",
+        "Refactor this selection into a function called helper"
+      ],
+      "expected_tool": "scalpel_extract"
+    },
+    {
+      "language": "rust",
+      "prompt": "Inline this function call at every callsite",
+      "paraphrases": [
+        "Replace the function call with its body",
+        "Inline this helper everywhere it is used"
+      ],
+      "expected_tool": "scalpel_inline"
+    },
+    {
+      "language": "rust",
+      "prompt": "Change the visibility of this item to public",
+      "paraphrases": [
+        "Make this struct pub",
+        "Rewrite this fn so it is publicly visible"
+      ],
+      "expected_tool": "scalpel_change_visibility"
+    },
+    {
+      "language": "rust",
+      "prompt": "Organize the imports in this file",
+      "paraphrases": [
+        "Sort and dedupe the use statements",
+        "Tidy up the import block"
+      ],
+      "expected_tool": "scalpel_imports_organize"
+    },
+    {
+      "language": "rust",
+      "prompt": "Expand this macro invocation",
+      "paraphrases": [
+        "Show me what this macro expands to",
+        "Replace the macro call with its expansion"
+      ],
+      "expected_tool": "scalpel_expand_macro"
+    },
+    {
+      "language": "python",
+      "prompt": "Extract this block into a helper function",
+      "paraphrases": [
+        "Pull this code into its own function",
+        "Refactor this selection into a function called helper"
+      ],
+      "expected_tool": "scalpel_extract"
+    },
+    {
+      "language": "python",
+      "prompt": "Inline this function call at every callsite",
+      "paraphrases": [
+        "Replace the function call with its body",
+        "Inline this helper everywhere it is used"
+      ],
+      "expected_tool": "scalpel_inline"
+    },
+    {
+      "language": "python",
+      "prompt": "Convert this local variable to a class field",
+      "paraphrases": [
+        "Promote this local to self.x",
+        "Move this local variable up to a field on the class"
+      ],
+      "expected_tool": "scalpel_local_to_field"
+    },
+    {
+      "language": "python",
+      "prompt": "Organize the imports in this file",
+      "paraphrases": [
+        "Sort and dedupe the import statements",
+        "Tidy up the import block"
+      ],
+      "expected_tool": "scalpel_imports_organize"
+    },
+    {
+      "language": "python",
+      "prompt": "Apply all available lint fixes to this file",
+      "paraphrases": [
+        "Fix the lints in this file",
+        "Run source.fixAll on this file"
+      ],
+      "expected_tool": "scalpel_fix_lints"
+    }
+  ]
+}
