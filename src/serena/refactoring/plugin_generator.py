@@ -145,17 +145,27 @@ def _render_plugin_json(strategy: _StrategyLike) -> str:
 
 
 def _render_mcp_json(strategy: _StrategyLike) -> str:
-    """Render the ``.mcp.json`` registering one MCP server per language."""
+    """Render the ``.mcp.json`` registering one MCP server per language.
 
+    Each plugin passes ``--server-name scalpel-<lang>`` as a trailing arg.
+    The flag is accepted by ``serena start-mcp-server`` but ignored at runtime;
+    its sole purpose is to make every plugin's ``args`` array unique so that
+    Claude Code's plugin manager does not deduplicate them when multiple
+    o2-scalpel-* plugins are installed simultaneously.
+    """
+
+    server_name = f"scalpel-{strategy.language}"
     payload = {
         "mcpServers": {
-            f"scalpel-{strategy.language}": {
+            server_name: {
                 "command": "uvx",
                 "args": [
                     "--from",
                     "git+https://github.com/o2alexanderfedin/o2-scalpel-engine.git",
                     "serena",
                     "start-mcp-server",
+                    "--server-name",
+                    server_name,
                 ],
                 "env": {},
             }

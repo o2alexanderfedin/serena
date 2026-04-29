@@ -298,6 +298,15 @@ class TopLevelCommands(AutoRegisteringGroup):
         default=False,
         help="Auto-detect project from current working directory (searches for .serena/project.yml or .git, falls back to CWD). Intended for CLI-based agents like Claude Code, Gemini and Codex.",
     )
+    @click.option(
+        "--server-name",
+        type=str,
+        default=None,
+        hidden=True,
+        help="Logical name for this MCP server instance. Accepted but unused at runtime — "
+        "present solely to give each per-language plugin a unique args array so that "
+        "Claude Code's plugin manager does not deduplicate them.",
+    )
     def start_mcp_server(
         project: str | None,
         project_file_arg: str | None,
@@ -314,6 +323,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None,
         trace_lsp_communication: bool | None,
         tool_timeout: float | None,
+        server_name: str | None,
     ) -> None:
         # initialize logging, using INFO level initially (will later be adjusted by SerenaAgent according to the config)
         #   * memory log handler (for use by GUI/Dashboard)
