@@ -31,13 +31,18 @@ def test_organize_imports_multi_file_python(tmp_path):
         f.write_text("import os, sys\n")
     tool = _make_tool(tmp_path)
     fake_coord = MagicMock()
+    fake_coord.supports_kind.return_value = True
     call_count = {"n": 0}
+    only_seen: list[str] = []
 
     async def _merge(**kwargs):
         call_count["n"] += 1
-        assert kwargs["only"] == ["source.organizeImports"]
+        # v1.5 G4-9: imports_organize now dispatches one of three sub-kinds
+        # per (file, flag) pair instead of the unified umbrella kind.
+        only = kwargs.get("only") or []
+        only_seen.append(only[0] if only else "")
         return [MagicMock(action_id=f"ruff:{call_count['n']}",
-                          title="organize", kind="source.organizeImports",
+                          title="organize", kind=only[0] if only else "",
                           provenance="ruff")]
     fake_coord.merge_code_actions = _merge
     with patch(
@@ -49,7 +54,12 @@ def test_organize_imports_multi_file_python(tmp_path):
         )
     payload = json.loads(out)
     assert payload["applied"] is True
-    assert call_count["n"] == 2
+    # 2 files × 3 default-True flags = 6 dispatches. Verify each sub-kind
+    # was issued at least once (per-file × per-kind product).
+    assert call_count["n"] == 6, only_seen
+    assert any("removeUnused" in k for k in only_seen), only_seen
+    assert any("sortImports" in k for k in only_seen), only_seen
+    assert any("quickfix.import" in k for k in only_seen), only_seen
 
 
 def test_organize_imports_no_actions_is_no_op(tmp_path):

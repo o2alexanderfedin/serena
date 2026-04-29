@@ -1405,8 +1405,27 @@ class ScalpelImportsOrganizeTool(Tool):
         :param language: 'rust' or 'python'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
+
+        v1.5 G4-9 (HI-10) — ``add_missing`` / ``remove_unused`` / ``reorder``
+        each map to a sub-kind dispatch:
+
+        * ``add_missing`` → ``quickfix.import``
+        * ``remove_unused`` → ``source.organizeImports.removeUnused``
+        * ``reorder`` → ``source.organizeImports.sortImports``
+
+        Per-flag dispatches are issued only for True flags; resulting
+        WorkspaceEdits are merged via :func:`_merge_workspace_edits`. All
+        three flags False short-circuits to a no-op (no LSP dispatch).
+        Sub-kinds the server doesn't advertise are silently skipped via
+        ``coord.supports_kind``.
+
+        v1.5 HI-13 — the LSP request range is now bracketed by
+        :func:`compute_file_range` (real EOF coordinates) rather than the
+        legacy ``(0,0)→(0,0)`` placeholder.
         """
-        del add_missing, remove_unused, reorder, preview_token
+        from solidlsp.util.file_range import compute_file_range
+
+        del preview_token
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         if not files:
             # Q4 boundary check is irrelevant when there are no files; emit no-op.
@@ -1429,23 +1448,55 @@ class ScalpelImportsOrganizeTool(Tool):
                 reason=f"Cannot infer language from {files[0]!r}; pass language=.",
                 recoverable=False,
             ).model_dump_json(indent=2)
+        # v1.5 G4-9 — build the sub-kind list per caller toggles. False
+        # flags omit the corresponding dispatch; all-False is no-op.
+        sub_kinds: list[str] = []
+        if remove_unused:
+            sub_kinds.append("source.organizeImports.removeUnused")
+        if reorder:
+            sub_kinds.append("source.organizeImports.sortImports")
+        if add_missing:
+            sub_kinds.append("quickfix.import")
+        if not sub_kinds:
+            return RefactorResult(
+                applied=False, no_op=True,
+                diagnostics_delta=_empty_diagnostics_delta(),
+            ).model_dump_json(indent=2)
         coord = coordinator_for_facade(language=lang, project_root=project_root)
         # Gate: skip when the responsible server does not advertise
-        # source.organizeImports (spec § 4.5 P4).
+        # source.organizeImports at all (spec § 4.5 P4). The umbrella kind
+        # gates the facade; per-sub-kind support is checked individually
+        # inside the dispatch loop and silently skipped when missing.
         if not coord.supports_kind(lang, "source.organizeImports"):
             return json.dumps(_capability_not_available_envelope(
                 language=lang, kind="source.organizeImports",
             ))
         t0 = time.monotonic()
         all_actions: list[Any] = []
+        captured_edits: list[dict[str, Any]] = []
         for f in files:
-            actions = _run_async(coord.merge_code_actions(
-                file=f,
-                start={"line": 0, "character": 0},
-                end={"line": 0, "character": 0},
-                only=["source.organizeImports"],
-            ))
-            all_actions.extend(actions)
+            try:
+                file_start, file_end = compute_file_range(f)
+            except (FileNotFoundError, OSError):
+                file_start = {"line": 0, "character": 0}
+                file_end = {"line": 0, "character": 0}
+            for kind in sub_kinds:
+                # Per-sub-kind capability gate; servers that don't expose
+                # the granular kind (e.g. some pylsp builds) are skipped
+                # silently rather than raising.
+                if not coord.supports_kind(lang, kind):
+                    continue
+                actions = _run_async(coord.merge_code_actions(
+                    file=f,
+                    start=file_start,
+                    end=file_end,
+                    only=[kind],
+                ))
+                for action in actions or []:
+                    all_actions.append(action)
+                    edit = _resolve_winner_edit(coord, action)
+                    if isinstance(edit, dict) and edit:
+                        captured_edits.append(edit)
         elapsed_ms = int((time.monotonic() - t0) * 1000)
         if not all_actions:
             return RefactorResult(
@@ -1457,14 +1508,31 @@ class ScalpelImportsOrganizeTool(Tool):
         if engine != "auto":
             keep_provenance = _ENGINE_TO_PROVENANCE.get(engine)
             kept: list[Any] = []
-            for a in all_actions:
+            kept_edits: list[dict[str, Any]] = []
+            for a, e in zip(all_actions, captured_edits) if len(all_actions) == len(captured_edits) else []:
                 if a.provenance == keep_provenance:
                     kept.append(a)
+                    kept_edits.append(e)
                 else:
                     warnings.append(
                         f"engine={engine!r} discards action from {a.provenance!r}",
                     )
-            all_actions = kept
+            # When edits/actions length mismatched (some actions had no
+            # resolvable edit), fall back to filtering actions only and
+            # leave captured_edits as-is for the merge step below.
+            if kept or len(all_actions) == len(captured_edits):
+                all_actions = kept
+                captured_edits = kept_edits
+            else:
+                filtered: list[Any] = []
+                for a in all_actions:
+                    if a.provenance == keep_provenance:
+                        filtered.append(a)
+                    else:
+                        warnings.append(
+                            f"engine={engine!r} discards action from {a.provenance!r}",
+                        )
+                all_actions = filtered
         if dry_run:
             return RefactorResult(
                 applied=False, no_op=False,
@@ -1473,19 +1541,11 @@ class ScalpelImportsOrganizeTool(Tool):
                 duration_ms=elapsed_ms,
                 warnings=tuple(warnings),
             ).model_dump_json(indent=2)
-        # v0.3.0 facade-application: apply every action's resolved edit
-        # (multi-file imports_organize touches every file passed in).
-        merged_changes: dict[str, list[dict[str, Any]]] = {}
-        for a in all_actions:
-            edit = _resolve_winner_edit(coord, a)
-            if not (isinstance(edit, dict) and edit):
-                continue
-            _apply_workspace_edit_to_disk(edit)
-            for uri, hunks in (edit.get("changes") or {}).items():
-                merged_changes.setdefault(uri, []).extend(hunks or [])
-        cid_edit = {"changes": merged_changes} if merged_changes else {"changes": {}}
+        merged = _merge_workspace_edits(captured_edits) if captured_edits else {"changes": {}}
+        if merged and (merged.get("changes") or merged.get("documentChanges")):
+            _apply_workspace_edit_to_disk(merged)
         cid = record_checkpoint_for_workspace_edit(
-            workspace_edit=cid_edit, snapshot={},
+            workspace_edit=merged, snapshot={},
         )
         return RefactorResult(
             applied=True,
