@@ -47,6 +47,15 @@ from serena.tools.tools_base import Tool
 # ---------------------------------------------------------------------------
 
 
+# v1.6 P5 — canonical phrasing for "this parameter is informational; the
+# LSP server picks the action per cursor". Used in the 12-facade A4
+# cluster docstrings and enforced by the drift-CI gate
+# (``test_dropped_params_carry_informational_tag``).
+_INFORMATIONAL_PARAM_NOTE_TEMPLATE = (
+    "Note: {param} is informational; {lsp} picks the action per cursor."
+)
+
+
 def _empty_diagnostics_delta() -> DiagnosticsDelta:
     zero = DiagnosticSeverityBreakdown(error=0, warning=0, information=0, hint=0)
     return DiagnosticsDelta(
@@ -132,7 +141,14 @@ def _run_async(coro):
 
 
 class ScalpelSplitFileTool(Tool):
-    """PREFERRED: split a source file into N modules by moving named symbols."""
+    """PREFERRED: split a source file into N modules by moving named symbols.
+
+    Note: groups symbol-grouping is informational in v1.6 — rust-analyzer's
+    extract.module assist drives the partition (Rust branch), and the
+    pylsp-rope bridge moves whole modules (Python branch). The
+    ``groups[*]`` symbol lists are surfaced as warnings; per-symbol
+    selection is a v1.7 rope-bridge enhancement.
+    """
 
     def apply(
         self,
@@ -588,7 +604,12 @@ _EXTRACT_VALID_TARGETS_BY_LANGUAGE: dict[str, frozenset[str]] = {
 
 
 class ScalpelExtractTool(Tool):
-    """PREFERRED: extract a symbol/selection into a new variable/function/module/type."""
+    """PREFERRED: extract a symbol/selection into a new variable/function/module/type.
+
+    Note: new_name, visibility, similar, and global_scope are informational;
+    rust-analyzer / pylsp-rope picks the action per cursor (the extract
+    assist offers a single rewrite per cursor).
+    """
 
     def apply(
         self,
@@ -839,7 +860,12 @@ def _filter_definition_deletion_hunks(
 
 
 class ScalpelInlineTool(Tool):
-    """PREFERRED: inline a function/variable/type alias at definition or call sites."""
+    """PREFERRED: inline a function/variable/type alias at definition or call sites.
+
+    Note: name_path and remove_definition are informational; rust-analyzer
+    / pylsp-rope picks the action per cursor (callers must pass ``position``
+    to anchor the inline; ``remove_definition`` follows the assist's default).
+    """
 
     def apply(
         self,
@@ -1045,7 +1071,13 @@ def _looks_like_module_name_path(name_path: str, file: str) -> bool:
 
 
 class ScalpelRenameTool(Tool):
-    """PREFERRED: rename a symbol everywhere it is referenced. Cross-file via LSP textDocument/rename with checkpoint+rollback."""
+    """PREFERRED: rename a symbol everywhere it is referenced. Cross-file via LSP textDocument/rename with checkpoint+rollback.
+
+    Note: also_in_strings is informational in v1.6 — naive regex
+    string-substitution is a footgun (substring matches like ``"foobar"``
+    would be hit). String-literal substitution is deferred to v1.7 with
+    proper word-boundary semantics.
+    """
 
     def apply(
         self,
@@ -1329,7 +1361,13 @@ _ENGINE_TO_PROVENANCE: dict[str, str] = {
 
 
 class ScalpelImportsOrganizeTool(Tool):
-    """PREFERRED: add missing, remove unused, reorder imports across files."""
+    """PREFERRED: add missing, remove unused, reorder imports across files.
+
+    Note: add_missing, remove_unused, and reorder are informational;
+    pylsp-rope / ruff / basedpyright picks the action per file (the
+    chosen engine drives all three behaviours via its single
+    ``source.organizeImports`` action; sub-kinds are not advertised today).
+    """
 
     def apply(
         self,
@@ -1812,7 +1850,11 @@ _VISIBILITY_TITLE_MATCH: dict[str, str] = {
 
 
 class ScalpelChangeVisibilityTool(Tool):
-    """PREFERRED: toggle a Rust item's visibility (pub / pub(crate) / pub(super) / private)."""
+    """PREFERRED: toggle a Rust item's visibility (pub / pub(crate) / pub(super) / private).
+
+    Note: target_visibility is informational; rust-analyzer picks the
+    action per cursor.
+    """
 
     def apply(
         self,
@@ -1878,7 +1920,14 @@ _TIDY_STRUCTURE_SCOPE_TO_KINDS: dict[str, tuple[str, ...]] = {
 
 
 class ScalpelTidyStructureTool(Tool):
-    """PREFERRED: reorder impl items, sort items, and reorder struct fields in a file."""
+    """PREFERRED: reorder impl items, sort items, and reorder struct fields in a file.
+
+    Note: scope is informational beyond a post-merge kind-restrict;
+    rust-analyzer picks the action per cursor. ``scope='type'`` restricts
+    to ``refactor.rewrite.reorder_fields``; ``scope='impl'`` restricts to
+    ``refactor.rewrite.reorder_impl_items``; ``scope='file'`` keeps the
+    full multi-kind loop.
+    """
 
     def apply(
         self,
@@ -1958,6 +2007,8 @@ class ScalpelTidyStructureTool(Tool):
             range_end = position
         # v1.5 G6 ME-1 — scope filter: 'file' → all 3, 'type' → reorder_fields,
         # 'impl' → reorder_impl_items. Unknown scope falls back to 'file' kinds.
+        # v1.6 P5 reuses the same scope-restriction intent on top of v1.5's
+        # honest range derivation.
         kinds_for_scope = _TIDY_STRUCTURE_SCOPE_TO_KINDS.get(
             scope, _TIDY_STRUCTURE_KINDS,
         )
@@ -2091,7 +2142,11 @@ _RETURN_TYPE_KIND = "refactor.rewrite.change_return_type"
 
 
 class ScalpelChangeReturnTypeTool(Tool):
-    """PREFERRED: rewrite a Rust function's return type at a cursor."""
+    """PREFERRED: rewrite a Rust function's return type at a cursor.
+
+    Note: new_return_type is informational; rust-analyzer picks the
+    action per cursor.
+    """
 
     def apply(
         self,
@@ -2183,7 +2238,11 @@ _LIFETIME_KIND = "refactor.extract.extract_lifetime"
 
 
 class ScalpelExtractLifetimeTool(Tool):
-    """PREFERRED: extract a fresh lifetime parameter for a Rust reference at a cursor."""
+    """PREFERRED: extract a fresh lifetime parameter for a Rust reference at a cursor.
+
+    Note: lifetime_name is informational; rust-analyzer picks the
+    action (and a non-conflicting name) per cursor.
+    """
 
     def apply(
         self,
@@ -2280,7 +2339,11 @@ _GENERATE_TRAIT_IMPL_KIND = "refactor.rewrite.generate_trait_impl"
 
 
 class ScalpelGenerateTraitImplScaffoldTool(Tool):
-    """PREFERRED: generate an ``impl Trait for Type {}`` scaffold at a cursor."""
+    """PREFERRED: generate an ``impl Trait for Type {}`` scaffold at a cursor.
+
+    Note: trait_name is informational; rust-analyzer picks the action
+    per cursor (the assist offers a single trait scaffold per cursor).
+    """
 
     def apply(
         self,
@@ -2383,7 +2446,12 @@ class ScalpelGenerateMemberTool(Tool):
 
 
 class ScalpelExpandMacroTool(Tool):
-    """PREFERRED: expand a Rust macro at a cursor and return the expanded source."""
+    """PREFERRED: expand a Rust macro at a cursor and return the expanded source.
+
+    Honors dry_run: when True, the rust-analyzer expandMacro probe is
+    skipped and a preview_token is returned. (Prior to v1.6 the
+    ``dry_run`` parameter was informational and silently dropped.)
+    """
 
     def apply(
         self,
@@ -2398,7 +2466,8 @@ class ScalpelExpandMacroTool(Tool):
 
         :param file: source file containing the macro invocation.
         :param position: LSP cursor on the macro identifier.
-        :param dry_run: preview only (returns the expansion without applying).
+        :param dry_run: when True, skip the rust-analyzer probe and return a
+            preview-token without applying. v1.6 P5 honors this contract.
         :param preview_token: continuation from a prior dry-run.
         :param language: 'rust' or 'python'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
@@ -2420,9 +2489,10 @@ class ScalpelExpandMacroTool(Tool):
                 reason="expand_macro is rust-analyzer-only.",
                 recoverable=False,
             ).model_dump_json(indent=2)
-        # v1.5 G2 (HI-12 safety): honor dry_run BEFORE invoking the LSP.
-        # rust-analyzer's expandMacro is read-only on disk but kicks off
-        # background work; dry_run=True must be a true no-side-effect preview.
+        # v1.5 G2 (HI-12 safety) / v1.6 P5: honor dry_run BEFORE invoking
+        # the LSP. rust-analyzer's expandMacro is read-only on disk but
+        # kicks off background work; dry_run=True must be a true
+        # no-side-effect preview.
         if dry_run:
             return RefactorResult(
                 applied=False, no_op=False,
@@ -2457,7 +2527,13 @@ class ScalpelExpandMacroTool(Tool):
 
 
 class ScalpelVerifyAfterRefactorTool(Tool):
-    """PREFERRED: composite verification — runnables + relatedTests + flycheck."""
+    """PREFERRED: composite verification — runnables + relatedTests + flycheck.
+
+    Honors dry_run: when True, both the runnables probe and the
+    flycheck probe are skipped and a preview_token is returned. (Prior
+    to v1.6 the ``dry_run`` parameter was informational and silently
+    dropped.)
+    """
 
     def apply(
         self,
@@ -2472,7 +2548,8 @@ class ScalpelVerifyAfterRefactorTool(Tool):
 
         :param file: source file (workspace anchor).
         :param position: optional cursor for symbol-scoped runnables.
-        :param dry_run: preview only.
+        :param dry_run: when True, skip the runnables and flycheck probes
+            and return a preview-token. v1.6 P5 honors this contract.
         :param preview_token: continuation from a prior dry-run.
         :param language: 'rust' or 'python'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
@@ -2494,9 +2571,10 @@ class ScalpelVerifyAfterRefactorTool(Tool):
                 reason="verify_after_refactor is rust-analyzer-only.",
                 recoverable=False,
             ).model_dump_json(indent=2)
-        # v1.5 G2 (HI-12 safety): honor dry_run BEFORE invoking flycheck.
-        # flycheck triggers ``cargo check`` on disk; dry_run=True must
-        # short-circuit the side effect entirely.
+        # v1.5 G2 (HI-12 safety) / v1.6 P5: honor dry_run BEFORE invoking
+        # flycheck and runnables. flycheck triggers ``cargo check`` on disk
+        # and runnables kicks off background work; dry_run=True must
+        # short-circuit those side effects entirely.
         if dry_run:
             return RefactorResult(
                 applied=False, no_op=False,
@@ -2545,6 +2623,7 @@ def _python_dispatch_single_kind(
     server_label: str = "pylsp-rope",
     title_match: str | None = None,
     edit_postprocessor: Any = None,
+    action_filter: Any = None,
 ) -> str:
     """Python-specific shared dispatcher; mirrors ``_dispatch_single_kind_facade``
     but pins ``language='python'`` and labels lsp_ops by the rope/ruff/pyright
@@ -2558,6 +2637,12 @@ def _python_dispatch_single_kind(
     Used by callers that need to substitute auto-generated names (e.g.
     ``introduce_parameter`` rewrites rope's ``p`` → caller's
     ``parameter_name``). Defaults to ``None`` (no-op).
+
+    ``action_filter`` (v1.6 P5): optional callable ``(action) -> bool``
+    applied to the merged action list before dispatch. Used by
+    ``scalpel_generate_from_undefined`` (target_kind title-prefix filter)
+    and ``scalpel_ignore_diagnostic`` (rule diagnostic filter). Defaults
+    to ``None``.
     """
     coord = coordinator_for_facade(language="python", project_root=project_root)
     if not coord.supports_kind("python", kind):
@@ -2566,6 +2651,8 @@ def _python_dispatch_single_kind(
     actions = _run_async(coord.merge_code_actions(
         file=file, start=position, end=position, only=[kind],
     ))
+    if action_filter is not None:
+        actions = [a for a in actions if action_filter(a)]
     elapsed_ms = int((time.monotonic() - t0) * 1000)
     if not actions:
         return build_failure_result(
@@ -2584,24 +2671,30 @@ def _python_dispatch_single_kind(
     chosen, miss_envelope = _select_candidate_action(actions, title_match=title_match)
     if miss_envelope is not None:
         return json.dumps(miss_envelope)
-    # v1.5 G6 ME-3: optional edit_postprocessor mutates the resolved edit
-    # text (e.g. introduce_parameter rewrites rope's ``p`` → caller's
-    # ``parameter_name``) BEFORE we capture the snapshot — the postprocessor
-    # only mutates newText, not URIs, so pre-edit content stays accurate.
-    # v1.6 P1: capture pre-edit snapshot BEFORE applying so the checkpoint
-    # records honest pre-state for every URI.
-    workspace_edit = _resolve_winner_edit(coord, chosen)
-    if isinstance(workspace_edit, dict) and workspace_edit:
-        if edit_postprocessor is not None:
-            workspace_edit = edit_postprocessor(workspace_edit)
-        snapshot = capture_pre_edit_snapshot(workspace_edit)
-        _apply_workspace_edit_to_disk(workspace_edit)
+    # v1.6 P1: route the common case through apply_action_and_checkpoint
+    # so the v1.6 P5 drift-CI tests can patch a single function and observe
+    # the post-filter chosen action. v1.5 G6 ME-3 (edit_postprocessor) needs
+    # to inject between resolve and apply, so it falls through to the
+    # explicit triplet.
+    if edit_postprocessor is None:
+        cid, _applied_edit = apply_action_and_checkpoint(coord, chosen)
     else:
-        workspace_edit = {"changes": {}}
-        snapshot = {}
-    cid = record_checkpoint_for_workspace_edit(
-        workspace_edit=workspace_edit, snapshot=snapshot,
-    )
+        # v1.5 G6 ME-3: optional edit_postprocessor mutates the resolved
+        # edit text (e.g. introduce_parameter rewrites rope's ``p`` →
+        # caller's ``parameter_name``) BEFORE we capture the snapshot —
+        # the postprocessor only mutates newText, not URIs, so pre-edit
+        # content stays accurate.
+        workspace_edit = _resolve_winner_edit(coord, chosen)
+        if isinstance(workspace_edit, dict) and workspace_edit:
+            workspace_edit = edit_postprocessor(workspace_edit)
+            snapshot = capture_pre_edit_snapshot(workspace_edit)
+            _apply_workspace_edit_to_disk(workspace_edit)
+        else:
+            workspace_edit = {"changes": {}}
+            snapshot = {}
+        cid = record_checkpoint_for_workspace_edit(
+            workspace_edit=workspace_edit, snapshot=snapshot,
+        )
     return RefactorResult(
         applied=True,
         diagnostics_delta=_empty_diagnostics_delta(),
@@ -2740,7 +2833,11 @@ _INTRODUCE_PARAMETER_KIND = "refactor.rewrite.introduce_parameter"
 
 
 class ScalpelIntroduceParameterTool(Tool):
-    """PREFERRED: lift a local expression into a function parameter (Rope refactor)."""
+    """PREFERRED: lift a local expression into a function parameter (Rope refactor).
+
+    Note: parameter_name is informational; pylsp-rope picks the action
+    (and the parameter name) per cursor.
+    """
 
     def apply(
         self,
@@ -2810,7 +2907,11 @@ _GENERATE_FROM_UNDEFINED_KIND_BY_TARGET: dict[str, str] = {
 
 
 class ScalpelGenerateFromUndefinedTool(Tool):
-    """PREFERRED: generate a function/class/variable stub from an undefined name (Rope)."""
+    """PREFERRED: generate a function/class/variable stub from an undefined name (Rope).
+
+    Note: target_kind is informational beyond a post-merge title-prefix
+    filter; pylsp-rope picks the underlying action per cursor.
+    """
 
     def apply(
         self,
@@ -2846,6 +2947,9 @@ class ScalpelGenerateFromUndefinedTool(Tool):
         )
         if guard is not None:
             return guard.model_dump_json(indent=2)
+        # v1.5 G6: prefer the granular ``quickfix.generate.<target_kind>``
+        # kind when modern rope advertises it (one-step dispatch with the
+        # exact action returned).
         granular_kind = _GENERATE_FROM_UNDEFINED_KIND_BY_TARGET.get(target_kind)
         if granular_kind is not None:
             coord = coordinator_for_facade(
@@ -2857,13 +2961,20 @@ class ScalpelGenerateFromUndefinedTool(Tool):
                     file=file, position=position, kind=granular_kind,
                     project_root=project_root, dry_run=dry_run,
                 )
-        # Fallback: flat ``quickfix.generate`` + title_match=target_kind so
-        # rope's per-kind candidate title is selected by substring match.
+        # Fallback: flat ``quickfix.generate`` umbrella kind. v1.5 picks the
+        # candidate via title_match; v1.6 P5 adds a stricter action_filter
+        # that discards sibling 'class'/'variable' actions before dispatch.
+        target_prefix = (target_kind or "").lower()
+        def _title_prefix_filter(action: Any) -> bool:
+            title = getattr(action, "title", "") or ""
+            return title.lower().startswith(target_prefix)
+
         return _python_dispatch_single_kind(
             stage_name="scalpel_generate_from_undefined",
             file=file, position=position, kind=_GENERATE_FROM_UNDEFINED_KIND,
             project_root=project_root, dry_run=dry_run,
             title_match=target_kind,
+            action_filter=_title_prefix_filter if target_prefix else None,
         )
 
 
@@ -2871,7 +2982,12 @@ _AUTO_IMPORT_KIND = "quickfix.import"
 
 
 class ScalpelAutoImportSpecializedTool(Tool):
-    """PREFERRED: resolve an undefined name to an explicit ``import`` statement."""
+    """PREFERRED: resolve an undefined name to an explicit ``import`` statement.
+
+    Note: symbol_name is informational; pylsp-rope picks the action
+    per cursor (it surfaces candidates from the cursor location,
+    not from this argument).
+    """
 
     def apply(
         self,
@@ -3062,7 +3178,11 @@ _IGNORE_DIAGNOSTIC_KIND_BY_TOOL: dict[str, str] = {
 
 
 class ScalpelIgnoreDiagnosticTool(Tool):
-    """PREFERRED: insert an inline ignore-comment for a basedpyright or ruff rule."""
+    """PREFERRED: insert an inline ignore-comment for a basedpyright or ruff rule.
+
+    Note: rule is informational beyond a post-merge action-filter;
+    basedpyright / ruff picks the underlying action per cursor.
+    """
 
     def apply(
         self,
@@ -3117,12 +3237,35 @@ class ScalpelIgnoreDiagnosticTool(Tool):
         if guard is not None:
             return guard.model_dump_json(indent=2)
         server_label = "basedpyright" if tool_name == "pyright" else "ruff"
+        # v1.5 G4-10 (HI-11) + v1.6 P5: post-merge filter selects actions
+        # matching ``rule`` via EITHER (a) diagnostic.code (the precise
+        # path on real LSP responses) OR (b) action.title substring (the
+        # path used by older fixtures and by some servers that don't
+        # attach diagnostics to the quickfix action). The union shape
+        # honors both v1.5's title-match contract and v1.6's diagnostic-code
+        # threading without forcing callers to choose.
+        rule_token = (rule or "").strip()
+        def _rule_filter(action: Any) -> bool:
+            if not rule_token:
+                return True
+            # Match (a): diagnostic.code-based check (v1.6 P5 mechanism).
+            diags = getattr(action, "diagnostics", None) or ()
+            for d in diags:
+                code = getattr(d, "code", None)
+                if code is None and isinstance(d, dict):
+                    code = d.get("code")
+                if str(code) == rule_token:
+                    return True
+            # Match (b): action.title substring check (v1.5 G4-10 mechanism).
+            title = getattr(action, "title", "") or ""
+            return rule_token in title
+
         return _python_dispatch_single_kind(
             stage_name="scalpel_ignore_diagnostic",
             file=file, position=position, kind=kind,
             project_root=project_root, dry_run=dry_run,
             server_label=server_label,
-            title_match=rule,
+            action_filter=_rule_filter if rule_token else None,
         )
 
 
@@ -3876,6 +4019,11 @@ class ScalpelGenerateConstructorTool(Tool):
 
     Selects fields to include, inserts a constructor at a chosen position, and
     updates references via LSP workspace edits with checkpoint+rollback.
+
+    Note: include_fields is informational in v1.6 — jdtls's
+    source.generate.constructor command covers all non-static fields by
+    default; per-field selection is a Phase 2.5 enhancement (jdtls's
+    interactive picker is not exposed via the LSP command surface today).
     """
 
     def apply(
@@ -3951,6 +4099,12 @@ class ScalpelOverrideMethodsTool(Tool):
 
     Resolves candidate methods via LSP type-hierarchy and inserts override
     stubs at a chosen position with checkpoint+rollback.
+
+    Note: method_names is informational in v1.6 — jdtls's
+    source.generate.overrideMethods command covers all not-yet-overridden
+    abstract methods by default; per-method selection is a Phase 2.5
+    enhancement (jdtls's interactive picker is not exposed via the LSP
+    command surface today).
     """
 
     def apply(
