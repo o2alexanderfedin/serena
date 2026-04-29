@@ -10,7 +10,9 @@ Docstrings on every ``apply`` method are <=30 words (router signage,
 
 from __future__ import annotations
 
+import asyncio
 import time
+from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any, Literal
 
@@ -19,6 +21,7 @@ from serena.refactoring.capabilities import CapabilityRecord
 from serena.refactoring.pending_tx import AnnotationGroup, PendingTransaction
 from serena.tools.facade_support import (
     _apply_workspace_edit_to_disk,
+    apply_action_and_checkpoint,
 )
 from serena.tools.scalpel_runtime import ScalpelRuntime
 from serena.tools.scalpel_schemas import (
@@ -201,6 +204,22 @@ def _is_in_workspace(file: str, project_root: Path) -> bool:
         return False
 
 
+def _run_async(coro: Coroutine[Any, Any, Any]) -> Any:
+    """Drive an async coroutine to completion in a tool's sync ``apply`` path.
+
+    Mirrors ``serena.tools.scalpel_facades._run_async`` (kept local here to
+    avoid forming a ``scalpel_primitives -> scalpel_facades`` import edge,
+    which v1.6 PR 1 explicitly broke).
+    """
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            return asyncio.run_coroutine_threadsafe(coro, loop).result()
+    except RuntimeError:
+        pass
+    return asyncio.new_event_loop().run_until_complete(coro)
+
+
 def _dispatch_via_coordinator(
     capability: CapabilityRecord,
     file: str,
@@ -213,27 +232,54 @@ def _dispatch_via_coordinator(
 ) -> RefactorResult:
     """Drive the Stage 1D coordinator + Stage 1B applier.
 
-    Stage 1G ships the dispatcher *plumbing*; the Stage 2A ergonomic
-    facades exercise the full code-action -> resolve -> apply pipeline.
+    v1.6 PR 3 (Plan 2): the dispatcher now resolves the winner action's
+    ``WorkspaceEdit`` via :func:`apply_action_and_checkpoint` and applies
+    it to disk; the v0.2.0 ``applied=True`` lie (recorded an empty
+    ``{"changes": {}}`` checkpoint) is gone.
+
+    Note: ``params`` is informational; the LSP server's code-action request
+    shapes the dispatch via ``capability.kind`` alone (today's
+    ``merge_code_actions(only=[capability.kind])``). Threading ``params``
+    into the LSP ``context`` is deferred to a future capability-shape spec.
+    ``preview_token`` is reserved for the dry-run continuation contract;
+    today's dry-run mints a fresh token rather than threading the prior one.
     """
-    del params, preview_token  # Stage 2A wires these end-to-end
+    del params, preview_token  # see docstring — informational at MVP
     from solidlsp.ls_config import Language
 
     runtime = ScalpelRuntime.instance()
     language = Language(capability.language)
     coord = runtime.coordinator_for(language, project_root)
+    # v1.6 Plan 2 NEW gate — short-circuit when the responsible LSP server
+    # does not advertise the capability's code-action kind. Mirrors the
+    # named-facade gates (e.g. scalpel_facades.py:195, :428, :2132).
+    if not coord.supports_kind(language.value, capability.kind):
+        return RefactorResult(
+            applied=False,
+            diagnostics_delta=_empty_diagnostics_delta(),
+            failure=FailureInfo(
+                stage="apply_capability",
+                reason=(
+                    f"Server {capability.source_server!r} does not advertise "
+                    f"code-action kind {capability.kind!r} for language "
+                    f"{language.value!r}."
+                ),
+                code=ErrorCode.CAPABILITY_NOT_AVAILABLE,
+                recoverable=True,
+            ),
+        )
     t0 = time.monotonic()
     if isinstance(range_or_name_path, dict):
         rng = range_or_name_path
     else:
         rng = {"start": {"line": 0, "character": 0},
                "end": {"line": 0, "character": 0}}
-    actions = coord.merge_code_actions(
+    actions = _run_async(coord.merge_code_actions(
         file=file,
         start=rng["start"],
         end=rng["end"],
         only=[capability.kind],
-    )
+    ))
     elapsed_ms = int((time.monotonic() - t0) * 1000)
     if not actions:
         return RefactorResult(
@@ -261,15 +307,37 @@ def _dispatch_via_coordinator(
             preview_token=f"pv_{capability.id}_{int(time.time())}",
             duration_ms=elapsed_ms,
         )
-    ckpt_id = runtime.checkpoint_store().record(
-        applied={"changes": {}},
-        snapshot={},
-    )
+    # v1.6 PR 3: resolve the winner action's WorkspaceEdit, snapshot pre-edit
+    # bytes, and apply via PR 2's helper. Empty ``cid`` would mean the helper
+    # short-circuited without recording — ``apply_action_and_checkpoint``
+    # always returns a non-empty id today, but we surface a no-op envelope
+    # defensively so the contract stays honest if that invariant ever weakens.
+    cid, applied_edit = apply_action_and_checkpoint(coord, actions[0])
+    if not cid or applied_edit == {"changes": {}}:
+        return RefactorResult(
+            applied=False,
+            no_op=True,
+            diagnostics_delta=_empty_diagnostics_delta(),
+            checkpoint_id=cid or None,
+            duration_ms=elapsed_ms,
+            lsp_ops=(LspOpStat(
+                method="textDocument/codeAction",
+                server=capability.source_server,
+                count=1,
+                total_ms=elapsed_ms,
+            ),),
+        )
     return RefactorResult(
         applied=True,
         diagnostics_delta=_empty_diagnostics_delta(),
-        checkpoint_id=ckpt_id,
+        checkpoint_id=cid,
         duration_ms=elapsed_ms,
+        lsp_ops=(LspOpStat(
+            method="textDocument/codeAction",
+            server=capability.source_server,
+            count=1,
+            total_ms=elapsed_ms,
+        ),),
     )
 
 
