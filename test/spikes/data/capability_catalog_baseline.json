@@ -163,6 +163,114 @@
     },
     {
       "extension_allow_list": [
+        ".cs",
+        ".csx"
+      ],
+      "id": "csharp.quickfix",
+      "kind": "quickfix",
+      "language": "csharp",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "csharp-ls"
+    },
+    {
+      "extension_allow_list": [
+        ".cs",
+        ".csx"
+      ],
+      "id": "csharp.refactor",
+      "kind": "refactor",
+      "language": "csharp",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "csharp-ls"
+    },
+    {
+      "extension_allow_list": [
+        ".cs",
+        ".csx"
+      ],
+      "id": "csharp.refactor.extract",
+      "kind": "refactor.extract",
+      "language": "csharp",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "csharp-ls"
+    },
+    {
+      "extension_allow_list": [
+        ".cs",
+        ".csx"
+      ],
+      "id": "csharp.refactor.extract.method",
+      "kind": "refactor.extract.method",
+      "language": "csharp",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "csharp-ls"
+    },
+    {
+      "extension_allow_list": [
+        ".cs",
+        ".csx"
+      ],
+      "id": "csharp.refactor.extract.variable",
+      "kind": "refactor.extract.variable",
+      "language": "csharp",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "csharp-ls"
+    },
+    {
+      "extension_allow_list": [
+        ".cs",
+        ".csx"
+      ],
+      "id": "csharp.refactor.inline",
+      "kind": "refactor.inline",
+      "language": "csharp",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "csharp-ls"
+    },
+    {
+      "extension_allow_list": [
+        ".cs",
+        ".csx"
+      ],
+      "id": "csharp.refactor.inline.method",
+      "kind": "refactor.inline.method",
+      "language": "csharp",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "csharp-ls"
+    },
+    {
+      "extension_allow_list": [
+        ".cs",
+        ".csx"
+      ],
+      "id": "csharp.refactor.rewrite",
+      "kind": "refactor.rewrite",
+      "language": "csharp",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "csharp-ls"
+    },
+    {
+      "extension_allow_list": [
+        ".cs",
+        ".csx"
+      ],
+      "id": "csharp.source.organizeImports",
+      "kind": "source.organizeImports",
+      "language": "csharp",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "csharp-ls"
+    },
+    {
+      "extension_allow_list": [
         ".go"
       ],
       "id": "go.quickfix",

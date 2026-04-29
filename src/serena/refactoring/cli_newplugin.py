@@ -548,6 +548,72 @@ _LANGUAGE_METADATA: dict[str, _StrategyView] = {
             ),
         ),
     ),
+    "csharp": _StrategyView(
+        # Stream 6 / Leaf I: csharp-ls drives the LSP over stdio.
+        # csharp-ls (https://github.com/razzmatazz/csharp-language-server) is a
+        # Roslyn-based C# language server that is simpler to install than OmniSharp
+        # (no tarball + Mono dance). It is distributed as a .NET global tool.
+        # Install: ``dotnet tool install --global csharp-ls``
+        # Ensure ~/.dotnet/tools is on PATH after install.
+        # See csharp_strategy.py module docstring for the full rationale.
+        language="csharp",
+        display_name="C#",
+        file_extensions=(".cs", ".csx"),
+        lsp_server_cmd=("csharp-ls",),
+        facades=(
+            _Facade(
+                name="extract",
+                summary="Extract selection into a method or variable",
+                trigger_phrases=("extract this", "extract method", "extract variable"),
+                primitive_chain=(
+                    "textDocument/codeAction[refactor.extract]",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="inline",
+                summary="Inline a method at all call sites",
+                trigger_phrases=("inline this", "inline method"),
+                primitive_chain=(
+                    "textDocument/codeAction[refactor.inline]",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="rename",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="organize_imports",
+                summary="Remove unused using directives and sort import order",
+                trigger_phrases=("organize imports", "sort imports", "clean imports", "organize usings"),
+                primitive_chain=(
+                    "textDocument/codeAction[source.organizeImports]",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="rewrite",
+                summary="Apply rewrite transformations (convert, invert, etc.)",
+                trigger_phrases=("rewrite this", "convert to", "invert condition"),
+                primitive_chain=(
+                    "textDocument/codeAction[refactor.rewrite]",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply all auto-fixable diagnostics (quickfix)",
+                trigger_phrases=("fix all", "fix lints", "auto fix"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
 }
 
 
