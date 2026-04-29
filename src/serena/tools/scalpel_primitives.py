@@ -23,6 +23,7 @@ from serena.refactoring.pending_tx import AnnotationGroup, PendingTransaction
 from serena.tools.facade_support import (
     _apply_workspace_edit_to_disk,
     apply_action_and_checkpoint,
+    inverse_apply_checkpoint,
 )
 from serena.tools.scalpel_runtime import ScalpelRuntime
 from serena.tools.scalpel_schemas import (
@@ -844,14 +845,6 @@ class ScalpelConfirmAnnotationsTool(Tool):
 # ---------------------------------------------------------------------------
 
 
-def _no_op_applier(_: dict[str, Any]) -> int:
-    """Stage 1G synthetic applier — exists so checkpoint_store.restore
-    can be invoked without spinning up a real LSP. Returns 0 so restore()
-    surfaces as ``no_op=True`` in RefactorResult.
-    """
-    return 0
-
-
 def _strip_txn_prefix(txn_id: str) -> str:
     """Strip the 'txn_' presentation prefix added by dry_run_compose.
 
@@ -865,19 +858,22 @@ def _strip_txn_prefix(txn_id: str) -> str:
 class ScalpelRollbackTool(Tool):
     """PREFERRED: undo a refactor by checkpoint_id (idempotent).
 
-    WARNING: rollback marks the checkpoint reverted in the in-memory
-    checkpoint store; it does NOT undo edits to disk. The caller is
-    responsible for re-running the inverse refactor or relying on their
-    editor's undo stack to restore the prior file content. The real
-    on-disk inverse-applier is deferred to v1.7 (snapshot capture
-    landed in v1.6 P1, which is the prerequisite groundwork).
+    Restores edits to disk via the captured pre-edit snapshot and marks the
+    checkpoint reverted in the store. Returns warnings for any irreversible
+    resource operations (e.g., delete with no captured snapshot).
+
+    Snapshot capture landed in v1.6 P1; this on-disk inverse-applier landed
+    in v1.7 P7 (Plan 3-A). Idempotent — second call against the same
+    checkpoint is a no-op.
     """
 
     def apply(self, checkpoint_id: str) -> str:
         """Undo a refactor by checkpoint_id. Idempotent: second call is no-op.
 
-        WARNING: this call does NOT undo edits to disk; it only marks
-        the checkpoint reverted in the store. See the class docstring.
+        Restores edits to disk via the captured pre-edit snapshot and marks
+        the checkpoint reverted in the store. Returns warnings for any
+        irreversible resource operations (e.g., delete with no captured
+        snapshot).
 
         :param checkpoint_id: id returned by a prior apply call.
         :return: JSON RefactorResult with applied=True if any ops applied,
@@ -893,10 +889,29 @@ class ScalpelRollbackTool(Tool):
                 diagnostics_delta=_empty_diagnostics_delta(),
                 checkpoint_id=checkpoint_id,
             ).model_dump_json(indent=2)
-        restored = ckpt_store.restore(checkpoint_id, _no_op_applier)
+        # Idempotent contract: if this checkpoint has already been rolled
+        # back in this process, short-circuit to no_op without re-running the
+        # inverse-applier (which would otherwise rewrite the snapshot atop
+        # the same content for a no-op disk effect but a misleading
+        # ``applied=True``).
+        if getattr(ckpt, "reverted", False):
+            return RefactorResult(
+                applied=False,
+                no_op=True,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                checkpoint_id=checkpoint_id,
+            ).model_dump_json(indent=2)
+        # v1.7 P7 — call the real inverse-applier BEFORE marking the
+        # checkpoint reverted. The applier restores per-URI content from the
+        # captured snapshot; resource ops (create / delete / rename) are
+        # reversed in reverse documentChanges order.
+        ok, _warnings = inverse_apply_checkpoint(checkpoint_id)
+        if ok:
+            # Flip the reverted flag so subsequent calls are no-ops.
+            ckpt.reverted = True
         return RefactorResult(
-            applied=bool(restored),
-            no_op=not restored,
+            applied=bool(ok),
+            no_op=not ok,
             diagnostics_delta=_empty_diagnostics_delta(),
             checkpoint_id=checkpoint_id,
         ).model_dump_json(indent=2)
@@ -905,21 +920,25 @@ class ScalpelRollbackTool(Tool):
 class ScalpelTransactionRollbackTool(Tool):
     """PREFERRED: undo all checkpoints in a transaction in reverse order (idempotent).
 
-    WARNING: rollback marks each checkpoint reverted in the in-memory
-    checkpoint store; it does NOT undo edits to disk. The caller is
-    responsible for re-running the inverse of each step's refactor or
-    relying on their editor's undo stack to restore the prior file
-    content. The real on-disk inverse-applier is deferred to v1.7
-    (snapshot capture landed in v1.6 P1, which is the prerequisite
-    groundwork).
+    Restores edits to disk via each checkpoint's captured pre-edit snapshot,
+    walking steps in reverse chronological order so dependent edits unwind
+    cleanly. Reverses resource ops (create / delete / rename) per step and
+    marks each checkpoint reverted in the store for idempotency. Returns
+    warnings for any irreversible resource operations (e.g., delete with no
+    captured snapshot).
+
+    Snapshot capture landed in v1.6 P1; this on-disk inverse-applier landed
+    in v1.7 P7 (Plan 3-A).
     """
 
     def apply(self, transaction_id: str) -> str:
         """Undo all checkpoints in a transaction (from dry_run_compose) in
         reverse order. Idempotent.
 
-        WARNING: this call does NOT undo edits to disk; it only marks
-        each checkpoint reverted in the store. See the class docstring.
+        Restores edits to disk via each checkpoint's captured pre-edit
+        snapshot, walking steps in reverse chronological order so dependent
+        edits unwind cleanly. Reverses resource ops per step and returns
+        warnings for any irreversible resource operations.
 
         :param transaction_id: id returned by dry_run_compose.
         :return: JSON TransactionResult.
@@ -941,8 +960,22 @@ class ScalpelTransactionRollbackTool(Tool):
                 rolled_back=False,
             ).model_dump_json(indent=2)
         success_count = 0
+        # Walk steps in REVERSE chronological order so each step's inverse
+        # runs against the interim disk state produced by the next-newer
+        # step's already-reverted edit. v1.7 P7 — calls the real
+        # inverse-applier per step.
         for cid in reversed(member_ids):
-            ok = ckpt_store.restore(cid, _no_op_applier)
+            ckpt = ckpt_store.get(cid)
+            if ckpt is None:
+                ok = False
+            elif getattr(ckpt, "reverted", False):
+                # Already reverted in a prior call — preserve idempotency.
+                ok = False
+            else:
+                applied_ok, _warnings = inverse_apply_checkpoint(cid)
+                if applied_ok:
+                    ckpt.reverted = True
+                ok = applied_ok
             if ok:
                 success_count += 1
             per_step.append(RefactorResult(
