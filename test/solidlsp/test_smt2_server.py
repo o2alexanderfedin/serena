@@ -1,10 +1,10 @@
-"""Stream 6 / Leaf F — Smt2Server adapter unit tests.
+"""Stream 6 / Leaf F — Smt2Server adapter unit tests (v1.4.1: dolmenls-backed).
 
 Unit-level tests: exercise the adapter's constants and small introspection
-methods without spawning a real ``smt2-lsp`` subprocess.
+methods without spawning a real ``dolmenls`` subprocess.
 
 Key invariants tested:
-  - ``server_id`` is stable (used for dynamic-capability registration).
+  - ``server_id == "dolmenls"`` — keys dynamic-capability registrations.
   - ``get_language_enum_instance()`` returns ``Language.SMT2``.
   - ``is_ignored_dirname`` excludes solver temp dirs (.z3, .cvc5).
   - Initialize-params advertise ONLY ``quickfix`` — SMT-LIB 2 is a constraint
@@ -24,8 +24,11 @@ from solidlsp.ls_config import Language
 
 
 def test_server_id_constant() -> None:
-    """``server_id`` keys dynamic-capability registrations; must be stable."""
-    assert Smt2Server.server_id == "smt2-lsp"
+    """``server_id`` keys dynamic-capability registrations; must be stable.
+
+    v1.4.1: renamed from ``smt2-lsp`` (sentinel) to ``dolmenls`` (real binary).
+    """
+    assert Smt2Server.server_id == "dolmenls"
 
 
 def test_get_language_enum_instance_returns_smt2() -> None:
