@@ -48,6 +48,7 @@ from .lean_strategy import LeanStrategy
 from .smt2_strategy import Smt2Strategy
 from .prolog_strategy import PrologStrategy
 from .problog_strategy import ProblogStrategy
+from .csharp_strategy import CsharpStrategy
 
 
 # Lazy-import the Language enum to keep refactoring/__init__.py free of
@@ -66,6 +67,7 @@ def _build_strategy_registry() -> dict:
         Language.SMT2: Smt2Strategy,
         Language.PROLOG: PrologStrategy,
         Language.PROBLOG: ProblogStrategy,
+        Language.CSHARP: CsharpStrategy,
     }
 
 
@@ -108,6 +110,7 @@ __all__ = [
     "Smt2Strategy",
     "PrologStrategy",
     "ProblogStrategy",
+    "CsharpStrategy",
     "WaitingForLspBudget",
     "build_capability_catalog",
     "default_cache_root",
