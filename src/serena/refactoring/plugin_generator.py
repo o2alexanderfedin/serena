@@ -154,9 +154,8 @@ def _render_mcp_json(strategy: _StrategyLike) -> str:
                 "args": [
                     "--from",
                     "git+https://github.com/o2alexanderfedin/o2-scalpel-engine.git",
-                    "serena-mcp",
-                    "--language",
-                    strategy.language,
+                    "serena",
+                    "start-mcp-server",
                 ],
                 "env": {},
             }
