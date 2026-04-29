@@ -36,6 +36,13 @@ def _stub_strategy_registry():
         pass
 
     class _StubStrategy:
+        # Catalog walk (post-DLp2) reads these as ClassVars; provide an
+        # empty allow-list so the stub doesn't add records to the catalog
+        # (and so build_capability_catalog can complete).
+        language_id = "rust"
+        code_action_allow_list: frozenset[str] = frozenset()
+        extension_allow_list: frozenset[str] = frozenset({".rs"})
+
         def __init__(self, pool):
             self._pool = pool
 
