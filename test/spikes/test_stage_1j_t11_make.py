@@ -33,7 +33,8 @@ def test_make_generate_plugins_creates_rust(tmp_path) -> None:
     assert (
         tmp_path / "o2-scalpel-rust" / ".claude-plugin" / "plugin.json"
     ).exists()
-    assert (tmp_path / "marketplace.json").exists()
+    # Post-v1.2.2: marketplace.json lives under .claude-plugin/.
+    assert (tmp_path / ".claude-plugin" / "marketplace.json").exists()
 
 
 def test_make_generate_plugins_includes_python(tmp_path) -> None:
@@ -61,6 +62,23 @@ def test_make_generate_plugins_marketplace_lists_both(tmp_path) -> None:
         check=False,
     )
     assert result.returncode == 0, f"stderr:\n{result.stderr}"
-    data = json.loads((tmp_path / "marketplace.json").read_text())
+    # Post-v1.2.2: marketplace.json lives under .claude-plugin/.
+    data = json.loads(
+        (tmp_path / ".claude-plugin" / "marketplace.json").read_text()
+    )
     names = sorted(p["name"] for p in data["plugins"])
-    assert names == ["o2-scalpel-python", "o2-scalpel-rust"]
+    # Post-Stream-6 + v1.4.1 expansion: 12 plugins are emitted by default.
+    assert names == sorted([
+        "o2-scalpel-cpp",
+        "o2-scalpel-csharp",
+        "o2-scalpel-go",
+        "o2-scalpel-java",
+        "o2-scalpel-lean",
+        "o2-scalpel-markdown",
+        "o2-scalpel-prolog",
+        "o2-scalpel-problog",
+        "o2-scalpel-python",
+        "o2-scalpel-rust",
+        "o2-scalpel-smt2",
+        "o2-scalpel-typescript",
+    ])

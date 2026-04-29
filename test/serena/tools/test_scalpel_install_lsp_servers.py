@@ -292,7 +292,13 @@ def _patched_run(argv: list[str] | tuple[str, ...], **_kw: Any) -> MagicMock:
 def test_apply_default_languages_covers_all_installers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Stream 6 registry surfaces markdown + 5 back-port slots + typescript — seven entries total."""
+    """Default sweep surfaces every registered installer in dry-run mode.
+
+    The registry grows over time (Stream 6 added 7, v1.4 polyglot pushed it
+    higher). Rather than hard-pin a count, this test asserts the v1.2-and-
+    earlier core slots are all present and that every emitted entry obeys
+    the safety contract (dry_run + planned argv + sane action).
+    """
     monkeypatch.setattr(platform, "system", lambda: "Darwin")
     # Patch every installer's subprocess.run so the sweep stays in dry-run land.
     import serena.installer.basedpyright_installer as bpr_mod
@@ -308,7 +314,8 @@ def test_apply_default_languages_covers_all_installers(
         monkeypatch.setattr(mod.subprocess, "run", _patched_run)
 
     payload = json.loads(_make_tool().apply())
-    expected_keys = {
+    # Lower-bound: v1.2-and-earlier core slots must be present.
+    core_keys = {
         "markdown",
         "rust",
         "python",
@@ -317,14 +324,21 @@ def test_apply_default_languages_covers_all_installers(
         "rust-clippy",
         "typescript",
     }
-    assert set(payload.keys()) == expected_keys
-    for lang in expected_keys:
-        entry = payload[lang]
-        # Every entry has a planned argv tuple and is in safe dry-run mode.
-        assert entry["dry_run"] is True
-        assert isinstance(entry["command"], list)
-        assert entry["command"]  # non-empty
-        assert entry["action"] in {"install", "update", "noop"}
+    assert core_keys.issubset(set(payload.keys()))
+    for lang, entry in payload.items():
+        action = entry["action"]
+        # ``skipped`` entries (e.g. unsupported on this OS) have no
+        # planned argv — they only carry a ``reason``. Every other action
+        # must obey the dry-run safety contract.
+        if action == "skipped":
+            assert "reason" in entry, f"{lang} skipped without reason"
+            continue
+        assert action in {"install", "update", "noop"}, (
+            f"{lang} unexpected action {action!r}"
+        )
+        assert entry["dry_run"] is True, f"{lang} not in dry-run"
+        assert isinstance(entry["command"], list), f"{lang} command not a list"
+        assert entry["command"], f"{lang} command empty"
 
 
 def test_apply_filter_to_rust_only_returns_rust_analyzer(
@@ -404,12 +418,17 @@ def test_apply_filter_to_rust_clippy_returns_clippy(
     ]
 
 
-def test_installer_registry_has_seven_entries() -> None:
-    """Stream 6 registry ships 7 installer slots (v1.2 six + typescript)."""
+def test_installer_registry_nonempty_and_covers_known_languages() -> None:
+    """Registry covers v1.2-and-earlier core slots; allows v1.4+ growth.
+
+    Hard-pinning a count makes this test brittle as new languages land
+    (Stream 6 polyglot, v1.4 polyglot, etc). Lower-bound the v1.2 core
+    set + assert every value is a concrete LspInstaller subclass.
+    """
     from serena.tools.scalpel_primitives import _installer_registry
 
     registry = _installer_registry()
-    assert set(registry.keys()) == {
+    core_keys = {
         "markdown",
         "rust",
         "python",
@@ -418,6 +437,8 @@ def test_installer_registry_has_seven_entries() -> None:
         "rust-clippy",
         "typescript",
     }
+    assert core_keys.issubset(set(registry.keys()))
+    assert len(registry) >= 7
     # Each value is a concrete LspInstaller subclass.
     from serena.installer.installer import LspInstaller
 

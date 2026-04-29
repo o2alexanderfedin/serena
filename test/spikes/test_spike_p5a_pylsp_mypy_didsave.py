@@ -23,6 +23,8 @@ import subprocess
 import time
 from pathlib import Path
 
+import pytest
+
 from ._pylsp_client import PylspClient
 from .conftest import write_spike_result
 
@@ -55,6 +57,11 @@ def _wait_for_mypy_diagnostics(client: PylspClient, uri: str, timeout: float = 8
     return time.perf_counter() - start, [d for d in client.diagnostics_by_uri.get(uri, []) if d.get("source") == "mypy"]
 
 
+# pylsp + mypy cold-start + 12 didSave round-trips routinely takes ~110s on
+# host machines; the spike polls dmypy oracle per step. Pin a generous
+# per-test timeout so a narrower outer ``--timeout=60`` (used in regression
+# sweeps) doesn't kill an otherwise-deterministic run.
+@pytest.mark.timeout(240)
 def test_p5a_pylsp_mypy_didsave_stale_rate(seed_python_root: Path, results_dir: Path) -> None:
     init_py = seed_python_root / "calcpy_seed" / "__init__.py"
     original = init_py.read_text(encoding="utf-8")
