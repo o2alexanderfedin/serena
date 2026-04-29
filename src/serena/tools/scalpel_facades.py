@@ -1099,6 +1099,85 @@ def _capability_not_available_envelope(
 # ---------------------------------------------------------------------------
 
 
+def _select_candidate_action(
+    actions: list[Any],
+    *,
+    title_match: str | None,
+) -> tuple[Any | None, dict[str, object] | None]:
+    """v1.5 G1 — disambiguation policy for shared facade dispatchers.
+
+    Replaces the historical ``actions[0]`` blind selection with a three-step
+    policy. Returns ``(chosen_action, None)`` on success; ``(None, envelope)``
+    when ``title_match`` was requested but selection is ambiguous or empty.
+
+    Policy:
+
+    1. If ``title_match`` is supplied: filter actions by case-insensitive
+       substring match on ``.title``.
+
+       - 0 hits → return a ``MULTIPLE_CANDIDATES``-shaped envelope with
+         ``reason="no_candidate_matched_title_match"``.
+       - 1 hit  → return that action.
+       - ≥2 hits → return a ``MULTIPLE_CANDIDATES``-shaped envelope with
+         ``reason="multiple_candidates_matched_title_match"`` listing the
+         candidates so the caller can tighten the filter.
+
+    2. Otherwise (``title_match is None``): prefer the first action with
+       ``is_preferred=True``; fall back to ``actions[0]`` for the 17
+       pre-G1 callers that have not yet adopted ``title_match`` (status-quo
+       behavior, regression-protected by the existing test corpus).
+
+    The envelope carries ``status="skipped"`` (caller treats this as a
+    non-applied result) plus a ``candidates`` list of ``{id, title,
+    provenance}`` triples for debugging.
+    """
+    if not actions:
+        return None, None
+    if title_match is not None:
+        needle = title_match.casefold()
+        hits = [
+            a for a in actions
+            if isinstance(getattr(a, "title", None), str)
+            and needle in a.title.casefold()
+        ]
+        if len(hits) == 1:
+            return hits[0], None
+        # 0 hits or ≥2 hits → return the envelope.
+        if len(hits) == 0:
+            reason = "no_candidate_matched_title_match"
+            envelope_candidates = [
+                {
+                    "id": getattr(a, "id", None) or getattr(a, "action_id", None),
+                    "title": getattr(a, "title", None),
+                    "provenance": getattr(a, "provenance", None),
+                }
+                for a in actions
+            ]
+        else:
+            reason = "multiple_candidates_matched_title_match"
+            envelope_candidates = [
+                {
+                    "id": getattr(a, "id", None) or getattr(a, "action_id", None),
+                    "title": getattr(a, "title", None),
+                    "provenance": getattr(a, "provenance", None),
+                }
+                for a in hits
+            ]
+        envelope: dict[str, object] = {
+            "status": "skipped",
+            "code": ErrorCode.MULTIPLE_CANDIDATES.value,
+            "reason": reason,
+            "title_match": title_match,
+            "candidates": envelope_candidates,
+        }
+        return None, envelope
+    # title_match is None — preserve pre-G1 behavior.
+    for a in actions:
+        if bool(getattr(a, "is_preferred", False)):
+            return a, None
+    return actions[0], None
+
+
 def _dispatch_single_kind_facade(
     *,
     stage_name: str,
@@ -1109,6 +1188,7 @@ def _dispatch_single_kind_facade(
     dry_run: bool,
     language: Literal["rust", "python"] | None,
     server_label: str = "rust-analyzer",
+    title_match: str | None = None,
 ) -> str:
     """Shared dispatcher for Stage 3 facades that select a single code-action
     kind at a cursor ``position``.
@@ -1116,6 +1196,11 @@ def _dispatch_single_kind_facade(
     Caller is expected to have already invoked ``workspace_boundary_guard``
     and short-circuited on rejection (each Tool subclass does so directly so
     the safety call stays visible in ``inspect.getsource(cls.apply)``).
+
+    ``title_match`` (v1.5 G1): when supplied, runs the candidate-disambiguation
+    policy in :func:`_select_candidate_action`. Defaults to ``None`` so the
+    17 pre-G1 callers retain status-quo ``actions[0]`` behavior; G4-* leaves
+    migrate one Tool subclass at a time to pass a real ``title_match``.
     """
     lang = _infer_language(file, language)
     if lang not in ("rust", "python"):
@@ -1149,11 +1234,17 @@ def _dispatch_single_kind_facade(
             preview_token=f"pv_{stage_name}_{int(time.time())}",
             duration_ms=elapsed_ms,
         ).model_dump_json(indent=2)
+    # v1.5 G1 — candidate disambiguation policy. Returns an envelope when
+    # title_match is ambiguous; empty title_match preserves actions[0] for
+    # the 17 pre-G1 callers.
+    chosen, miss_envelope = _select_candidate_action(actions, title_match=title_match)
+    if miss_envelope is not None:
+        return json.dumps(miss_envelope)
     # v0.3.0 facade-application: pull the resolved WorkspaceEdit for the
     # winner and write it to disk. ``get_action_edit`` returns ``None`` when
     # the action wasn't tracked (synthetic ids in legacy tests, or when
     # resolve failed); in that case fall back to the v0.2.0 empty checkpoint.
-    workspace_edit = _resolve_winner_edit(coord, actions[0])
+    workspace_edit = _resolve_winner_edit(coord, chosen)
     if isinstance(workspace_edit, dict) and workspace_edit:
         _apply_workspace_edit_to_disk(workspace_edit)
     else:
@@ -1876,10 +1967,15 @@ def _python_dispatch_single_kind(
     project_root: Path,
     dry_run: bool,
     server_label: str = "pylsp-rope",
+    title_match: str | None = None,
 ) -> str:
     """Python-specific shared dispatcher; mirrors ``_dispatch_single_kind_facade``
     but pins ``language='python'`` and labels lsp_ops by the rope/ruff/pyright
-    server. Used by Wave A (rope) and Wave B (ruff / basedpyright)."""
+    server. Used by Wave A (rope) and Wave B (ruff / basedpyright).
+
+    ``title_match`` (v1.5 G1): see :func:`_select_candidate_action`. Defaults
+    to ``None`` so the pre-G1 callers retain their status-quo behavior.
+    """
     coord = coordinator_for_facade(language="python", project_root=project_root)
     if not coord.supports_kind("python", kind):
         return json.dumps(_capability_not_available_envelope(language="python", kind=kind))
@@ -1901,8 +1997,12 @@ def _python_dispatch_single_kind(
             preview_token=f"pv_{stage_name}_{int(time.time())}",
             duration_ms=elapsed_ms,
         ).model_dump_json(indent=2)
+    # v1.5 G1 — candidate disambiguation policy. See _select_candidate_action.
+    chosen, miss_envelope = _select_candidate_action(actions, title_match=title_match)
+    if miss_envelope is not None:
+        return json.dumps(miss_envelope)
     # v0.3.0 facade-application: same pattern as the Rust dispatcher.
-    workspace_edit = _resolve_winner_edit(coord, actions[0])
+    workspace_edit = _resolve_winner_edit(coord, chosen)
     if isinstance(workspace_edit, dict) and workspace_edit:
         _apply_workspace_edit_to_disk(workspace_edit)
     else:
