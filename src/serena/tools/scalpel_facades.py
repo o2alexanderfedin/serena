@@ -107,7 +107,7 @@ def _run_async(coro):
 
 
 def _apply_workspace_edit_to_disk(workspace_edit: dict[str, Any]) -> int:
-    """Apply an LSP-spec WorkspaceEdit to the filesystem (v0.3.0).
+    """Apply an LSP-spec WorkspaceEdit to the filesystem (v0.3.0 + v1.5 G3b).
 
     Walks both the ``changes`` (dict shape) and ``documentChanges`` (array
     shape) forms; routes every TextDocumentEdit's ``edits`` list through
@@ -115,12 +115,15 @@ def _apply_workspace_edit_to_disk(workspace_edit: dict[str, Any]) -> int:
     earlier edits don't invalidate later positions.
 
     Resource operations (CreateFile / RenameFile / DeleteFile) inside
-    ``documentChanges`` are recognised but skipped — they ship in v1.1
-    alongside resource-management auditing.
+    ``documentChanges`` apply per LSP §3.18 with default options
+    (``ignoreIfExists`` for create, ``overwrite=False`` for rename,
+    ``ignoreIfNotExists`` for delete). Recursive directory delete is
+    deferred per LO-3 (v1.6 deep-tree checkpoint restore).
 
-    Returns the count of TextEdits actually applied (excluding skipped
-    non-file URIs and missing target files). Caller uses the return value
-    to distinguish ``applied=True`` (count > 0) from ``no_op`` (count == 0).
+    Returns the count of TextEdits *and* resource ops actually applied
+    (excluding skipped non-file URIs and missing target files). Caller
+    uses the return value to distinguish ``applied=True`` (count > 0)
+    from ``no_op`` (count == 0).
     """
     applied = 0
     # changes shape: {uri: [TextEdit, ...]}
@@ -130,8 +133,19 @@ def _apply_workspace_edit_to_disk(workspace_edit: dict[str, Any]) -> int:
     for dc in workspace_edit.get("documentChanges") or []:
         if not isinstance(dc, dict):
             continue
+        kind = dc.get("kind")
+        if kind == "create":
+            applied += _apply_resource_create(dc)
+            continue
+        if kind == "rename":
+            applied += _apply_resource_rename(dc)
+            continue
+        if kind == "delete":
+            applied += _apply_resource_delete(dc)
+            continue
         if "kind" in dc:
-            # Resource op — skip per v1.1 deferral.
+            # Unknown future resource-op kind — preserve forward-compat
+            # by skipping rather than crashing.
             continue
         text_doc = dc.get("textDocument") or {}
         uri = text_doc.get("uri")
@@ -139,6 +153,94 @@ def _apply_workspace_edit_to_disk(workspace_edit: dict[str, Any]) -> int:
             continue
         applied += _apply_text_edits_to_file_uri(uri, dc.get("edits") or [])
     return applied
+
+
+def _resource_uri_to_path(uri: object) -> Path | None:
+    """Decode an LSP ``file://`` URI to a local ``Path``; return ``None``
+    for non-file or malformed URIs.
+    """
+    if not isinstance(uri, str) or not uri.startswith("file://"):
+        return None
+    from urllib.parse import urlparse, unquote
+    return Path(unquote(urlparse(uri).path))
+
+
+def _apply_resource_create(dc: dict[str, Any]) -> int:
+    """LSP §3.18 CreateFile.
+
+    Default options: ``overwrite=False``, ``ignoreIfExists=True``. When
+    the file already exists and neither override is set, the operation
+    is a silent no-op (per LSP semantics — the create is "absorbed" by
+    the existing file). ``mkdir -p`` is always honored on the parent.
+    """
+    target = _resource_uri_to_path(dc.get("uri"))
+    if target is None:
+        return 0
+    options = dc.get("options") or {}
+    overwrite = bool(options.get("overwrite", False))
+    ignore_if_exists = bool(options.get("ignoreIfExists", True))
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.exists():
+        if overwrite:
+            target.write_text("", encoding="utf-8")
+            return 1
+        if ignore_if_exists:
+            return 0  # no-op (LSP default semantics)
+        return 0  # spec would fail; we mirror "skip silently" for safety
+    target.write_text("", encoding="utf-8")
+    return 1
+
+
+def _apply_resource_rename(dc: dict[str, Any]) -> int:
+    """LSP §3.18 RenameFile.
+
+    Default options: ``overwrite=False``, ``ignoreIfExists=False``. When
+    the destination exists and neither override is set, the operation is
+    a silent no-op (mirroring LSP's "skip on conflict" semantics — the
+    structured-logging primitive layer surfaces the no-op via the
+    ``applied`` count).
+    """
+    src = _resource_uri_to_path(dc.get("oldUri"))
+    dst = _resource_uri_to_path(dc.get("newUri"))
+    if src is None or dst is None:
+        return 0
+    if not src.exists():
+        return 0
+    options = dc.get("options") or {}
+    overwrite = bool(options.get("overwrite", False))
+    ignore_if_exists = bool(options.get("ignoreIfExists", False))
+    if dst.exists():
+        if overwrite:
+            dst.unlink()
+        elif ignore_if_exists:
+            return 0
+        else:
+            return 0  # default LSP semantics — skip silently
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    src.rename(dst)
+    return 1
+
+
+def _apply_resource_delete(dc: dict[str, Any]) -> int:
+    """LSP §3.18 DeleteFile.
+
+    Default options: ``ignoreIfNotExists=True``. Recursive directory
+    delete is deferred per LO-3 (v1.6) — a directory target is a no-op.
+    """
+    target = _resource_uri_to_path(dc.get("uri"))
+    if target is None:
+        return 0
+    options = dc.get("options") or {}
+    ignore_if_not_exists = bool(options.get("ignoreIfNotExists", True))
+    if not target.exists():
+        if ignore_if_not_exists:
+            return 0
+        return 0  # spec would fail; we mirror "skip silently" for safety
+    if target.is_dir():
+        # LO-3 — recursive directory delete deferred. No-op.
+        return 0
+    target.unlink()
+    return 1
 
 
 def _apply_text_edits_to_file_uri(uri: str, edits: list[dict[str, Any]]) -> int:
