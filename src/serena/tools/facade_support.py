@@ -290,6 +290,33 @@ def apply_action_and_checkpoint(
     return (cid, edit)
 
 
+def apply_workspace_edit_and_checkpoint(
+    workspace_edit: dict[str, Any],
+) -> str:
+    """Snapshot, apply, and checkpoint a pre-resolved WorkspaceEdit.
+
+    Sibling of :func:`apply_action_and_checkpoint` for non-action paths
+    (v1.6 Plan 3): callers that already have a resolved ``WorkspaceEdit``
+    in hand (e.g. ``scalpel_split_file._split_python`` — which gets the
+    edit straight from a Rope bridge, never from an LSP CodeAction) can
+    use this helper to honor the same snapshot+apply+checkpoint contract
+    without inventing a fake action.
+
+    Empty / malformed edits short-circuit: returns ``""`` (no checkpoint
+    recorded) when the edit is falsy or carries no actual changes.
+
+    :returns: the checkpoint id (non-empty when an edit was recorded;
+      ``""`` for the empty-edit short-circuit).
+    """
+    if not workspace_edit:
+        return ""
+    if workspace_edit == {"changes": {}}:
+        return ""
+    snapshot = capture_pre_edit_snapshot(workspace_edit)
+    _apply_workspace_edit_to_disk(workspace_edit)
+    return record_checkpoint_for_workspace_edit(workspace_edit, snapshot=snapshot)
+
+
 FACADE_TO_CAPABILITY_ID: dict[str, dict[str, str]] = {
     "scalpel_split_file": {
         "rust": "rust.refactor.move.module",
@@ -485,6 +512,7 @@ __all__ = [
     "_splice_text_edit",
     "_uri_to_path",
     "apply_action_and_checkpoint",
+    "apply_workspace_edit_and_checkpoint",
     "apply_workspace_edit_via_editor",
     "attach_apply_source",
     "build_failure_result",
