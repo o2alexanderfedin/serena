@@ -3034,8 +3034,21 @@ class ScalpelIgnoreDiagnosticTool(Tool):
         :param language: 'rust' or 'python'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
+
+        v1.5 G4-10 (HI-11) — ``rule`` is now threaded into the shared
+        dispatcher's ``title_match`` substring. Ruff and basedpyright both
+        embed the rule code in their quickfix titles
+        (``"Disable F401: unused-import"`` / ``"Pyright: ignore reportMissingImports"``),
+        so a substring match against ``rule`` is the correct disambiguator
+        when multiple rule-specific quickfixes are returned at the same
+        cursor. When no candidate's title contains ``rule``, the
+        dispatcher returns a ``MULTIPLE_CANDIDATES`` envelope with
+        ``status='skipped'`` and ``reason='no_candidate_matched_title_match'``;
+        the file is left untouched. Closes the silent gap where the
+        LSP-first quickfix was applied (silencing whichever rule LSP
+        returned first, not the one caller named).
         """
-        del preview_token, rule, language
+        del preview_token, language
         kind = _IGNORE_DIAGNOSTIC_KIND_BY_TOOL.get(tool_name)
         if kind is None:
             return build_failure_result(
@@ -3057,6 +3070,7 @@ class ScalpelIgnoreDiagnosticTool(Tool):
             file=file, position=position, kind=kind,
             project_root=project_root, dry_run=dry_run,
             server_label=server_label,
+            title_match=rule,
         )
 
 
