@@ -2437,6 +2437,18 @@ class ScalpelIntroduceParameterTool(Tool):
 
 _GENERATE_FROM_UNDEFINED_KIND = "quickfix.generate"
 
+# v1.5 G4-5 — per-target-kind LSP filter for ScalpelGenerateFromUndefinedTool.
+# Modern rope advertises granular ``quickfix.generate.<kind>`` kinds; the
+# facade dispatches the granular kind when supported. Older rope versions
+# only advertise the flat ``quickfix.generate`` — the facade falls back to
+# the flat kind plus ``title_match=target_kind`` so rope's per-kind
+# candidate title is selected via substring match (forward-compat).
+_GENERATE_FROM_UNDEFINED_KIND_BY_TARGET: dict[str, str] = {
+    "function": "quickfix.generate.function",
+    "class": "quickfix.generate.class",
+    "variable": "quickfix.generate.variable",
+}
+
 
 class ScalpelGenerateFromUndefinedTool(Tool):
     """PREFERRED: generate a function/class/variable stub from an undefined name (Rope)."""
@@ -2455,14 +2467,19 @@ class ScalpelGenerateFromUndefinedTool(Tool):
 
         :param file: Python source file containing the undefined reference.
         :param position: LSP cursor on the undefined name.
-        :param target_kind: kind of stub to generate.
+        :param target_kind: kind of stub to generate. v1.5 G4-5 wires this
+            into a per-kind dispatch: when rope advertises
+            ``quickfix.generate.<target_kind>`` (modern rope) the granular
+            kind is sent; otherwise the facade falls back to the flat
+            ``quickfix.generate`` + ``title_match=target_kind`` so rope's
+            per-kind candidate is selected by substring title match.
         :param dry_run: preview only.
         :param preview_token: continuation from a prior dry-run.
         :param language: 'rust' or 'python'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
-        del preview_token, target_kind, language
+        del preview_token, language
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -2470,10 +2487,24 @@ class ScalpelGenerateFromUndefinedTool(Tool):
         )
         if guard is not None:
             return guard.model_dump_json(indent=2)
+        granular_kind = _GENERATE_FROM_UNDEFINED_KIND_BY_TARGET.get(target_kind)
+        if granular_kind is not None:
+            coord = coordinator_for_facade(
+                language="python", project_root=project_root,
+            )
+            if coord.supports_kind("python", granular_kind):
+                return _python_dispatch_single_kind(
+                    stage_name="scalpel_generate_from_undefined",
+                    file=file, position=position, kind=granular_kind,
+                    project_root=project_root, dry_run=dry_run,
+                )
+        # Fallback: flat ``quickfix.generate`` + title_match=target_kind so
+        # rope's per-kind candidate title is selected by substring match.
         return _python_dispatch_single_kind(
             stage_name="scalpel_generate_from_undefined",
             file=file, position=position, kind=_GENERATE_FROM_UNDEFINED_KIND,
             project_root=project_root, dry_run=dry_run,
+            title_match=target_kind,
         )
 
 

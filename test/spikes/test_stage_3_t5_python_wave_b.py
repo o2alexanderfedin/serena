@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -40,8 +41,15 @@ def reset_runtime():
     ScalpelRuntime.reset_for_testing()
 
 
-def _make_tool(cls, project_root: Path):
-    tool = cls.__new__(cls)
+def _make_tool(cls: type, project_root: Path) -> Any:
+    """Construct a Tool-subclass instance without invoking ``__init__``.
+
+    Returns ``Any`` so test bodies can call each subclass's bespoke
+    ``apply(...)`` signature directly without per-call type assertions —
+    pyright's narrowing through ``__new__`` does not reach subclass
+    ``apply`` parameter shapes (e.g. ``symbol_name``, ``tool_name``).
+    """
+    tool = cls.__new__(cls)  # pyright: ignore[reportCallIssue]
     tool.get_project_root = lambda: str(project_root)  # type: ignore[method-assign]
     return tool
 
@@ -70,16 +78,23 @@ def _fake_coord(actions_by_kind: dict[str, list]):
 
 
 def test_generate_from_undefined_dispatches(tmp_path: Path):
+    # v1.5 G4-5 — facade prefers the granular ``quickfix.generate.<kind>``
+    # when rope advertises it, otherwise falls back to the flat
+    # ``quickfix.generate`` + title_match=target_kind. Pin
+    # ``supports_kind`` to advertise only the flat kind so the test
+    # exercises the fallback path; fake_action's title is "x" and
+    # target_kind="x" is used so the title-substring match succeeds.
     src = tmp_path / "module.py"
     src.write_text("x = undefined_thing()\n")
     tool = _make_tool(ScalpelGenerateFromUndefinedTool, tmp_path)
     coord = _fake_coord({
         "quickfix.generate": [_fake_action("quickfix.generate")],
     })
+    coord.supports_kind = lambda lang, kind: kind == "quickfix.generate"
     with patch("serena.tools.scalpel_facades.coordinator_for_facade", return_value=coord):
         out = tool.apply(
             file=str(src), position={"line": 0, "character": 4},
-            target_kind="function", language="python",
+            target_kind="x", language="python",  # type: ignore[arg-type]
         )
     payload = json.loads(out)
     assert payload["applied"] is True
@@ -90,6 +105,7 @@ def test_generate_from_undefined_no_action(tmp_path: Path):
     src.write_text("\n")
     tool = _make_tool(ScalpelGenerateFromUndefinedTool, tmp_path)
     coord = _fake_coord({})
+    coord.supports_kind = lambda lang, kind: kind == "quickfix.generate"
     with patch("serena.tools.scalpel_facades.coordinator_for_facade", return_value=coord):
         out = tool.apply(
             file=str(src), position={"line": 0, "character": 0},
