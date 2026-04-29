@@ -22,6 +22,7 @@ from serena.tools.facade_support import (
     _splice_text_edit,
     _uri_to_path,
     apply_action_and_checkpoint,
+    apply_workspace_edit_and_checkpoint,
     attach_apply_source,
     build_failure_result,
     capture_pre_edit_snapshot,
@@ -211,12 +212,22 @@ class ScalpelSplitFileTool(Tool):
     ) -> RefactorResult:
         bridge = _build_python_rope_bridge(project_root)
         edits: list[dict[str, Any]] = []
+        warnings: list[str] = []
         t0 = time.monotonic()
         try:
             rel = str(Path(file).relative_to(project_root))
-            for group_name in groups.keys():
+            for group_name, members in groups.items():
                 target_rel = f"{group_name}.py"
                 edits.append(bridge.move_module(rel, target_rel))
+                # v1.6 Plan 3 — symbol lists are doc-tagged "informational"
+                # for v1.6; the rope bridge moves whole modules. The v1.7
+                # rope-bridge expansion will honor per-symbol selection.
+                if members:
+                    warnings.append(
+                        f"groups[{group_name!r}] symbol list is "
+                        f"informational; rope bridge moves whole modules "
+                        f"in v1.6"
+                    )
         finally:
             try:
                 bridge.close()
@@ -230,13 +241,20 @@ class ScalpelSplitFileTool(Tool):
                 diagnostics_delta=_empty_diagnostics_delta(),
                 preview_token=f"pv_split_{int(time.time())}",
                 duration_ms=elapsed_ms,
+                warnings=tuple(warnings),
             )
-        cid = record_checkpoint_for_workspace_edit(merged, snapshot={})
+        # v1.6 Plan 3 — apply the merged edit to disk via the new
+        # ``apply_workspace_edit_and_checkpoint`` sibling helper. Replaces
+        # the v0.2.0 ``record_checkpoint_for_workspace_edit(merged,
+        # snapshot={})`` snippet that recorded a checkpoint without ever
+        # touching disk and with an empty placeholder snapshot.
+        cid = apply_workspace_edit_and_checkpoint(merged)
         return RefactorResult(
             applied=True,
             diagnostics_delta=_empty_diagnostics_delta(),
             checkpoint_id=cid,
             duration_ms=elapsed_ms,
+            warnings=tuple(warnings),
             lsp_ops=(LspOpStat(
                 method="rope.refactor.move",
                 server="pylsp-rope",
