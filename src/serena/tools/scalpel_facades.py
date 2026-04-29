@@ -1754,16 +1754,21 @@ class ScalpelChangeReturnTypeTool(Tool):
 
         :param file: source file containing the function.
         :param position: LSP cursor on the ``fn`` keyword or return-type token.
-        :param new_return_type: replacement type expression (informational —
-            rust-analyzer offers a single rewrite per cursor; the target type
-            is selected by the assist).
+        :param new_return_type: replacement type expression. v1.5 G4-1 wires
+            this into the shared dispatcher's ``title_match`` so rust-analyzer's
+            ``Change return type to <T>`` action is selected by substring
+            match against the caller's request. When the assist's surfaced
+            rewrite does not match this type, the response is the G1
+            ``MULTIPLE_CANDIDATES`` envelope (``status="skipped"`` /
+            ``reason="no_candidate_matched_title_match"``) — caller can retry
+            at a different cursor or accept rust-analyzer's suggested type.
         :param dry_run: preview only.
         :param preview_token: continuation from a prior dry-run.
         :param language: 'rust' or 'python'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
-        del preview_token, new_return_type
+        del preview_token
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -1776,6 +1781,7 @@ class ScalpelChangeReturnTypeTool(Tool):
             file=file, position=position, kind=_RETURN_TYPE_KIND,
             project_root=project_root,
             dry_run=dry_run, language=language,
+            title_match=new_return_type,
         )
 
 
