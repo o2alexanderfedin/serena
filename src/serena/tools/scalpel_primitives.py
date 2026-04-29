@@ -351,6 +351,11 @@ class ScalpelApplyCapabilityTool(Tool):
     the ``FALLBACK:`` opener (vs the ``PREFERRED:`` opener used by every
     named facade) is the asymmetric routing signal that lets the LLM
     prefer a specialised tool when one exists.
+
+    Note: params is informational; the LSP server's code-action request
+    shapes the dispatch via ``capability_id`` alone (today's
+    ``merge_code_actions(only=[capability.kind])``). Threading ``params``
+    into the LSP ``context`` is deferred to a future capability-shape spec.
     """
 
     def apply(
@@ -858,10 +863,21 @@ def _strip_txn_prefix(txn_id: str) -> str:
 
 
 class ScalpelRollbackTool(Tool):
-    """PREFERRED: undo a refactor by checkpoint_id (idempotent)."""
+    """PREFERRED: undo a refactor by checkpoint_id (idempotent).
+
+    WARNING: rollback marks the checkpoint reverted in the in-memory
+    checkpoint store; it does NOT undo edits to disk. The caller is
+    responsible for re-running the inverse refactor or relying on their
+    editor's undo stack to restore the prior file content. The real
+    on-disk inverse-applier is deferred to v1.7 (snapshot capture
+    landed in v1.6 P1, which is the prerequisite groundwork).
+    """
 
     def apply(self, checkpoint_id: str) -> str:
         """Undo a refactor by checkpoint_id. Idempotent: second call is no-op.
+
+        WARNING: this call does NOT undo edits to disk; it only marks
+        the checkpoint reverted in the store. See the class docstring.
 
         :param checkpoint_id: id returned by a prior apply call.
         :return: JSON RefactorResult with applied=True if any ops applied,
@@ -887,11 +903,23 @@ class ScalpelRollbackTool(Tool):
 
 
 class ScalpelTransactionRollbackTool(Tool):
-    """PREFERRED: undo all checkpoints in a transaction in reverse order (idempotent)."""
+    """PREFERRED: undo all checkpoints in a transaction in reverse order (idempotent).
+
+    WARNING: rollback marks each checkpoint reverted in the in-memory
+    checkpoint store; it does NOT undo edits to disk. The caller is
+    responsible for re-running the inverse of each step's refactor or
+    relying on their editor's undo stack to restore the prior file
+    content. The real on-disk inverse-applier is deferred to v1.7
+    (snapshot capture landed in v1.6 P1, which is the prerequisite
+    groundwork).
+    """
 
     def apply(self, transaction_id: str) -> str:
         """Undo all checkpoints in a transaction (from dry_run_compose) in
         reverse order. Idempotent.
+
+        WARNING: this call does NOT undo edits to disk; it only marks
+        each checkpoint reverted in the store. See the class docstring.
 
         :param transaction_id: id returned by dry_run_compose.
         :return: JSON TransactionResult.

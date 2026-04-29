@@ -47,6 +47,15 @@ from serena.tools.tools_base import Tool
 # ---------------------------------------------------------------------------
 
 
+# v1.6 P5 — canonical phrasing for "this parameter is informational; the
+# LSP server picks the action per cursor". Used in the 12-facade A4
+# cluster docstrings and enforced by the drift-CI gate
+# (``test_dropped_params_carry_informational_tag``).
+_INFORMATIONAL_PARAM_NOTE_TEMPLATE = (
+    "Note: {param} is informational; {lsp} picks the action per cursor."
+)
+
+
 def _empty_diagnostics_delta() -> DiagnosticsDelta:
     zero = DiagnosticSeverityBreakdown(error=0, warning=0, information=0, hint=0)
     return DiagnosticsDelta(
@@ -130,7 +139,14 @@ def _run_async(coro):
 
 
 class ScalpelSplitFileTool(Tool):
-    """PREFERRED: split a source file into N modules by moving named symbols."""
+    """PREFERRED: split a source file into N modules by moving named symbols.
+
+    Note: groups symbol-grouping is informational in v1.6 — rust-analyzer's
+    extract.module assist drives the partition (Rust branch), and the
+    pylsp-rope bridge moves whole modules (Python branch). The
+    ``groups[*]`` symbol lists are surfaced as warnings; per-symbol
+    selection is a v1.7 rope-bridge enhancement.
+    """
 
     def apply(
         self,
@@ -345,7 +361,12 @@ _EXTRACT_VALID_TARGETS_BY_LANGUAGE: dict[str, frozenset[str]] = {
 
 
 class ScalpelExtractTool(Tool):
-    """PREFERRED: extract a symbol/selection into a new variable/function/module/type."""
+    """PREFERRED: extract a symbol/selection into a new variable/function/module/type.
+
+    Note: new_name, visibility, similar, and global_scope are informational;
+    rust-analyzer / pylsp-rope picks the action per cursor (the extract
+    assist offers a single rewrite per cursor).
+    """
 
     def apply(
         self,
@@ -497,7 +518,12 @@ _INLINE_TARGET_TO_KIND: dict[str, str] = {
 
 
 class ScalpelInlineTool(Tool):
-    """PREFERRED: inline a function/variable/type alias at definition or call sites."""
+    """PREFERRED: inline a function/variable/type alias at definition or call sites.
+
+    Note: name_path and remove_definition are informational; rust-analyzer
+    / pylsp-rope picks the action per cursor (callers must pass ``position``
+    to anchor the inline; ``remove_definition`` follows the assist's default).
+    """
 
     def apply(
         self,
@@ -613,7 +639,13 @@ def _looks_like_module_name_path(name_path: str, file: str) -> bool:
 
 
 class ScalpelRenameTool(Tool):
-    """PREFERRED: rename a symbol everywhere it is referenced. Cross-file via LSP textDocument/rename with checkpoint+rollback."""
+    """PREFERRED: rename a symbol everywhere it is referenced. Cross-file via LSP textDocument/rename with checkpoint+rollback.
+
+    Note: also_in_strings is informational in v1.6 — naive regex
+    string-substitution is a footgun (substring matches like ``"foobar"``
+    would be hit). String-literal substitution is deferred to v1.7 with
+    proper word-boundary semantics.
+    """
 
     def apply(
         self,
@@ -861,7 +893,13 @@ _ENGINE_TO_PROVENANCE: dict[str, str] = {
 
 
 class ScalpelImportsOrganizeTool(Tool):
-    """PREFERRED: add missing, remove unused, reorder imports across files."""
+    """PREFERRED: add missing, remove unused, reorder imports across files.
+
+    Note: add_missing, remove_unused, and reorder are informational;
+    pylsp-rope / ruff / basedpyright picks the action per file (the
+    chosen engine drives all three behaviours via its single
+    ``source.organizeImports`` action; sub-kinds are not advertised today).
+    """
 
     def apply(
         self,
@@ -1177,7 +1215,11 @@ _VISIBILITY_KIND = "refactor.rewrite.change_visibility"
 
 
 class ScalpelChangeVisibilityTool(Tool):
-    """PREFERRED: toggle a Rust item's visibility (pub / pub(crate) / pub(super) / private)."""
+    """PREFERRED: toggle a Rust item's visibility (pub / pub(crate) / pub(super) / private).
+
+    Note: target_visibility is informational; rust-analyzer picks the
+    action per cursor.
+    """
 
     def apply(
         self,
@@ -1193,7 +1235,8 @@ class ScalpelChangeVisibilityTool(Tool):
 
         :param file: source file containing the item.
         :param position: LSP cursor on the item keyword.
-        :param target_visibility: requested new visibility tier.
+        :param target_visibility: requested new visibility tier (informational —
+            rust-analyzer's assist offers a single rewrite per cursor).
         :param dry_run: preview only.
         :param preview_token: continuation from a prior dry-run.
         :param language: 'rust' or 'python'; inferred from extension when None.
@@ -1224,7 +1267,14 @@ _TIDY_STRUCTURE_KINDS: tuple[str, ...] = (
 
 
 class ScalpelTidyStructureTool(Tool):
-    """PREFERRED: reorder impl items, sort items, and reorder struct fields in a file."""
+    """PREFERRED: reorder impl items, sort items, and reorder struct fields in a file.
+
+    Note: scope is informational beyond a post-merge kind-restrict;
+    rust-analyzer picks the action per cursor. ``scope='type'`` restricts
+    to ``refactor.rewrite.reorder_fields``; ``scope='impl'`` restricts to
+    ``refactor.rewrite.reorder_impl_items``; ``scope='file'`` keeps the
+    full multi-kind loop.
+    """
 
     def apply(
         self,
@@ -1248,7 +1298,7 @@ class ScalpelTidyStructureTool(Tool):
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
-        del preview_token, scope
+        del preview_token
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -1266,9 +1316,19 @@ class ScalpelTidyStructureTool(Tool):
             ).model_dump_json(indent=2)
         coord = coordinator_for_facade(language=lang, project_root=project_root)
         cursor = position or {"line": 0, "character": 0}
+        # v1.6 P5 — small threading: scope restricts the multi-kind loop.
+        # ``scope='type'`` -> only reorder_fields. ``scope='impl'`` -> only
+        # reorder_impl_items. ``scope='file'`` (default) keeps the full
+        # 3-kind catalogue.
+        if scope == "type":
+            scope_kinds: tuple[str, ...] = ("refactor.rewrite.reorder_fields",)
+        elif scope == "impl":
+            scope_kinds = ("refactor.rewrite.reorder_impl_items",)
+        else:
+            scope_kinds = _TIDY_STRUCTURE_KINDS
         t0 = time.monotonic()
         all_actions: list[Any] = []
-        for kind in _TIDY_STRUCTURE_KINDS:
+        for kind in scope_kinds:
             # Gate: skip individual kinds not advertised by the server
             # (spec § 4.5 P4 — per-kind gate inside multi-kind loop).
             if not coord.supports_kind(lang, kind):
@@ -1396,7 +1456,11 @@ _RETURN_TYPE_KIND = "refactor.rewrite.change_return_type"
 
 
 class ScalpelChangeReturnTypeTool(Tool):
-    """PREFERRED: rewrite a Rust function's return type at a cursor."""
+    """PREFERRED: rewrite a Rust function's return type at a cursor.
+
+    Note: new_return_type is informational; rust-analyzer picks the
+    action per cursor.
+    """
 
     def apply(
         self,
@@ -1482,7 +1546,11 @@ _LIFETIME_KIND = "refactor.extract.extract_lifetime"
 
 
 class ScalpelExtractLifetimeTool(Tool):
-    """PREFERRED: extract a fresh lifetime parameter for a Rust reference at a cursor."""
+    """PREFERRED: extract a fresh lifetime parameter for a Rust reference at a cursor.
+
+    Note: lifetime_name is informational; rust-analyzer picks the
+    action (and a non-conflicting name) per cursor.
+    """
 
     def apply(
         self,
@@ -1573,7 +1641,11 @@ _GENERATE_TRAIT_IMPL_KIND = "refactor.rewrite.generate_trait_impl"
 
 
 class ScalpelGenerateTraitImplScaffoldTool(Tool):
-    """PREFERRED: generate an ``impl Trait for Type {}`` scaffold at a cursor."""
+    """PREFERRED: generate an ``impl Trait for Type {}`` scaffold at a cursor.
+
+    Note: trait_name is informational; rust-analyzer picks the action
+    per cursor (the assist offers a single trait scaffold per cursor).
+    """
 
     def apply(
         self,
@@ -1670,7 +1742,12 @@ class ScalpelGenerateMemberTool(Tool):
 
 
 class ScalpelExpandMacroTool(Tool):
-    """PREFERRED: expand a Rust macro at a cursor and return the expanded source."""
+    """PREFERRED: expand a Rust macro at a cursor and return the expanded source.
+
+    Honors dry_run: when True, the rust-analyzer expandMacro probe is
+    skipped and a preview_token is returned. (Prior to v1.6 the
+    ``dry_run`` parameter was informational and silently dropped.)
+    """
 
     def apply(
         self,
@@ -1685,13 +1762,14 @@ class ScalpelExpandMacroTool(Tool):
 
         :param file: source file containing the macro invocation.
         :param position: LSP cursor on the macro identifier.
-        :param dry_run: preview only (returns the expansion without applying).
+        :param dry_run: when True, skip the rust-analyzer probe and return a
+            preview-token without applying. v1.6 P5 honors this contract.
         :param preview_token: continuation from a prior dry-run.
         :param language: 'rust' or 'python'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult with the expansion in language_findings.
         """
-        del preview_token, dry_run
+        del preview_token
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -1706,6 +1784,15 @@ class ScalpelExpandMacroTool(Tool):
                 stage="scalpel_expand_macro",
                 reason="expand_macro is rust-analyzer-only.",
                 recoverable=False,
+            ).model_dump_json(indent=2)
+        # v1.6 P5 — honor dry_run by short-circuiting BEFORE the
+        # rust-analyzer expandMacro probe.
+        if dry_run:
+            return RefactorResult(
+                applied=False, no_op=False,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                preview_token=f"pv_expand_macro_{int(time.time())}",
+                duration_ms=0,
             ).model_dump_json(indent=2)
         coord = coordinator_for_facade(language="rust", project_root=project_root)
         t0 = time.monotonic()
@@ -1734,7 +1821,13 @@ class ScalpelExpandMacroTool(Tool):
 
 
 class ScalpelVerifyAfterRefactorTool(Tool):
-    """PREFERRED: composite verification — runnables + relatedTests + flycheck."""
+    """PREFERRED: composite verification — runnables + relatedTests + flycheck.
+
+    Honors dry_run: when True, both the runnables probe and the
+    flycheck probe are skipped and a preview_token is returned. (Prior
+    to v1.6 the ``dry_run`` parameter was informational and silently
+    dropped.)
+    """
 
     def apply(
         self,
@@ -1749,13 +1842,14 @@ class ScalpelVerifyAfterRefactorTool(Tool):
 
         :param file: source file (workspace anchor).
         :param position: optional cursor for symbol-scoped runnables.
-        :param dry_run: preview only.
+        :param dry_run: when True, skip the runnables and flycheck probes
+            and return a preview-token. v1.6 P5 honors this contract.
         :param preview_token: continuation from a prior dry-run.
         :param language: 'rust' or 'python'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult with a verify_summary in language_findings.
         """
-        del preview_token, dry_run
+        del preview_token
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -1770,6 +1864,15 @@ class ScalpelVerifyAfterRefactorTool(Tool):
                 stage="scalpel_verify_after_refactor",
                 reason="verify_after_refactor is rust-analyzer-only.",
                 recoverable=False,
+            ).model_dump_json(indent=2)
+        # v1.6 P5 — honor dry_run by short-circuiting BEFORE the
+        # runnables / flycheck probes.
+        if dry_run:
+            return RefactorResult(
+                applied=False, no_op=False,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                preview_token=f"pv_verify_{int(time.time())}",
+                duration_ms=0,
             ).model_dump_json(indent=2)
         coord = coordinator_for_facade(language="rust", project_root=project_root)
         t0 = time.monotonic()
@@ -1810,10 +1913,17 @@ def _python_dispatch_single_kind(
     project_root: Path,
     dry_run: bool,
     server_label: str = "pylsp-rope",
+    action_filter: Any = None,
 ) -> str:
     """Python-specific shared dispatcher; mirrors ``_dispatch_single_kind_facade``
     but pins ``language='python'`` and labels lsp_ops by the rope/ruff/pyright
-    server. Used by Wave A (rope) and Wave B (ruff / basedpyright)."""
+    server. Used by Wave A (rope) and Wave B (ruff / basedpyright).
+
+    v1.6 P5 — ``action_filter`` is an optional callable
+    ``(action) -> bool`` applied to the merged action list before the
+    dispatch. Used by ``scalpel_generate_from_undefined`` (target_kind
+    title-prefix filter) and ``scalpel_ignore_diagnostic`` (rule
+    diagnostic filter)."""
     coord = coordinator_for_facade(language="python", project_root=project_root)
     if not coord.supports_kind("python", kind):
         return json.dumps(_capability_not_available_envelope(language="python", kind=kind))
@@ -1821,6 +1931,8 @@ def _python_dispatch_single_kind(
     actions = _run_async(coord.merge_code_actions(
         file=file, start=position, end=position, only=[kind],
     ))
+    if action_filter is not None:
+        actions = [a for a in actions if action_filter(a)]
     elapsed_ms = int((time.monotonic() - t0) * 1000)
     if not actions:
         return build_failure_result(
@@ -1975,7 +2087,11 @@ _INTRODUCE_PARAMETER_KIND = "refactor.rewrite.introduce_parameter"
 
 
 class ScalpelIntroduceParameterTool(Tool):
-    """PREFERRED: lift a local expression into a function parameter (Rope refactor)."""
+    """PREFERRED: lift a local expression into a function parameter (Rope refactor).
+
+    Note: parameter_name is informational; pylsp-rope picks the action
+    (and the parameter name) per cursor.
+    """
 
     def apply(
         self,
@@ -2022,7 +2138,11 @@ _GENERATE_FROM_UNDEFINED_KIND = "quickfix.generate"
 
 
 class ScalpelGenerateFromUndefinedTool(Tool):
-    """PREFERRED: generate a function/class/variable stub from an undefined name (Rope)."""
+    """PREFERRED: generate a function/class/variable stub from an undefined name (Rope).
+
+    Note: target_kind is informational beyond a post-merge title-prefix
+    filter; pylsp-rope picks the underlying action per cursor.
+    """
 
     def apply(
         self,
@@ -2045,7 +2165,7 @@ class ScalpelGenerateFromUndefinedTool(Tool):
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
-        del preview_token, target_kind, language
+        del preview_token, language
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -2053,10 +2173,19 @@ class ScalpelGenerateFromUndefinedTool(Tool):
         )
         if guard is not None:
             return guard.model_dump_json(indent=2)
+        # v1.6 P5 — small threading: post-merge title-prefix filter so
+        # ``target_kind='function'`` discards 'class'/'variable' actions
+        # that share the ``quickfix.generate`` umbrella kind.
+        target_prefix = (target_kind or "").lower()
+        def _title_prefix_filter(action: Any) -> bool:
+            title = getattr(action, "title", "") or ""
+            return title.lower().startswith(target_prefix)
+
         return _python_dispatch_single_kind(
             stage_name="scalpel_generate_from_undefined",
             file=file, position=position, kind=_GENERATE_FROM_UNDEFINED_KIND,
             project_root=project_root, dry_run=dry_run,
+            action_filter=_title_prefix_filter if target_prefix else None,
         )
 
 
@@ -2064,7 +2193,12 @@ _AUTO_IMPORT_KIND = "quickfix.import"
 
 
 class ScalpelAutoImportSpecializedTool(Tool):
-    """PREFERRED: resolve an undefined name to an explicit ``import`` statement."""
+    """PREFERRED: resolve an undefined name to an explicit ``import`` statement.
+
+    Note: symbol_name is informational; pylsp-rope picks the action
+    per cursor (it surfaces candidates from the cursor location,
+    not from this argument).
+    """
 
     def apply(
         self,
@@ -2193,7 +2327,11 @@ _IGNORE_DIAGNOSTIC_KIND_BY_TOOL: dict[str, str] = {
 
 
 class ScalpelIgnoreDiagnosticTool(Tool):
-    """PREFERRED: insert an inline ignore-comment for a basedpyright or ruff rule."""
+    """PREFERRED: insert an inline ignore-comment for a basedpyright or ruff rule.
+
+    Note: rule is informational beyond a post-merge action-filter;
+    basedpyright / ruff picks the underlying action per cursor.
+    """
 
     def apply(
         self,
@@ -2218,7 +2356,7 @@ class ScalpelIgnoreDiagnosticTool(Tool):
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
-        del preview_token, rule, language
+        del preview_token, language
         kind = _IGNORE_DIAGNOSTIC_KIND_BY_TOOL.get(tool_name)
         if kind is None:
             return build_failure_result(
@@ -2235,11 +2373,30 @@ class ScalpelIgnoreDiagnosticTool(Tool):
         if guard is not None:
             return guard.model_dump_json(indent=2)
         server_label = "basedpyright" if tool_name == "pyright" else "ruff"
+        # v1.6 P5 — small threading: post-merge filter so ``rule`` selects
+        # the action whose attached diagnostic carries the matching code.
+        rule_token = (rule or "").strip()
+        def _rule_filter(action: Any) -> bool:
+            if not rule_token:
+                return True
+            diags = getattr(action, "diagnostics", None) or ()
+            for d in diags:
+                # Diagnostics may be dicts (LSP) or pydantic models;
+                # try .code/.source attribute access first, fall back to
+                # mapping access.
+                code = getattr(d, "code", None)
+                if code is None and isinstance(d, dict):
+                    code = d.get("code")
+                if str(code) == rule_token:
+                    return True
+            return False
+
         return _python_dispatch_single_kind(
             stage_name="scalpel_ignore_diagnostic",
             file=file, position=position, kind=kind,
             project_root=project_root, dry_run=dry_run,
             server_label=server_label,
+            action_filter=_rule_filter if rule_token else None,
         )
 
 
@@ -2986,6 +3143,11 @@ class ScalpelGenerateConstructorTool(Tool):
 
     Selects fields to include, inserts a constructor at a chosen position, and
     updates references via LSP workspace edits with checkpoint+rollback.
+
+    Note: include_fields is informational in v1.6 — jdtls's
+    source.generate.constructor command covers all non-static fields by
+    default; per-field selection is a Phase 2.5 enhancement (jdtls's
+    interactive picker is not exposed via the LSP command surface today).
     """
 
     def apply(
@@ -3041,6 +3203,12 @@ class ScalpelOverrideMethodsTool(Tool):
 
     Resolves candidate methods via LSP type-hierarchy and inserts override
     stubs at a chosen position with checkpoint+rollback.
+
+    Note: method_names is informational in v1.6 — jdtls's
+    source.generate.overrideMethods command covers all not-yet-overridden
+    abstract methods by default; per-method selection is a Phase 2.5
+    enhancement (jdtls's interactive picker is not exposed via the LSP
+    command surface today).
     """
 
     def apply(
