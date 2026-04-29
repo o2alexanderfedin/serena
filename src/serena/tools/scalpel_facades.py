@@ -1943,15 +1943,20 @@ class ScalpelGenerateTraitImplScaffoldTool(Tool):
 
         :param file: source file containing the type definition.
         :param position: LSP cursor on the type name.
-        :param trait_name: trait to scaffold (informational — rust-analyzer's
-            assist offers a single trait per cursor).
+        :param trait_name: trait to scaffold (e.g. ``"Display"``). v1.5 G4-3
+            wires this REQUIRED argument into the shared dispatcher's
+            ``title_match`` so rust-analyzer's stable
+            ``Implement <trait_name> for <Type>`` action is selected by
+            substring match against the caller's request. When no surfaced
+            action matches, the response is the G1 ``MULTIPLE_CANDIDATES``
+            envelope rather than silent scaffolding of an unrelated trait.
         :param dry_run: preview only.
         :param preview_token: continuation from a prior dry-run.
         :param language: 'rust' or 'python'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
-        del preview_token, trait_name
+        del preview_token
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -1964,6 +1969,7 @@ class ScalpelGenerateTraitImplScaffoldTool(Tool):
             file=file, position=position, kind=_GENERATE_TRAIT_IMPL_KIND,
             project_root=project_root,
             dry_run=dry_run, language=language,
+            title_match=trait_name,
         )
 
 
