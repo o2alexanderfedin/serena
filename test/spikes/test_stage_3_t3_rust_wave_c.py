@@ -61,6 +61,9 @@ def _fake_coord(actions_by_kind: dict[str, list]):
 
 
 def test_generate_trait_impl_scaffold_dispatches(tmp_path: Path):
+    # v1.5 G4-3 — caller's trait_name now flows into the shared dispatcher's
+    # title_match; use trait_name="x" so the substring match succeeds against
+    # the default fake_action title "x".
     src = tmp_path / "lib.rs"
     src.write_text("struct S;\n")
     tool = _make_tool(ScalpelGenerateTraitImplScaffoldTool, tmp_path)
@@ -72,7 +75,7 @@ def test_generate_trait_impl_scaffold_dispatches(tmp_path: Path):
     with patch("serena.tools.scalpel_facades.coordinator_for_facade", return_value=coord):
         out = tool.apply(
             file=str(src), position={"line": 0, "character": 7},
-            trait_name="Display", language="rust",
+            trait_name="x", language="rust",
         )
     payload = json.loads(out)
     assert payload["applied"] is True
@@ -86,7 +89,7 @@ def test_generate_trait_impl_scaffold_no_action(tmp_path: Path):
     with patch("serena.tools.scalpel_facades.coordinator_for_facade", return_value=coord):
         out = tool.apply(
             file=str(src), position={"line": 0, "character": 0},
-            trait_name="Display", language="rust",
+            trait_name="x", language="rust",
         )
     payload = json.loads(out)
     assert payload["failure"]["code"] == "SYMBOL_NOT_FOUND"
