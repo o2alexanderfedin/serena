@@ -550,6 +550,103 @@ _EXTRACT_TARGET_TO_KIND: dict[str, str] = {
     "module": "refactor.extract.module",
 }
 
+# v1.5 G4-6 — rust-analyzer's stable auto-names for extracted items.
+# When the caller supplies ``new_name``, the post-processor walks the
+# emitted WorkspaceEdit and substitutes any of these tokens with the
+# caller's request via word-boundary regex.
+_EXTRACT_AUTO_NAMES: tuple[str, ...] = (
+    "new_function",
+    "new_variable",
+    "new_var",
+    "new_const",
+    "new_constant",
+    "new_static",
+    "new_type",
+    "new_alias",
+    "new_module",
+    "extracted",
+    "placeholder",
+)
+
+# v1.5 G4-6 — `visibility` → Rust visibility-prefix string. ``private``
+# is the bare default (no prefix injected). The post-processor prepends
+# the prefix in front of the bare ``fn``/``const``/``type``/``static``
+# keyword on the emitted item.
+_EXTRACT_VISIBILITY_PREFIX: dict[str, str] = {
+    "private": "",
+    "pub": "pub ",
+    "pub_crate": "pub(crate) ",
+    "pub_super": "pub(super) ",
+}
+
+
+def _post_process_extract_edit(
+    workspace_edit: dict[str, Any],
+    *,
+    new_name: str | None,
+    visibility_prefix: str,
+) -> dict[str, Any]:
+    """v1.5 G4-6 — substitute caller's ``new_name`` for rust-analyzer's
+    auto-name tokens and inject ``visibility_prefix`` on each emitted
+    item-keyword line.
+
+    Operates only on hunks the LSP emitted (``newText`` strings inside
+    ``changes`` and ``documentChanges``); pre-existing source surrounding
+    the hunks is untouched. ``new_name=None`` is a no-op for the rename
+    pass; ``visibility_prefix=""`` (the ``private`` default) skips the
+    prefix injection.
+    """
+    import re as _re
+
+    def _patch_text(text: str) -> str:
+        out = text
+        if new_name:
+            for auto in _EXTRACT_AUTO_NAMES:
+                out = _re.sub(rf"\b{_re.escape(auto)}\b", new_name, out)
+        if visibility_prefix:
+            # Match each line's first item-keyword (fn/const/type/static)
+            # not already preceded by a visibility prefix on that line.
+            # We anchor to `^` per line via re.MULTILINE.
+            out = _re.sub(
+                r"(?m)^(?!\s*pub)(\s*)(fn|const|type|static)\b",
+                rf"\1{visibility_prefix}\2",
+                out,
+            )
+        return out
+
+    if not isinstance(workspace_edit, dict):
+        return workspace_edit
+    out: dict[str, Any] = {}
+    for key, val in workspace_edit.items():
+        if key == "changes" and isinstance(val, dict):
+            new_changes: dict[str, list[dict[str, Any]]] = {}
+            for uri, edits in val.items():
+                new_edits = []
+                for e in edits or []:
+                    if isinstance(e, dict) and isinstance(e.get("newText"), str):
+                        new_edits.append({**e, "newText": _patch_text(e["newText"])})
+                    else:
+                        new_edits.append(e)
+                new_changes[uri] = new_edits
+            out[key] = new_changes
+        elif key == "documentChanges" and isinstance(val, list):
+            new_dcs: list[Any] = []
+            for dc in val:
+                if isinstance(dc, dict) and "edits" in dc:
+                    new_edits = []
+                    for e in dc.get("edits") or []:
+                        if isinstance(e, dict) and isinstance(e.get("newText"), str):
+                            new_edits.append({**e, "newText": _patch_text(e["newText"])})
+                        else:
+                            new_edits.append(e)
+                    new_dcs.append({**dc, "edits": new_edits})
+                else:
+                    new_dcs.append(dc)
+            out[key] = new_dcs
+        else:
+            out[key] = val
+    return out
+
 
 # v1.5 P2 — per-language target-validity matrix for ``ScalpelExtractTool``.
 # Spec § 4.2.1 (rust/python/java × variable/function/constant/static/type_alias/module).
@@ -595,17 +692,28 @@ class ScalpelExtractTool(Tool):
         :param range: optional LSP Range; one of range or name_path required.
         :param name_path: optional Serena name-path.
         :param target: extraction target enum.
-        :param new_name: name for the extracted item.
-        :param visibility: Rust visibility prefix on the new item.
-        :param similar: when True (Python/Rope), extract similar expressions too.
-        :param global_scope: extract to module scope (Python only).
+        :param new_name: name for the extracted item. v1.5 G4-6 wires
+            this via post-processing of the LSP's WorkspaceEdit: the
+            caller's ``new_name`` substitutes for any of rust-analyzer's
+            stable auto-names (``new_function``, ``new_variable``, ...)
+            in every emitted hunk via word-boundary regex.
+        :param visibility: Rust visibility prefix on the new item. v1.5
+            G4-6 wires this via post-processing: the prefix
+            (``"pub "``/``"pub(crate) "``/``"pub(super) "``) is injected
+            before the bare ``fn``/``const``/``type``/``static`` keyword
+            on each emitted item line. ``private`` (default) is a no-op.
+        :param similar: when True (Python/Rope), extract similar
+            expressions too. v1.5 G4-6 forwards this through
+            ``merge_code_actions(arguments=[{...}])``.
+        :param global_scope: extract to module scope (Python only). v1.5
+            G4-6 forwards via the same ``arguments`` payload.
         :param dry_run: preview only.
         :param preview_token: continuation from a prior dry-run.
         :param language: 'rust' | 'python' | 'java'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
-        del new_name, visibility, similar, global_scope, preview_token
+        del preview_token
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -670,11 +778,20 @@ class ScalpelExtractTool(Tool):
         if not coord.supports_kind(lang, kind):
             return json.dumps(_capability_not_available_envelope(language=lang, kind=kind))
         t0 = time.monotonic()
+        # v1.5 G4-6 — forward `similar` / `global_scope` to the LSP via
+        # the additive `arguments` payload (rope honors these in its
+        # extract-method / extract-variable refactors). Defaults are
+        # falsy; we still pass an empty dict-shaped arguments slot so
+        # rope sees the arguments key consistently.
+        extract_arguments: list[dict[str, Any]] = [
+            {"similar": bool(similar), "global_scope": bool(global_scope)}
+        ]
         actions = _run_async(coord.merge_code_actions(
             file=file,
             start=rng["start"],
             end=rng["end"],
             only=[kind],
+            arguments=extract_arguments,
         ))
         elapsed_ms = int((time.monotonic() - t0) * 1000)
         if not actions:
@@ -693,6 +810,20 @@ class ScalpelExtractTool(Tool):
         # v0.3.0 facade-application: apply the resolved WorkspaceEdit if available.
         edit = _resolve_winner_edit(coord, actions[0])
         if isinstance(edit, dict) and edit:
+            # v1.5 G4-6 — post-process the WorkspaceEdit: rename the
+            # LSP's auto-named symbol to ``new_name`` and inject the
+            # caller's ``visibility`` prefix. Rust-only; for Python the
+            # prefix dict resolves to "" (see _EXTRACT_VISIBILITY_PREFIX
+            # default at the call-site below).
+            visibility_prefix = (
+                _EXTRACT_VISIBILITY_PREFIX.get(visibility, "")
+                if lang == "rust" else ""
+            )
+            edit = _post_process_extract_edit(
+                edit,
+                new_name=new_name if new_name and new_name != "extracted" else None,
+                visibility_prefix=visibility_prefix,
+            )
             _apply_workspace_edit_to_disk(edit)
         else:
             edit = {"changes": {}}

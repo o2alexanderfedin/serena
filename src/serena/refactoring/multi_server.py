@@ -1106,6 +1106,7 @@ class MultiServerCoordinator:
         only: list[str] | None = None,
         diagnostics: list[dict[str, Any]] | None = None,
         timeout_ms: int | None = None,
+        arguments: list[dict[str, Any]] | None = None,
     ) -> list[MergedCodeAction]:
         """Public entry point for the §11.1 two-stage code-action merge.
 
@@ -1121,6 +1122,11 @@ class MultiServerCoordinator:
         / workspace-boundary) are enforced in T7 by a wrapping method
         ``merge_and_validate_code_actions``; this method delivers the
         unvalidated merge.
+
+        v1.5 G4-6 — ``arguments`` is an additive forward of the LSP
+        ``CodeActionParams.context.arguments`` slot used by rope to honor
+        ``similar`` / ``global_scope`` in extract refactors. Defaults to
+        ``None`` so existing callers compile unchanged.
         """
         cast_diagnostics = diagnostics or []
         broadcast_kwargs: dict[str, Any] = {
@@ -1130,6 +1136,8 @@ class MultiServerCoordinator:
             "only": only,
             "diagnostics": cast_diagnostics,
         }
+        if arguments is not None:
+            broadcast_kwargs["arguments"] = arguments
         broadcast = await self.broadcast(
             method="textDocument/codeAction",
             kwargs=broadcast_kwargs,
