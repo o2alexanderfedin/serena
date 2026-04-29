@@ -138,9 +138,12 @@ def test_complete_match_arms_no_action(tmp_path: Path):
 
 
 def test_extract_lifetime_dispatches(tmp_path: Path):
+    # v1.5 G4-2 — caller's lifetime_name now flows into the shared
+    # dispatcher's title_match. The default fake_action title is "x"; we
+    # use that as the lifetime token so the substring match succeeds.
     payload = _exercise_dispatch(
         ScalpelExtractLifetimeTool,
-        kwargs={"position": {"line": 0, "character": 0}, "lifetime_name": "a"},
+        kwargs={"position": {"line": 0, "character": 0}, "lifetime_name": "x"},
         kind="refactor.extract.extract_lifetime",
         tmp_path=tmp_path,
     )
@@ -150,7 +153,7 @@ def test_extract_lifetime_dispatches(tmp_path: Path):
 def test_extract_lifetime_no_action(tmp_path: Path):
     payload = _exercise_dispatch(
         ScalpelExtractLifetimeTool,
-        kwargs={"position": {"line": 0, "character": 0}, "lifetime_name": "a"},
+        kwargs={"position": {"line": 0, "character": 0}, "lifetime_name": "x"},
         kind=None,
         tmp_path=tmp_path,
     )

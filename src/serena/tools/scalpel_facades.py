@@ -1846,16 +1846,21 @@ class ScalpelExtractLifetimeTool(Tool):
 
         :param file: source file containing the reference.
         :param position: LSP cursor on the reference token.
-        :param lifetime_name: requested name for the new lifetime (without
-            leading apostrophe). Informational — rust-analyzer's assist
-            picks a non-conflicting name automatically.
+        :param lifetime_name: requested name for the new lifetime (with
+            leading apostrophe, e.g. ``"'session"``). v1.5 G4-2 wires this
+            into the shared dispatcher's ``title_match``: rust-analyzer's
+            assist auto-picks a fresh lifetime; if RA's surfaced title does
+            not include ``lifetime_name`` (substring match), the response
+            is the G1 ``MULTIPLE_CANDIDATES`` envelope
+            (``status="skipped"`` / ``reason="no_candidate_matched_title_match"``)
+            rather than a silent rewrite using RA's chosen name.
         :param dry_run: preview only.
         :param preview_token: continuation from a prior dry-run.
         :param language: 'rust' or 'python'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
-        del preview_token, lifetime_name
+        del preview_token
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -1868,6 +1873,7 @@ class ScalpelExtractLifetimeTool(Tool):
             file=file, position=position, kind=_LIFETIME_KIND,
             project_root=project_root,
             dry_run=dry_run, language=language,
+            title_match=lifetime_name,
         )
 
 
