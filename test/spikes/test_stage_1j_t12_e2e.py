@@ -59,7 +59,9 @@ def test_hook_fails_when_lsp_missing(tmp_path) -> None:
     result = subprocess.run(
         [str(hook)], env=env, capture_output=True, text=True
     )
-    assert result.returncode == 1
+    # Hook script's contract: exit 2 when LSP binary not found on PATH
+    # (distinct from generic exit 1 to signal "missing dependency").
+    assert result.returncode == 2
     assert "not found on PATH" in result.stderr
     # Per-language install hint surfaced for rust.
     assert "rustup" in result.stderr
