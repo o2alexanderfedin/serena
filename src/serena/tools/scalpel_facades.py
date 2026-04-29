@@ -2835,22 +2835,29 @@ class ScalpelFixLintsTool(Tool):
         language: Literal["rust", "python"] | None = None,
         allow_out_of_workspace: bool = False,
     ) -> str:
-        """Apply ruff's full set of auto-fixable lints. Closes E13-py dedup.
+        """Apply ruff's auto-fixable lints (closes E13-py dedup).
 
         ``source.fixAll.ruff`` covers I001 (duplicate-import removal) and the
         rest of ruff's auto-fixable rule set. Use ``scalpel_imports_organize``
         for sort-only behaviour without lint application.
 
         :param file: Python source file.
-        :param rules: optional ruff rule allow-list (informational; ruff's
-            auto-fix selection is driven by its own config today).
+        :param rules: optional ruff rule allow-list. v1.5 G4-8 wires this
+            via per-rule dispatch: when supplied, the facade dispatches one
+            ``source.fixAll.ruff`` per rule with
+            ``arguments=[{"select": [<rule>]}]`` and merges the resulting
+            WorkspaceEdits via :func:`_merge_workspace_edits`. ``None``
+            preserves the full auto-fix-all behavior with one dispatch and
+            no ``select`` argument.
         :param dry_run: preview only.
         :param preview_token: continuation from a prior dry-run.
         :param language: 'rust' or 'python'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
-        del preview_token, rules, language
+        from solidlsp.util.file_range import compute_file_range
+
+        del preview_token, language
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -2865,15 +2872,49 @@ class ScalpelFixLintsTool(Tool):
             return json.dumps(_capability_not_available_envelope(
                 language="python", kind=_FIX_LINTS_KIND,
             ))
+        # v1.5 G4-8 + HI-13 — replace (0,0)→(0,0) degenerate end with the
+        # real file end via compute_file_range so the LSP brackets the
+        # whole file. Falls back gracefully on FileNotFound (caller may
+        # have created an in-memory path).
+        try:
+            file_start, file_end = compute_file_range(file)
+        except (FileNotFoundError, OSError):
+            file_start = {"line": 0, "character": 0}
+            file_end = {"line": 0, "character": 0}
         t0 = time.monotonic()
-        actions = _run_async(coord.merge_code_actions(
-            file=file,
-            start={"line": 0, "character": 0},
-            end={"line": 0, "character": 0},
-            only=[_FIX_LINTS_KIND],
-        ))
+        all_actions: list[Any] = []
+        captured_edits: list[dict[str, Any]] = []
+        if rules:
+            # v1.5 G4-8 — per-rule dispatch.
+            for rule in rules:
+                actions_per_rule = _run_async(coord.merge_code_actions(
+                    file=file,
+                    start=file_start,
+                    end=file_end,
+                    only=[_FIX_LINTS_KIND],
+                    arguments=[{"select": [rule]}],
+                ))
+                for action in actions_per_rule or []:
+                    all_actions.append(action)
+                    edit = _resolve_winner_edit(coord, action)
+                    if isinstance(edit, dict) and edit:
+                        captured_edits.append(edit)
+        else:
+            # Full auto-fix path — preserve today's single-dispatch behavior.
+            actions = _run_async(coord.merge_code_actions(
+                file=file,
+                start=file_start,
+                end=file_end,
+                only=[_FIX_LINTS_KIND],
+            ))
+            for action in actions or []:
+                all_actions.append(action)
+            if all_actions:
+                edit = _resolve_winner_edit(coord, all_actions[0])
+                if isinstance(edit, dict) and edit:
+                    captured_edits.append(edit)
         elapsed_ms = int((time.monotonic() - t0) * 1000)
-        if not actions:
+        if not all_actions:
             return RefactorResult(
                 applied=False, no_op=True,
                 diagnostics_delta=_empty_diagnostics_delta(),
@@ -2886,13 +2927,10 @@ class ScalpelFixLintsTool(Tool):
                 preview_token=f"pv_fix_lints_{int(time.time())}",
                 duration_ms=elapsed_ms,
             ).model_dump_json(indent=2)
-        # v0.3.0 facade-application: apply the resolved edit (closes E13-py).
-        edit = _resolve_winner_edit(coord, actions[0])
-        if isinstance(edit, dict) and edit:
-            _apply_workspace_edit_to_disk(edit)
-        else:
-            edit = {"changes": {}}
-        cid = record_checkpoint_for_workspace_edit(workspace_edit=edit, snapshot={})
+        merged = _merge_workspace_edits(captured_edits) if captured_edits else {"changes": {}}
+        if merged and (merged.get("changes") or merged.get("documentChanges")):
+            _apply_workspace_edit_to_disk(merged)
+        cid = record_checkpoint_for_workspace_edit(workspace_edit=merged, snapshot={})
         return RefactorResult(
             applied=True,
             diagnostics_delta=_empty_diagnostics_delta(),
@@ -2900,7 +2938,7 @@ class ScalpelFixLintsTool(Tool):
             duration_ms=elapsed_ms,
             lsp_ops=(LspOpStat(
                 method="textDocument/codeAction",
-                server="ruff", count=len(actions), total_ms=elapsed_ms,
+                server="ruff", count=len(all_actions), total_ms=elapsed_ms,
             ),),
         ).model_dump_json(indent=2)
 
