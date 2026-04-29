@@ -73,7 +73,7 @@ def test_expand_macro_no_dry_run_calls_lsp(rust_workspace):
     tool = _make_expand(rust_workspace)
     fake_coord = MagicMock()
 
-    async def _fake_expand(**kw):
+    async def _fake_expand(**_kw):
         return {"name": "println", "expansion": "// expansion"}
 
     fake_coord.expand_macro = _fake_expand
@@ -118,10 +118,10 @@ def test_verify_after_refactor_no_dry_run_calls_lsp(rust_workspace):
     tool = _make_verify(rust_workspace)
     fake_coord = MagicMock()
 
-    async def _fake_runnables(**kw):
+    async def _fake_runnables(**_kw):
         return []
 
-    async def _fake_flycheck(**kw):
+    async def _fake_flycheck(**_kw):
         return {"diagnostics": []}
 
     fake_coord.fetch_runnables = _fake_runnables

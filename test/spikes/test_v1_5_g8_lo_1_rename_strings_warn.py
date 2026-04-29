@@ -46,11 +46,11 @@ def test_rename_also_in_strings_emits_warning(rust_workspace):
     fake_coord = MagicMock()
     fake_coord.supports_method.return_value = True
 
-    async def _find(**kw):
+    async def _find(**_kw):
         return {"line": 0, "character": 7}
     fake_coord.find_symbol_position = _find
 
-    async def _rename(**kw):
+    async def _rename(**_kw):
         return ({"changes": {src.as_uri(): [{
             "range": {"start": {"line": 0, "character": 7},
                       "end": {"line": 0, "character": 13}},
@@ -89,11 +89,11 @@ def test_rename_without_also_in_strings_no_warning(rust_workspace):
     fake_coord = MagicMock()
     fake_coord.supports_method.return_value = True
 
-    async def _find(**kw):
+    async def _find(**_kw):
         return {"line": 0, "character": 7}
     fake_coord.find_symbol_position = _find
 
-    async def _rename(**kw):
+    async def _rename(**_kw):
         return ({"changes": {src.as_uri(): [{
             "range": {"start": {"line": 0, "character": 7},
                       "end": {"line": 0, "character": 13}},
