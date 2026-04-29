@@ -240,7 +240,7 @@ class CapabilityDescriptor(_Frozen):
 
     capability_id: str
     title: str
-    language: Literal["rust", "python"]
+    language: str  # any language with a registered strategy
     kind: str
     source_server: ProvenanceLiteral
     preferred_facade: str | None = None
@@ -251,7 +251,7 @@ class CapabilityFullDescriptor(_Frozen):
 
     capability_id: str
     title: str
-    language: Literal["rust", "python"]
+    language: str  # any language with a registered strategy
     kind: str
     source_server: ProvenanceLiteral
     preferred_facade: str | None = None
@@ -280,7 +280,7 @@ class ExecuteCommandArgs(_Frozen):
 
     command: str
     arguments: tuple[Any, ...] = ()
-    language: Literal["rust", "python"] | None = None
+    language: str | None = None  # any language with a registered strategy
     allow_out_of_workspace: bool = False
 
 
