@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 from typing import Any, Literal
 
+from serena.refactoring import STRATEGY_REGISTRY
 from serena.refactoring.capabilities import CapabilityRecord
 from serena.refactoring.pending_tx import AnnotationGroup, PendingTransaction
 from serena.tools.scalpel_runtime import ScalpelRuntime
@@ -38,21 +39,33 @@ from serena.tools.tools_base import Tool
 from solidlsp.dynamic_capabilities import DynamicCapabilityRegistry
 
 
-def _ensure_supported_language(language: str) -> Literal["rust", "python"]:
-    """Narrow a catalog ``language`` string to the MVP-supported literal.
+def _registered_language_ids() -> frozenset[str]:
+    """Return the set of ``language_id`` strings from all registered strategies.
 
-    ``CapabilityRecord.language`` is ``str`` (loaded from JSON) but every
-    descriptor schema in the response is ``Literal["rust", "python"]``.
-    Centralising the narrowing here keeps consumers type-safe and fails
-    fast if the catalog ever leaks an unexpected value.
+    Using ``strategy_cls.language_id`` (not ``Language`` enum values) because
+    catalog records are built from ``strategy_cls.language_id`` — they share
+    the same namespace.
     """
-    if language == "rust":
-        return "rust"
-    if language == "python":
-        return "python"
-    raise ValueError(
-        f"unsupported catalog language: {language!r}; expected 'rust' or 'python'"
-    )
+    return frozenset(cls.language_id for cls in STRATEGY_REGISTRY.values())
+
+
+def _ensure_supported_language(language: str) -> str:
+    """Validate that *language* has a registered strategy and return it unchanged.
+
+    ``CapabilityRecord.language`` is ``str`` (loaded from JSON).  Rather than
+    hardcoding a static ``Literal[...]``, we consult ``STRATEGY_REGISTRY`` so
+    that every language added via a plugin is accepted automatically.
+
+    Raises ``ValueError`` with the sorted list of registered language IDs when
+    the value has no registered strategy.
+    """
+    registered = _registered_language_ids()
+    if language not in registered:
+        raise ValueError(
+            f"No strategy registered for language {language!r}; "
+            f"registered: {sorted(registered)}"
+        )
+    return language
 
 
 class ScalpelCapabilitiesListTool(Tool):
@@ -60,14 +73,16 @@ class ScalpelCapabilitiesListTool(Tool):
 
     def apply(
         self,
-        language: Literal["rust", "python"] | None = None,
+        language: str | None = None,
         filter_kind: str | None = None,
         applies_to_symbol_kind: str | None = None,
     ) -> str:
         """List capabilities for a language with optional filter. Returns
         capability_id + title + applies_to_kinds + preferred_facade.
 
-        :param language: 'rust' or 'python'; None returns both languages.
+        :param language: language name (e.g. 'rust', 'python', 'typescript',
+            'go', 'cpp', 'java', 'lean4', 'smt2', 'prolog', 'problog');
+            None returns all languages.
         :param filter_kind: LSP code-action kind prefix to filter by.
         :param applies_to_symbol_kind: reserved (Stage 2A); unused at MVP.
         :return: JSON array of CapabilityDescriptor rows.
@@ -924,7 +939,7 @@ class ScalpelExecuteCommandTool(Tool):
         self,
         command: str,
         arguments: list[Any] | None = None,
-        language: Literal["rust", "python"] | None = None,
+        language: str | None = None,
         allow_out_of_workspace: bool = False,
     ) -> str:
         """Server-specific JSON-RPC pass-through, allowlisted per
@@ -933,7 +948,7 @@ class ScalpelExecuteCommandTool(Tool):
         :param command: the workspace/executeCommand verb (e.g.
             'rust-analyzer.runFlycheck').
         :param arguments: positional arguments forwarded as-is.
-        :param language: 'rust' or 'python'; inferred when None.
+        :param language: language name (e.g. 'rust', 'python'); inferred when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
