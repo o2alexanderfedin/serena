@@ -7,6 +7,7 @@ using the standard Ansible test repository. They work with the standard
 """
 
 import platform
+import shutil
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,16 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
+
+# ansible-language-server shells out to ``ansible-lint`` for module-level
+# documentation lookups (hover, completion). When the binary is absent, the
+# server still boots and reports ``is_running`` correctly, but hover/completion
+# return ``None``. Tests that depend on documentation enrichment must gate on
+# the host having ``ansible-lint`` installed — honest-skip rather than fail.
+_ANSIBLE_LINT_REQUIRED = pytest.mark.skipif(
+    shutil.which("ansible-lint") is None,
+    reason="ansible-lint not on PATH; ansible-language-server cannot return hover/completion docs",
+)
 
 
 @pytest.mark.skipif(platform.system() == "Windows", reason="ansible-language-server does not support native Windows operation")
@@ -28,6 +39,7 @@ class TestAnsibleLanguageServerBasics:
         assert language_server.is_running()
         assert Path(language_server.language_server.repository_root_path).resolve() == repo_path.resolve()
 
+    @_ANSIBLE_LINT_REQUIRED
     @pytest.mark.parametrize("language_server", [Language.ANSIBLE], indirect=True)
     def test_hover_on_module_contains_documentation(self, language_server: SolidLanguageServer) -> None:
         """Hover on ansible.builtin.package returns module documentation."""
@@ -43,6 +55,7 @@ class TestAnsibleLanguageServerBasics:
             hover_text = str(hover_value)
         assert "package" in hover_text.lower(), f"Hover should mention 'package', got: {hover_text[:300]}"
 
+    @_ANSIBLE_LINT_REQUIRED
     @pytest.mark.parametrize("language_server", [Language.ANSIBLE], indirect=True)
     def test_completions_contain_module_names(self, language_server: SolidLanguageServer) -> None:
         """Completions at a task keyword position return Ansible module names."""

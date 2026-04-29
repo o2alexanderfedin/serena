@@ -113,13 +113,17 @@ def test_main_refreshes_unified_marketplace_when_repo_root_set(
         ]
     )
     assert rc == 0
-    surface = tmp_path / "marketplace.json"
+    # v1.2.2 install-blocker fix: Claude Code requires the manifest at
+    # ``<repo>/.claude-plugin/marketplace.json`` (not at the repo root).
+    surface = tmp_path / ".claude-plugin" / "marketplace.json"
     assert surface.exists()
     payload = json.loads(surface.read_text(encoding="utf-8"))
     names = [p["name"] for p in payload["plugins"]]
     assert "o2-scalpel-rust" in names
     # Surface file no longer written.
     assert not (tmp_path / "marketplace.surface.json").exists()
+    # Stale top-level path also no longer written (v1.2.2 relocation).
+    assert not (tmp_path / "marketplace.json").exists()
 
 
 def test_main_skips_marketplace_refresh_when_repo_root_omitted(
@@ -141,6 +145,9 @@ def test_main_skips_marketplace_refresh_when_repo_root_omitted(
     )
     rc = main(["--language", "rust", "--out", str(tmp_path)])
     assert rc == 0
+    # v1.2.2: manifest lives at ``.claude-plugin/marketplace.json`` when written,
+    # but ``--out`` without ``--repo-root`` should not write the manifest at all.
+    assert not (tmp_path / ".claude-plugin" / "marketplace.json").exists()
     assert not (tmp_path / "marketplace.json").exists()
     assert not (tmp_path / "marketplace.surface.json").exists()
 
