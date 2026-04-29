@@ -45,6 +45,7 @@ _DEFAULT_SOURCE_SERVER_BY_LANGUAGE: dict[str, ProvenanceLiteral] = {
     "smt2": "smt2-lsp",
     "prolog": "swipl-lsp",
     "problog": "problog-lsp",
+    "csharp": "csharp-ls",
 }
 
 
@@ -168,6 +169,7 @@ def _adapter_map() -> dict[ProvenanceLiteral, type]:
     """Lazy import to avoid forcing solidlsp adapter modules at import time."""
     from solidlsp.language_servers.basedpyright_server import BasedpyrightServer
     from solidlsp.language_servers.clangd_server import ClangdServer
+    from solidlsp.language_servers.csharp_ls_server import CsharpLsServer
     from solidlsp.language_servers.gopls_server import GoplsServer
     from solidlsp.language_servers.jdtls_server import JdtlsServer
     from solidlsp.language_servers.lean_server import LeanServer
@@ -191,6 +193,7 @@ def _adapter_map() -> dict[ProvenanceLiteral, type]:
         "smt2-lsp": Smt2Server,
         "swipl-lsp": PrologServer,
         "problog-lsp": ProblogServer,
+        "csharp-ls": CsharpLsServer,
     }
 
 
@@ -209,6 +212,7 @@ _ADAPTER_ATTRIBUTION_ORDER: dict[str, tuple[ProvenanceLiteral, ...]] = {
     "smt2": ("smt2-lsp",),
     "prolog": ("swipl-lsp",),
     "problog": ("problog-lsp",),
+    "csharp": ("csharp-ls",),
 }
 
 

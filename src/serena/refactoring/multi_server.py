@@ -45,6 +45,7 @@ ProvenanceLiteral = Literal[
     "smt2-lsp",
     "swipl-lsp",
     "problog-lsp",
+    "csharp-ls",
 ]
 
 # Tuple of valid provenance values, derived from ``ProvenanceLiteral`` so the
