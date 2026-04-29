@@ -21,8 +21,10 @@ from serena.tools.facade_support import (
     _resolve_winner_edit,
     _splice_text_edit,
     _uri_to_path,
+    apply_action_and_checkpoint,
     attach_apply_source,
     build_failure_result,
+    capture_pre_edit_snapshot,
     coordinator_for_facade,
     record_checkpoint_for_workspace_edit,
     workspace_boundary_guard,
@@ -345,9 +347,17 @@ class ScalpelSplitFileTool(Tool):
                 duration_ms=elapsed_ms,
                 language_findings=tuple(findings),
             )
+        # v1.5 G3a: ``captured_edits`` were resolved per-file to honor the
+        # multi-file split contract; merge them into a single edit so the
+        # checkpoint records every URI touched.
+        # v1.6 P1: capture pre-edit snapshot of the merged edit BEFORE applying
+        # so checkpoint-store rollback is honest about pre-state content.
         merged = _merge_workspace_edits(captured_edits)
+        snapshot = capture_pre_edit_snapshot(merged)
         _apply_workspace_edit_to_disk(merged)
-        cid = record_checkpoint_for_workspace_edit(workspace_edit=merged, snapshot={})
+        cid = record_checkpoint_for_workspace_edit(
+            workspace_edit=merged, snapshot=snapshot,
+        )
         return RefactorResult(
             applied=True,
             diagnostics_delta=_empty_diagnostics_delta(),
@@ -701,14 +711,15 @@ class ScalpelExtractTool(Tool):
                 preview_token=f"pv_extract_{int(time.time())}",
                 duration_ms=elapsed_ms,
             ).model_dump_json(indent=2)
-        # v0.3.0 facade-application: apply the resolved WorkspaceEdit if available.
+        # v1.5 G4-6 — post-process the WorkspaceEdit: rename the LSP's
+        # auto-named symbol to ``new_name`` and inject the caller's
+        # ``visibility`` prefix. Rust-only; for Python the prefix dict
+        # resolves to "" (see _EXTRACT_VISIBILITY_PREFIX default below).
+        # v1.6 P1: capture pre-edit snapshot AFTER post-processing (it
+        # only mutates the edit text, not the URIs touched) so the
+        # snapshot reflects on-disk pre-state for every URI.
         edit = _resolve_winner_edit(coord, actions[0])
         if isinstance(edit, dict) and edit:
-            # v1.5 G4-6 — post-process the WorkspaceEdit: rename the
-            # LSP's auto-named symbol to ``new_name`` and inject the
-            # caller's ``visibility`` prefix. Rust-only; for Python the
-            # prefix dict resolves to "" (see _EXTRACT_VISIBILITY_PREFIX
-            # default at the call-site below).
             visibility_prefix = (
                 _EXTRACT_VISIBILITY_PREFIX.get(visibility, "")
                 if lang == "rust" else ""
@@ -718,10 +729,14 @@ class ScalpelExtractTool(Tool):
                 new_name=new_name if new_name and new_name != "extracted" else None,
                 visibility_prefix=visibility_prefix,
             )
+            snapshot = capture_pre_edit_snapshot(edit)
             _apply_workspace_edit_to_disk(edit)
         else:
             edit = {"changes": {}}
-        cid = record_checkpoint_for_workspace_edit(workspace_edit=edit, snapshot={})
+            snapshot = {}
+        cid = record_checkpoint_for_workspace_edit(
+            workspace_edit=edit, snapshot=snapshot,
+        )
         return RefactorResult(
             applied=True,
             diagnostics_delta=_empty_diagnostics_delta(),
@@ -974,10 +989,15 @@ class ScalpelInlineTool(Tool):
         # multi-line empty-newText hunks (rust-analyzer's deletion shape).
         if not remove_definition:
             merged_edit = _filter_definition_deletion_hunks(merged_edit)
+        # v1.6 P1: capture pre-edit snapshot of the merged-and-filtered edit
+        # BEFORE applying so the checkpoint records honest pre-state.
         if merged_edit and (merged_edit.get("changes") or merged_edit.get("documentChanges")):
+            snapshot = capture_pre_edit_snapshot(merged_edit)
             _apply_workspace_edit_to_disk(merged_edit)
+        else:
+            snapshot = {}
         cid = record_checkpoint_for_workspace_edit(
-            workspace_edit=merged_edit, snapshot={},
+            workspace_edit=merged_edit, snapshot=snapshot,
         )
         return RefactorResult(
             applied=True,
@@ -1458,11 +1478,19 @@ class ScalpelImportsOrganizeTool(Tool):
                 duration_ms=elapsed_ms,
                 warnings=tuple(warnings),
             ).model_dump_json(indent=2)
+        # v1.5 multi-action variant — captured_edits were resolved upstream
+        # and engine-filtered alongside all_actions; merge them into a
+        # single edit so the checkpoint records every URI touched.
+        # v1.6 P1: capture pre-edit snapshot of the merged edit BEFORE
+        # applying so checkpoint-store rollback is honest about pre-state.
         merged = _merge_workspace_edits(captured_edits) if captured_edits else {"changes": {}}
         if merged and (merged.get("changes") or merged.get("documentChanges")):
+            snapshot = capture_pre_edit_snapshot(merged)
             _apply_workspace_edit_to_disk(merged)
+        else:
+            snapshot = {}
         cid = record_checkpoint_for_workspace_edit(
-            workspace_edit=merged, snapshot={},
+            workspace_edit=merged, snapshot=snapshot,
         )
         return RefactorResult(
             applied=True,
@@ -1668,18 +1696,14 @@ def _dispatch_single_kind_facade(
     chosen, miss_envelope = _select_candidate_action(actions, title_match=title_match)
     if miss_envelope is not None:
         return json.dumps(miss_envelope)
-    # v0.3.0 facade-application: pull the resolved WorkspaceEdit for the
-    # winner and write it to disk. ``get_action_edit`` returns ``None`` when
-    # the action wasn't tracked (synthetic ids in legacy tests, or when
-    # resolve failed); in that case fall back to the v0.2.0 empty checkpoint.
-    workspace_edit = _resolve_winner_edit(coord, chosen)
-    if isinstance(workspace_edit, dict) and workspace_edit:
-        _apply_workspace_edit_to_disk(workspace_edit)
-    else:
-        workspace_edit = {"changes": {}}
-    cid = record_checkpoint_for_workspace_edit(
-        workspace_edit=workspace_edit, snapshot={},
-    )
+    # v1.6 P1: real-snapshot apply + checkpoint via the consolidated helper.
+    # The helper resolves the winner edit, captures pre-edit snapshot of
+    # every URI BEFORE applying, applies, and records the checkpoint with
+    # the real snapshot. When resolve fails (synthetic ids in legacy tests)
+    # it falls back to ("", {"changes": {}}) so the facade still reports
+    # applied=True — the v0.2.0 contract for legacy fakes.
+    cid, _edit = apply_action_and_checkpoint(coord, chosen)
+
     return RefactorResult(
         applied=True,
         diagnostics_delta=_empty_diagnostics_delta(),
@@ -1944,18 +1968,26 @@ class ScalpelTidyStructureTool(Tool):
                 preview_token=f"pv_tidy_{int(time.time())}",
                 duration_ms=elapsed_ms,
             ).model_dump_json(indent=2)
-        # v0.3.0 facade-application: apply every action's resolved edit.
+        # v1.6 P1: multi-action variant — capture pre-edit snapshots BEFORE
+        # any apply, then apply, then record one merged checkpoint with
+        # the real snapshot.
         merged_changes: dict[str, list[dict[str, Any]]] = {}
+        merged_snapshot: dict[str, str] = {}
+        resolved_edits: list[dict[str, Any]] = []
         for a in all_actions:
             edit = _resolve_winner_edit(coord, a)
             if not (isinstance(edit, dict) and edit):
                 continue
+            for uri, content in capture_pre_edit_snapshot(edit).items():
+                merged_snapshot.setdefault(uri, content)
+            resolved_edits.append(edit)
+        for edit in resolved_edits:
             _apply_workspace_edit_to_disk(edit)
             for uri, hunks in (edit.get("changes") or {}).items():
                 merged_changes.setdefault(uri, []).extend(hunks or [])
         cid_edit = {"changes": merged_changes} if merged_changes else {"changes": {}}
         cid = record_checkpoint_for_workspace_edit(
-            workspace_edit=cid_edit, snapshot={},
+            workspace_edit=cid_edit, snapshot=merged_snapshot,
         )
         return RefactorResult(
             applied=True,
@@ -2534,16 +2566,23 @@ def _python_dispatch_single_kind(
     chosen, miss_envelope = _select_candidate_action(actions, title_match=title_match)
     if miss_envelope is not None:
         return json.dumps(miss_envelope)
-    # v0.3.0 facade-application: same pattern as the Rust dispatcher.
+    # v1.5 G6 ME-3: optional edit_postprocessor mutates the resolved edit
+    # text (e.g. introduce_parameter rewrites rope's ``p`` → caller's
+    # ``parameter_name``) BEFORE we capture the snapshot — the postprocessor
+    # only mutates newText, not URIs, so pre-edit content stays accurate.
+    # v1.6 P1: capture pre-edit snapshot BEFORE applying so the checkpoint
+    # records honest pre-state for every URI.
     workspace_edit = _resolve_winner_edit(coord, chosen)
     if isinstance(workspace_edit, dict) and workspace_edit:
         if edit_postprocessor is not None:
             workspace_edit = edit_postprocessor(workspace_edit)
+        snapshot = capture_pre_edit_snapshot(workspace_edit)
         _apply_workspace_edit_to_disk(workspace_edit)
     else:
         workspace_edit = {"changes": {}}
+        snapshot = {}
     cid = record_checkpoint_for_workspace_edit(
-        workspace_edit=workspace_edit, snapshot={},
+        workspace_edit=workspace_edit, snapshot=snapshot,
     )
     return RefactorResult(
         applied=True,
@@ -2972,10 +3011,20 @@ class ScalpelFixLintsTool(Tool):
                 preview_token=f"pv_fix_lints_{int(time.time())}",
                 duration_ms=elapsed_ms,
             ).model_dump_json(indent=2)
+        # v1.5 multi-file fix-lints: captured_edits collected per-file
+        # upstream; merge them into a single edit so the checkpoint
+        # records every URI touched.
+        # v1.6 P1: capture pre-edit snapshot of the merged edit BEFORE
+        # applying so checkpoint-store rollback is honest about pre-state.
         merged = _merge_workspace_edits(captured_edits) if captured_edits else {"changes": {}}
         if merged and (merged.get("changes") or merged.get("documentChanges")):
+            snapshot = capture_pre_edit_snapshot(merged)
             _apply_workspace_edit_to_disk(merged)
-        cid = record_checkpoint_for_workspace_edit(workspace_edit=merged, snapshot={})
+        else:
+            snapshot = {}
+        cid = record_checkpoint_for_workspace_edit(
+            workspace_edit=merged, snapshot=snapshot,
+        )
         return RefactorResult(
             applied=True,
             diagnostics_delta=_empty_diagnostics_delta(),
@@ -3787,14 +3836,8 @@ def _java_generate_dispatch(
             preview_token=f"pv_{stage_name}_{int(time.time())}",
             duration_ms=elapsed_ms,
         ).model_dump_json(indent=2)
-    workspace_edit = _resolve_winner_edit(coord, actions[0])
-    if isinstance(workspace_edit, dict) and workspace_edit:
-        _apply_workspace_edit_to_disk(workspace_edit)
-    else:
-        workspace_edit = {"changes": {}}
-    cid = record_checkpoint_for_workspace_edit(
-        workspace_edit=workspace_edit, snapshot={},
-    )
+    # v1.6 P1: real-snapshot apply + checkpoint via the consolidated helper.
+    cid, _edit = apply_action_and_checkpoint(coord, actions[0])
     return RefactorResult(
         applied=True,
         diagnostics_delta=_empty_diagnostics_delta(),
