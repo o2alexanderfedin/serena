@@ -335,8 +335,12 @@ class ScalpelSplitFileTool(Tool):
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
+        # v1.5 G3a — `allow_partial` now flows into `_split_rust`; the four
+        # documented-but-not-yet-wired layout/reexport knobs remain decorative
+        # for this leaf (spec § CR-1 prioritises `groups`; layout/reexport
+        # injection is post-edit AST rewrite, deferred to v1.6).
         del parent_layout, keep_in_original, reexport_policy
-        del explicit_reexports, allow_partial, preview_token
+        del explicit_reexports, preview_token
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -372,6 +376,7 @@ class ScalpelSplitFileTool(Tool):
         return self._split_rust(
             file=file, groups=groups,
             project_root=project_root, dry_run=dry_run,
+            allow_partial=allow_partial,
         ).model_dump_json(indent=2)
 
     def _split_python(
@@ -425,22 +430,85 @@ class ScalpelSplitFileTool(Tool):
         groups: dict[str, list[str]],
         project_root: Path,
         dry_run: bool,
+        allow_partial: bool,
     ) -> RefactorResult:
-        del groups
+        """v1.5 G3a — per-group iteration mirroring ``_split_python``.
+
+        For each ``target_module → [symbols]`` entry, resolve every symbol's
+        body range via ``coord.find_symbol_range`` and dispatch one
+        ``refactor.extract.module`` LSP request bracketed by the symbol's
+        actual range (NOT ``(0,0)→(0,0)``). The returned WorkspaceEdits are
+        merged via :func:`_merge_workspace_edits` and applied once.
+
+        ``allow_partial=True`` surfaces unresolvable symbols / no-action
+        responses as ``language_findings`` warnings and continues with the
+        remaining symbols. ``allow_partial=False`` (default) aborts on the
+        first failure with ``SYMBOL_NOT_FOUND``.
+
+        Closes spec § CR-1 (the user-reported scalpel_split_file regression).
+        """
         coord = coordinator_for_facade(language="rust", project_root=project_root)
         t0 = time.monotonic()
-        actions = _run_async(coord.merge_code_actions(
-            file=file,
-            start={"line": 0, "character": 0},
-            end={"line": 0, "character": 0},
-            only=["refactor.extract.module"],
-        ))
+        all_actions: list[Any] = []
+        captured_edits: list[dict[str, Any]] = []
+        findings: list[LanguageFinding] = []
+        for target_module, symbols in groups.items():
+            for symbol in symbols:
+                rng = _run_async(coord.find_symbol_range(
+                    file=file, name_path=symbol,
+                    project_root=str(project_root),
+                ))
+                if rng is None:
+                    if allow_partial:
+                        findings.append(LanguageFinding(
+                            code="symbol_not_found",
+                            message=f"{symbol!r} for module {target_module!r}",
+                        ))
+                        continue
+                    return build_failure_result(
+                        code=ErrorCode.SYMBOL_NOT_FOUND,
+                        stage="scalpel_split_file",
+                        reason=f"Symbol {symbol!r} not found in {file!r}.",
+                    )
+                actions = _run_async(coord.merge_code_actions(
+                    file=file,
+                    start=rng["start"], end=rng["end"],
+                    only=["refactor.extract.module"],
+                ))
+                if not actions:
+                    if allow_partial:
+                        findings.append(LanguageFinding(
+                            code="no_action",
+                            message=(
+                                f"no refactor.extract.module for {symbol!r} "
+                                f"(target_module={target_module!r})"
+                            ),
+                        ))
+                        continue
+                    return build_failure_result(
+                        code=ErrorCode.SYMBOL_NOT_FOUND,
+                        stage="scalpel_split_file",
+                        reason=(
+                            f"No refactor.extract.module action for {symbol!r} "
+                            f"in {file!r}."
+                        ),
+                    )
+                # G1 default-path: rust-analyzer offers exactly one
+                # extract.module per cursor, so ``actions[0]`` (now via the
+                # G1 disambiguation policy with no ``title_match``) is the
+                # documented behavior.
+                winner = actions[0]
+                all_actions.append(winner)
+                edit = _resolve_winner_edit(coord, winner)
+                if isinstance(edit, dict) and edit:
+                    captured_edits.append(edit)
         elapsed_ms = int((time.monotonic() - t0) * 1000)
-        if not actions:
-            return build_failure_result(
-                code=ErrorCode.SYMBOL_NOT_FOUND,
-                stage="scalpel_split_file",
-                reason="No refactor.extract.module actions surfaced.",
+        if not all_actions:
+            return RefactorResult(
+                applied=False, no_op=True,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                duration_ms=elapsed_ms,
+                language_findings=tuple(findings),
             )
         if dry_run:
             return RefactorResult(
@@ -448,23 +516,21 @@ class ScalpelSplitFileTool(Tool):
                 diagnostics_delta=_empty_diagnostics_delta(),
                 preview_token=f"pv_split_{int(time.time())}",
                 duration_ms=elapsed_ms,
+                language_findings=tuple(findings),
             )
-        # v0.3.0 facade-application: apply the resolved WorkspaceEdit if available.
-        edit = _resolve_winner_edit(coord, actions[0])
-        if isinstance(edit, dict) and edit:
-            _apply_workspace_edit_to_disk(edit)
-        else:
-            edit = {"changes": {}}
-        cid = record_checkpoint_for_workspace_edit(workspace_edit=edit, snapshot={})
+        merged = _merge_workspace_edits(captured_edits)
+        _apply_workspace_edit_to_disk(merged)
+        cid = record_checkpoint_for_workspace_edit(workspace_edit=merged, snapshot={})
         return RefactorResult(
             applied=True,
             diagnostics_delta=_empty_diagnostics_delta(),
             checkpoint_id=cid,
             duration_ms=elapsed_ms,
+            language_findings=tuple(findings),
             lsp_ops=(LspOpStat(
                 method="textDocument/codeAction",
                 server="rust-analyzer",
-                count=len(actions),
+                count=len(all_actions),
                 total_ms=elapsed_ms,
             ),),
         )

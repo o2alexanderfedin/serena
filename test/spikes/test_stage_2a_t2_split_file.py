@@ -117,17 +117,32 @@ def test_split_file_rust_dispatches_coordinator(python_workspace):
     target.write_text("pub fn add() {}\npub fn sub() {}\n")
     tool = _make_tool(python_workspace)
     fake_coord = MagicMock()
+    fake_coord.supports_kind.return_value = True
+
+    async def _fake_find(file, name_path, project_root):  # noqa: ARG001
+        # v1.5 G3a — _split_rust now resolves each symbol's range before
+        # dispatching one extract.module per symbol. Return a non-(0,0)
+        # body span so the dispatch-shape assertion below still holds.
+        return {
+            "start": {"line": 0, "character": 0},
+            "end": {"line": 0, "character": 15},
+        }
+
+    fake_coord.find_symbol_range = _fake_find
 
     async def _fake_merge(**kwargs):  # noqa: ARG001
         return [
             MagicMock(
                 action_id="ra:1",
+                id="ra:1",
                 title="Move to module",
                 kind="refactor.extract.module",
                 provenance="rust-analyzer",
+                is_preferred=False,
             )
         ]
     fake_coord.merge_code_actions = _fake_merge
+    fake_coord.get_action_edit = lambda aid: {"changes": {}}
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=fake_coord,
