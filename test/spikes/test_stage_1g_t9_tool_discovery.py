@@ -75,12 +75,21 @@ _V11_1_NAMES: frozenset[str] = frozenset({
     "scalpel_install_lsp_servers",  # Leaf 03 — LSP installer infra (marksman PoC)
 })
 
+# v1.5 P2 — Java facade stream (single-LSP jdtls).
+_V15_P2_NAMES: frozenset[str] = frozenset({
+    "scalpel_generate_constructor",  # P2 — jdtls source.generate.constructor
+    "scalpel_override_methods",  # P2 — jdtls source.generate.overrideMethods
+    # NOTE: scalpel_extract grew a Java arm in P2 but the tool name is unchanged
+    # so it stays in _STAGE_2A_NAMES.
+})
+
 EXPECTED_NAMES: frozenset[str] = (
     _STAGE_1G_NAMES
     | _STAGE_2A_NAMES
     | _STAGE_3_NAMES
     | _V11_NAMES
     | _V11_1_NAMES
+    | _V15_P2_NAMES
 )
 
 
