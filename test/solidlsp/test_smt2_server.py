@@ -17,8 +17,6 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-import pytest
-
 from solidlsp.language_servers.smt2_server import Smt2Server
 from solidlsp.ls_config import Language
 
@@ -127,29 +125,7 @@ def test_language_smt2_filename_matcher() -> None:
     assert matcher.is_relevant_filename("main.py") is False
 
 
-def test_smt2_installer_raises_not_implemented() -> None:
-    """Smt2Installer._install_command raises NotImplementedError (no LSP exists)."""
-    from serena.installer.smt2_installer import Smt2Installer
-
-    installer = Smt2Installer()
-    with pytest.raises(NotImplementedError) as exc_info:
-        installer._install_command()
-    msg = str(exc_info.value)
-    assert "SMT-LIB 2" in msg or "SMT" in msg
-
-
-def test_smt2_installer_detect_installed_returns_not_present() -> None:
-    """Smt2Installer.detect_installed always returns present=False."""
-    from serena.installer.smt2_installer import Smt2Installer
-
-    installer = Smt2Installer()
-    status = installer.detect_installed()
-    assert status.present is False
-
-
-def test_smt2_installer_latest_available_returns_none() -> None:
-    """Smt2Installer.latest_available returns None (no release channel)."""
-    from serena.installer.smt2_installer import Smt2Installer
-
-    installer = Smt2Installer()
-    assert installer.latest_available() is None
+# Smt2Installer behavior tests live in
+# test/serena/installer/test_smt2_installer.py — they grew large enough to
+# warrant a dedicated module after v1.4.1 promoted the installer from a
+# NotImplementedError stub to a real GitHub-Releases binary downloader.
