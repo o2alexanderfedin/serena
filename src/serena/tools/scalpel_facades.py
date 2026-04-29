@@ -856,6 +856,61 @@ _INLINE_TARGET_TO_KIND: dict[str, str] = {
 }
 
 
+def _filter_definition_deletion_hunks(
+    workspace_edit: dict[str, Any],
+) -> dict[str, Any]:
+    """v1.5 G4-7 — when ``remove_definition=False``, drop hunks whose
+    ``newText`` is empty AND whose range spans more than one line.
+
+    Heuristic: rust-analyzer's ``inline call`` assist emits two hunks per
+    apply — (1) replace the call-site expression and (2) delete the
+    definition by overwriting its multi-line range with ``""``. The
+    deletion hunk is identifiable by ``newText == ""`` AND
+    ``end.line > start.line`` (a single-line ``newText=""`` would be a
+    same-line deletion, which we conservatively keep).
+    """
+    if not isinstance(workspace_edit, dict):
+        return workspace_edit
+
+    def _is_definition_deletion(edit: dict[str, Any]) -> bool:
+        if not isinstance(edit, dict):
+            return False
+        if edit.get("newText") != "":
+            return False
+        rng = edit.get("range") or {}
+        start = rng.get("start") or {}
+        end = rng.get("end") or {}
+        try:
+            return int(end.get("line", 0)) > int(start.get("line", 0))
+        except (TypeError, ValueError):
+            return False
+
+    out: dict[str, Any] = {}
+    for key, val in workspace_edit.items():
+        if key == "changes" and isinstance(val, dict):
+            new_changes: dict[str, list[dict[str, Any]]] = {}
+            for uri, edits in val.items():
+                new_changes[uri] = [
+                    e for e in edits or [] if not _is_definition_deletion(e)
+                ]
+            out[key] = new_changes
+        elif key == "documentChanges" and isinstance(val, list):
+            new_dcs: list[Any] = []
+            for dc in val:
+                if isinstance(dc, dict) and "edits" in dc:
+                    new_edits = [
+                        e for e in dc.get("edits") or []
+                        if not _is_definition_deletion(e)
+                    ]
+                    new_dcs.append({**dc, "edits": new_edits})
+                else:
+                    new_dcs.append(dc)
+            out[key] = new_dcs
+        else:
+            out[key] = val
+    return out
+
+
 class ScalpelInlineTool(Tool):
     """PREFERRED: inline a function/variable/type alias at definition or call sites."""
 
@@ -876,18 +931,29 @@ class ScalpelInlineTool(Tool):
         call-sites. Pick `target`. Atomic.
 
         :param file: source file containing the definition or call.
-        :param name_path: optional Serena name-path.
+        :param name_path: Serena name-path. v1.5 G4-7 wires this: when
+            ``position`` is omitted, the facade resolves ``name_path``
+            via ``coord.find_symbol_range`` (instead of the previous
+            silent ``(0,0)`` fallback).
         :param position: optional LSP Position at the call site.
         :param target: 'call' | 'variable' | 'type_alias' | 'macro' | 'const'.
-        :param scope: 'single_call_site' or 'all_callers'.
-        :param remove_definition: drop the original definition after inlining.
+        :param scope: 'single_call_site' or 'all_callers'. v1.5 G4-7
+            ``all_callers`` now iterates ``coord.request_references`` to
+            dispatch one inline per returned reference (instead of the
+            ``(0,0)`` fallback). Requires ``name_path`` (or a resolved
+            symbol position) so references can be located.
+        :param remove_definition: drop the original definition after
+            inlining. v1.5 G4-7 honors ``False``: the WorkspaceEdit is
+            post-filtered to drop multi-line empty-newText hunks
+            (heuristic for rust-analyzer's ``delete definition`` hunk
+            shape) before applying to disk.
         :param dry_run: preview only.
         :param preview_token: continuation from a prior dry-run.
         :param language: 'rust' or 'python'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
-        del name_path, remove_definition, preview_token
+        del preview_token
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -903,11 +969,29 @@ class ScalpelInlineTool(Tool):
                 reason=f"Unknown target {target!r}; expected one of {sorted(_INLINE_TARGET_TO_KIND)}.",
                 recoverable=False,
             ).model_dump_json(indent=2)
-        if scope == "single_call_site" and position is None:
+        # v1.5 G4-7 — single_call_site requires either position OR
+        # name_path (which the facade now resolves to a position).
+        if (
+            scope == "single_call_site"
+            and position is None
+            and name_path is None
+        ):
             return build_failure_result(
                 code=ErrorCode.INVALID_ARGUMENT,
                 stage="scalpel_inline",
-                reason="scope=single_call_site requires position=.",
+                reason=(
+                    "scope=single_call_site requires position= or name_path=."
+                ),
+                recoverable=False,
+            ).model_dump_json(indent=2)
+        if scope == "all_callers" and name_path is None and position is None:
+            return build_failure_result(
+                code=ErrorCode.INVALID_ARGUMENT,
+                stage="scalpel_inline",
+                reason=(
+                    "scope=all_callers requires name_path= or position= so "
+                    "references can be located."
+                ),
                 recoverable=False,
             ).model_dump_json(indent=2)
         lang = _infer_language(file, language)
@@ -923,14 +1007,62 @@ class ScalpelInlineTool(Tool):
         # inline kind (spec § 4.5 P4).
         if not coord.supports_kind(lang, kind):
             return json.dumps(_capability_not_available_envelope(language=lang, kind=kind))
-        pos = position or {"line": 0, "character": 0}
-        rng = {"start": pos, "end": pos}
+        # v1.5 G4-7 — resolve name_path to a position if no position given.
+        if position is None and name_path is not None:
+            resolved = _run_async(coord.find_symbol_range(
+                file=file, name_path=name_path,
+                project_root=str(project_root),
+            ))
+            if resolved is None:
+                return build_failure_result(
+                    code=ErrorCode.SYMBOL_NOT_FOUND,
+                    stage="scalpel_inline",
+                    reason=f"Symbol {name_path!r} not found in {file!r}.",
+                    recoverable=False,
+                ).model_dump_json(indent=2)
+            position = resolved["start"]
+        # v1.5 G4-7 — collect dispatch positions: one for single_call_site,
+        # all references for all_callers.
+        dispatch_positions: list[dict[str, int]] = []
+        if scope == "all_callers":
+            references = _run_async(coord.request_references(
+                file=file, name_path=name_path,
+                project_root=str(project_root),
+            ))
+            for ref in references or []:
+                rng = (ref or {}).get("range") or {}
+                start = rng.get("start")
+                if isinstance(start, dict) and "line" in start and "character" in start:
+                    dispatch_positions.append({
+                        "line": int(start["line"]),
+                        "character": int(start["character"]),
+                    })
+            if not dispatch_positions:
+                return build_failure_result(
+                    code=ErrorCode.SYMBOL_NOT_FOUND,
+                    stage="scalpel_inline",
+                    reason=(
+                        f"No call-sites found for {name_path!r} in workspace."
+                    ),
+                ).model_dump_json(indent=2)
+        else:
+            assert position is not None  # type-narrowing
+            dispatch_positions.append(position)
+
         t0 = time.monotonic()
-        actions = _run_async(coord.merge_code_actions(
-            file=file, start=rng["start"], end=rng["end"], only=[kind],
-        ))
+        all_actions: list[Any] = []
+        captured_edits: list[dict[str, Any]] = []
+        for pos in dispatch_positions:
+            actions = _run_async(coord.merge_code_actions(
+                file=file, start=pos, end=pos, only=[kind],
+            ))
+            if actions:
+                all_actions.extend(actions)
+                edit = _resolve_winner_edit(coord, actions[0])
+                if isinstance(edit, dict) and edit:
+                    captured_edits.append(edit)
         elapsed_ms = int((time.monotonic() - t0) * 1000)
-        if not actions:
+        if not all_actions:
             return build_failure_result(
                 code=ErrorCode.SYMBOL_NOT_FOUND,
                 stage="scalpel_inline",
@@ -943,13 +1075,16 @@ class ScalpelInlineTool(Tool):
                 preview_token=f"pv_inline_{int(time.time())}",
                 duration_ms=elapsed_ms,
             ).model_dump_json(indent=2)
-        # v0.3.0 facade-application: apply the resolved WorkspaceEdit if available.
-        edit = _resolve_winner_edit(coord, actions[0])
-        if isinstance(edit, dict) and edit:
-            _apply_workspace_edit_to_disk(edit)
-        else:
-            edit = {"changes": {}}
-        cid = record_checkpoint_for_workspace_edit(workspace_edit=edit, snapshot={})
+        merged_edit = _merge_workspace_edits(captured_edits) if captured_edits else {"changes": {}}
+        # v1.5 G4-7 — honor remove_definition=False by post-filtering
+        # multi-line empty-newText hunks (rust-analyzer's deletion shape).
+        if not remove_definition:
+            merged_edit = _filter_definition_deletion_hunks(merged_edit)
+        if merged_edit and (merged_edit.get("changes") or merged_edit.get("documentChanges")):
+            _apply_workspace_edit_to_disk(merged_edit)
+        cid = record_checkpoint_for_workspace_edit(
+            workspace_edit=merged_edit, snapshot={},
+        )
         return RefactorResult(
             applied=True,
             diagnostics_delta=_empty_diagnostics_delta(),
@@ -957,8 +1092,8 @@ class ScalpelInlineTool(Tool):
             duration_ms=elapsed_ms,
             lsp_ops=(LspOpStat(
                 method="textDocument/codeAction",
-                server=actions[0].provenance if actions else "unknown",
-                count=len(actions),
+                server=all_actions[0].provenance if all_actions else "unknown",
+                count=len(all_actions),
                 total_ms=elapsed_ms,
             ),),
         ).model_dump_json(indent=2)

@@ -1607,6 +1607,62 @@ class MultiServerCoordinator:
         """
         return self._action_edits.get(action_id)
 
+    async def request_references(
+        self,
+        *,
+        file: str,
+        name_path: str | None = None,
+        position: dict[str, int] | None = None,
+        project_root: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """v1.5 G4-7 — return all references to the symbol at the
+        resolved cursor.
+
+        When ``name_path`` is supplied, the position is resolved via
+        :meth:`find_symbol_range` first. The first server that returns
+        non-empty results wins — references are language-server-driven
+        single-source-of-truth (per §11.3 single-primary-per-language
+        precedent for rename / references).
+
+        Each returned dict carries ``{"uri": str, "range": {...}}`` per
+        the LSP ``Location`` shape. Empty list when no references are
+        found across the pool.
+        """
+        if not self._servers:
+            return []
+        if position is None:
+            if name_path is None:
+                return []
+            resolved = await self.find_symbol_range(
+                file=file, name_path=name_path, project_root=project_root,
+            )
+            if resolved is None:
+                return []
+            position = resolved.get("start")
+            if position is None:
+                return []
+        rel_path = _to_relative_path(file, project_root)
+        for server in self._servers.values():
+            try:
+                refs = await asyncio.to_thread(
+                    server.request_references,
+                    rel_path,
+                    int(position["line"]),
+                    int(position["character"]),
+                )
+            except Exception:  # noqa: BLE001
+                continue
+            if refs:
+                # LSP Location list — normalise to plain dicts so the
+                # facade can iterate without depending on per-server
+                # type aliases.
+                normalised: list[dict[str, Any]] = []
+                for r in refs:
+                    if isinstance(r, dict):
+                        normalised.append(dict(r))
+                return normalised
+        return []
+
     async def expand_macro(
         self,
         file: str,
