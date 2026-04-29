@@ -90,6 +90,8 @@ def test_error_code_enum_membership() -> None:
         "INVALID_ARGUMENT",
         "INTERNAL_ERROR",
         "ROLLBACK_PARTIAL",
+        # v1.5 G1: shared-dispatcher disambiguation envelope.
+        "MULTIPLE_CANDIDATES",
     }
     assert {e.value for e in ErrorCode} == expected
 

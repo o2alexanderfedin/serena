@@ -20,7 +20,15 @@ from serena.refactoring.multi_server import ProvenanceLiteral
 
 
 class ErrorCode(str, Enum):
-    """The 10 error codes emitted by the Stage 1G tools (per §15.4)."""
+    """The error codes emitted by the Stage 1G tools (per §15.4).
+
+    v1.5 G1 added ``MULTIPLE_CANDIDATES`` for the shared-dispatcher
+    disambiguation envelope — surfaced when ``title_match`` matches
+    zero or ≥2 code-action candidates. Existing ``INVALID_ARGUMENT``
+    is reused on the wire (envelopes carry both ``code`` and ``reason``);
+    the enum entry is exported so callers / tests can reference the
+    semantic label.
+    """
 
     SYMBOL_NOT_FOUND = "SYMBOL_NOT_FOUND"
     CAPABILITY_NOT_AVAILABLE = "CAPABILITY_NOT_AVAILABLE"
@@ -32,6 +40,7 @@ class ErrorCode(str, Enum):
     INVALID_ARGUMENT = "INVALID_ARGUMENT"
     INTERNAL_ERROR = "INTERNAL_ERROR"
     ROLLBACK_PARTIAL = "ROLLBACK_PARTIAL"
+    MULTIPLE_CANDIDATES = "MULTIPLE_CANDIDATES"
 
 
 # --- base config ------------------------------------------------------
