@@ -30,7 +30,10 @@ from serena.refactoring.capabilities import (
 # localToField, useFunction, deriveImpl, basedpyright source.organizeImports)
 # have no catalog row to populate and are routed at dispatch time by the
 # dynamic-capability registry instead.
+#
+# v1.5 P2 (spec § 4.2) added three jdtls rows for the Java facades.
 EXPECTED_ENTRIES: dict[tuple[str, str], str] = {
+    # Phase 1 (rust-analyzer + pylsp-rope + ruff):
     ("rust-analyzer", "refactor.extract"): "scalpel_extract",
     ("rust-analyzer", "refactor.inline"): "scalpel_inline",
     ("rust-analyzer", "refactor.rewrite"): "scalpel_change_visibility",
@@ -39,6 +42,10 @@ EXPECTED_ENTRIES: dict[tuple[str, str], str] = {
     ("pylsp-rope", "refactor.inline"): "scalpel_inline",
     ("ruff", "source.fixAll"): "scalpel_fix_lints",
     ("ruff", "source.organizeImports"): "scalpel_imports_organize",
+    # Phase 2 (jdtls / Java):
+    ("jdtls", "refactor.extract"): "scalpel_extract",
+    ("jdtls", "source.generate.constructor"): "scalpel_generate_constructor",
+    ("jdtls", "source.generate.overrideMethods"): "scalpel_override_methods",
 }
 
 

@@ -346,4 +346,13 @@ KIND_TO_FACADE: dict[tuple[ProvenanceLiteral, str], str] = {
     # ruff (Python)
     ("ruff", "source.fixAll"): "scalpel_fix_lints",
     ("ruff", "source.organizeImports"): "scalpel_imports_organize",
+    # v1.5 P2 — jdtls (Java)
+    # Spec: docs/superpowers/specs/2026-04-29-lsp-feature-coverage-spec.md § 4.2
+    # Catalog stores both the family-level ``refactor.extract`` entry and
+    # the per-action child kinds (``.method`` / ``.variable``); the family
+    # row is what the LLM-routing hint targets — children are resolved at
+    # dispatch via ``ScalpelExtractTool``'s ``_EXTRACT_TARGET_TO_KIND`` map.
+    ("jdtls", "refactor.extract"): "scalpel_extract",
+    ("jdtls", "source.generate.constructor"): "scalpel_generate_constructor",
+    ("jdtls", "source.generate.overrideMethods"): "scalpel_override_methods",
 }

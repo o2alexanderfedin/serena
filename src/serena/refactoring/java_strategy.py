@@ -80,6 +80,15 @@ _JAVA_CODE_ACTION_KINDS: frozenset[str] = frozenset(
         "refactor.extract.variable",
         "refactor.extract.field",
         "refactor.extract.interface",
+        # v1.5 P2 — scalpel_extract Java-arm dispatch kinds. jdtls advertises
+        # ``refactor.extract.method`` natively; LSP §3.18.1 prefix matching
+        # routes the family-shaped ``refactor.extract.function`` /
+        # ``refactor.extract.constant`` requests onto the matching server-side
+        # actions. The allow-list entries here are required so the catalog
+        # carries them and ``MultiServerCoordinator.supports_kind`` returns
+        # True for the Java arm of ``ScalpelExtractTool``.
+        "refactor.extract.function",
+        "refactor.extract.constant",
         # inline refactors
         "refactor.inline",
         # rewrite refactors
