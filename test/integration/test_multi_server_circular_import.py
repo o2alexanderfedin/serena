@@ -100,6 +100,7 @@ def test_lazy_import_remains_function_scoped(
     )
 
 
+@pytest.mark.timeout(120)
 def test_no_op_flow_preserves_lazy_imports(
     python_coordinator: Any,
     calcpy_circular_workspace: Path,
