@@ -800,14 +800,18 @@ class ScalpelRenameTool(Tool):
         :param file: file containing the definition (or any reference).
         :param name_path: Serena name-path of the symbol (e.g. 'mod::Sym').
         :param new_name: replacement name.
-        :param also_in_strings: also rewrite string-literal occurrences.
+        :param also_in_strings: request rewriting string-literal occurrences.
+            **Not supported by ``textDocument/rename``** (LSP protocol limit;
+            v1.5 LO-1). When set, the response carries a ``warnings`` entry
+            pointing the caller at ``scalpel_replace_regex`` for string-literal
+            renames; the structured rename itself proceeds as normal.
         :param dry_run: preview only.
         :param preview_token: continuation from a prior dry-run.
         :param language: 'rust' or 'python'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
-        del also_in_strings, preview_token
+        del preview_token
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -880,12 +884,24 @@ class ScalpelRenameTool(Tool):
             "workspace_edit": workspace_edit or {},
             "primary_server": "pylsp-rope" if lang == "python" else "rust-analyzer",
         }
+        # v1.5 LO-1: also_in_strings is unsupported by textDocument/rename
+        # (LSP protocol limitation — the request operates on identifier
+        # references, not string-literal contents). Surface this honestly
+        # via a warnings entry so the caller can route to scalpel_replace_regex.
+        rename_warnings: tuple[str, ...] = ()
+        if also_in_strings:
+            rename_warnings = (
+                "also_in_strings is unsupported by textDocument/rename "
+                "(LSP protocol limitation); use scalpel_replace_regex for "
+                "string-literal renames.",
+            )
         if dry_run:
             return RefactorResult(
                 applied=False, no_op=False,
                 diagnostics_delta=_empty_diagnostics_delta(),
                 preview_token=f"pv_rename_{int(time.time())}",
                 duration_ms=elapsed_ms,
+                warnings=rename_warnings,
             ).model_dump_json(indent=2)
         cid = record_checkpoint_for_workspace_edit(
             workspace_edit=merged_dict.get("workspace_edit", {}), snapshot={},
@@ -895,6 +911,7 @@ class ScalpelRenameTool(Tool):
             diagnostics_delta=_empty_diagnostics_delta(),
             checkpoint_id=cid,
             duration_ms=elapsed_ms,
+            warnings=rename_warnings,
             lsp_ops=(LspOpStat(
                 method="textDocument/rename",
                 server=str(merged_dict.get("primary_server", "unknown")),
