@@ -64,3 +64,33 @@ def test_apply_unknown_language_returns_empty_list() -> None:
     raw = tool.apply(language="cobol")  # type: ignore[arg-type]
     payload = json.loads(raw)
     assert payload == []
+
+
+# --- new tests: _ensure_supported_language dynamic registry check ----------
+
+
+def test_ensure_supported_language_accepts_stream6_languages() -> None:
+    """All Stream 6 languages are accepted without raising."""
+    from serena.tools.scalpel_primitives import _ensure_supported_language
+
+    for lang in ("typescript", "go", "cpp", "java", "lean", "smt2", "prolog", "problog"):
+        result = _ensure_supported_language(lang)
+        assert result == lang, f"Expected {lang!r} returned unchanged, got {result!r}"
+
+
+def test_ensure_supported_language_raises_with_helpful_message() -> None:
+    """Unregistered language raises ValueError listing registered languages."""
+    import pytest
+    from serena.tools.scalpel_primitives import _ensure_supported_language
+
+    with pytest.raises(ValueError, match="No strategy registered for language 'cobol'"):
+        _ensure_supported_language("cobol")
+
+    # Error message must include some of the registered languages.
+    try:
+        _ensure_supported_language("cobol")
+    except ValueError as exc:
+        message = str(exc)
+        assert "rust" in message
+        assert "python" in message
+        assert "registered:" in message
