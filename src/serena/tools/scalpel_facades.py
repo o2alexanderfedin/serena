@@ -200,7 +200,7 @@ def _lsp_position_to_offset(lines: list[str], line: int, character: int) -> int:
 
 
 class ScalpelSplitFileTool(Tool):
-    """Split a source file into N modules by moving named symbols."""
+    """PREFERRED: split a source file into N modules by moving named symbols."""
 
     def apply(
         self,
@@ -401,7 +401,7 @@ _EXTRACT_VALID_TARGETS_BY_LANGUAGE: dict[str, frozenset[str]] = {
 
 
 class ScalpelExtractTool(Tool):
-    """Extract a symbol/selection into a new variable/function/module/type."""
+    """PREFERRED: extract a symbol/selection into a new variable/function/module/type."""
 
     def apply(
         self,
@@ -558,7 +558,7 @@ _INLINE_TARGET_TO_KIND: dict[str, str] = {
 
 
 class ScalpelInlineTool(Tool):
-    """Inline a function/variable/type alias at definition or call sites."""
+    """PREFERRED: inline a function/variable/type alias at definition or call sites."""
 
     def apply(
         self,
@@ -679,7 +679,7 @@ def _looks_like_module_name_path(name_path: str, file: str) -> bool:
 
 
 class ScalpelRenameTool(Tool):
-    """Rename a symbol everywhere it is referenced. Cross-file."""
+    """PREFERRED: rename a symbol everywhere it is referenced. Cross-file via LSP textDocument/rename with checkpoint+rollback."""
 
     def apply(
         self,
@@ -927,7 +927,7 @@ _ENGINE_TO_PROVENANCE: dict[str, str] = {
 
 
 class ScalpelImportsOrganizeTool(Tool):
-    """Add missing, remove unused, reorder imports across files."""
+    """PREFERRED: add missing, remove unused, reorder imports across files."""
 
     def apply(
         self,
@@ -1199,7 +1199,7 @@ _MODULE_LAYOUT_TO_KIND: dict[str, str] = {
 
 
 class ScalpelConvertModuleLayoutTool(Tool):
-    """Convert a Rust ``mod foo;`` into ``mod foo {{ ... }}`` (or vice versa)."""
+    """PREFERRED: convert a Rust ``mod foo;`` into ``mod foo {{ ... }}`` (or vice versa)."""
 
     def apply(
         self,
@@ -1251,7 +1251,7 @@ _VISIBILITY_KIND = "refactor.rewrite.change_visibility"
 
 
 class ScalpelChangeVisibilityTool(Tool):
-    """Toggle a Rust item's visibility (pub / pub(crate) / pub(super) / private)."""
+    """PREFERRED: toggle a Rust item's visibility (pub / pub(crate) / pub(super) / private)."""
 
     def apply(
         self,
@@ -1298,7 +1298,7 @@ _TIDY_STRUCTURE_KINDS: tuple[str, ...] = (
 
 
 class ScalpelTidyStructureTool(Tool):
-    """Reorder impl items, sort items, and reorder struct fields in a file."""
+    """PREFERRED: reorder impl items, sort items, and reorder struct fields in a file."""
 
     def apply(
         self,
@@ -1404,7 +1404,7 @@ _TYPE_SHAPE_TO_KIND: dict[str, str] = {
 
 
 class ScalpelChangeTypeShapeTool(Tool):
-    """Apply a Rust ``convert_*_to_*`` rewrite at a cursor."""
+    """PREFERRED: apply a Rust ``convert_*_to_*`` rewrite at a cursor."""
 
     def apply(
         self,
@@ -1462,7 +1462,7 @@ _RETURN_TYPE_KIND = "refactor.rewrite.change_return_type"
 
 
 class ScalpelChangeReturnTypeTool(Tool):
-    """Rewrite a Rust function's return type at a cursor."""
+    """PREFERRED: rewrite a Rust function's return type at a cursor."""
 
     def apply(
         self,
@@ -1507,7 +1507,7 @@ _MATCH_ARMS_KIND = "quickfix.add_missing_match_arms"
 
 
 class ScalpelCompleteMatchArmsTool(Tool):
-    """Insert the missing arms of a Rust ``match`` over a sealed enum."""
+    """PREFERRED: insert the missing arms of a Rust ``match`` over a sealed enum."""
 
     def apply(
         self,
@@ -1548,7 +1548,7 @@ _LIFETIME_KIND = "refactor.extract.extract_lifetime"
 
 
 class ScalpelExtractLifetimeTool(Tool):
-    """Extract a fresh lifetime parameter for a Rust reference at a cursor."""
+    """PREFERRED: extract a fresh lifetime parameter for a Rust reference at a cursor."""
 
     def apply(
         self,
@@ -1593,7 +1593,7 @@ _GLOB_IMPORTS_KIND = "refactor.rewrite.expand_glob_imports"
 
 
 class ScalpelExpandGlobImportsTool(Tool):
-    """Expand ``use foo::*;`` into the explicit names it brings into scope."""
+    """PREFERRED: expand ``use foo::*;`` into the explicit names it brings into scope."""
 
     def apply(
         self,
@@ -1639,7 +1639,7 @@ _GENERATE_TRAIT_IMPL_KIND = "refactor.rewrite.generate_trait_impl"
 
 
 class ScalpelGenerateTraitImplScaffoldTool(Tool):
-    """Generate an ``impl Trait for Type {}`` scaffold at a cursor."""
+    """PREFERRED: generate an ``impl Trait for Type {}`` scaffold at a cursor."""
 
     def apply(
         self,
@@ -1688,7 +1688,7 @@ _MEMBER_KIND_TO_KIND: dict[str, str] = {
 
 
 class ScalpelGenerateMemberTool(Tool):
-    """Generate a getter / setter / method stub for a Rust struct field."""
+    """PREFERRED: generate a getter / setter / method stub for a Rust struct field."""
 
     def apply(
         self,
@@ -1736,7 +1736,7 @@ class ScalpelGenerateMemberTool(Tool):
 
 
 class ScalpelExpandMacroTool(Tool):
-    """Expand a Rust macro at a cursor and return the expanded source."""
+    """PREFERRED: expand a Rust macro at a cursor and return the expanded source."""
 
     def apply(
         self,
@@ -1800,7 +1800,7 @@ class ScalpelExpandMacroTool(Tool):
 
 
 class ScalpelVerifyAfterRefactorTool(Tool):
-    """Composite verification — runnables + relatedTests + flycheck."""
+    """PREFERRED: composite verification — runnables + relatedTests + flycheck."""
 
     def apply(
         self,
@@ -1928,7 +1928,7 @@ _METHOD_OBJECT_KIND = "refactor.rewrite.method_to_method_object"
 
 
 class ScalpelConvertToMethodObjectTool(Tool):
-    """Convert a method body into its own callable object (Rope)."""
+    """PREFERRED: convert a method body into its own callable object (Rope)."""
 
     def apply(
         self,
@@ -1968,7 +1968,7 @@ _LOCAL_TO_FIELD_KIND = "refactor.rewrite.local_to_field"
 
 
 class ScalpelLocalToFieldTool(Tool):
-    """Promote a local variable to an instance field (Rope refactor)."""
+    """PREFERRED: promote a local variable to an instance field (Rope refactor)."""
 
     def apply(
         self,
@@ -2008,7 +2008,7 @@ _USE_FUNCTION_KIND = "refactor.rewrite.use_function"
 
 
 class ScalpelUseFunctionTool(Tool):
-    """Replace inline expressions with calls to an existing function (Rope)."""
+    """PREFERRED: replace inline expressions with calls to an existing function (Rope)."""
 
     def apply(
         self,
@@ -2048,7 +2048,7 @@ _INTRODUCE_PARAMETER_KIND = "refactor.rewrite.introduce_parameter"
 
 
 class ScalpelIntroduceParameterTool(Tool):
-    """Lift a local expression into a function parameter (Rope refactor)."""
+    """PREFERRED: lift a local expression into a function parameter (Rope refactor)."""
 
     def apply(
         self,
@@ -2095,7 +2095,7 @@ _GENERATE_FROM_UNDEFINED_KIND = "quickfix.generate"
 
 
 class ScalpelGenerateFromUndefinedTool(Tool):
-    """Generate a function/class/variable stub from an undefined name (Rope)."""
+    """PREFERRED: generate a function/class/variable stub from an undefined name (Rope)."""
 
     def apply(
         self,
@@ -2137,7 +2137,7 @@ _AUTO_IMPORT_KIND = "quickfix.import"
 
 
 class ScalpelAutoImportSpecializedTool(Tool):
-    """Resolve an undefined name to an explicit ``import`` statement."""
+    """PREFERRED: resolve an undefined name to an explicit ``import`` statement."""
 
     def apply(
         self,
@@ -2183,7 +2183,7 @@ _FIX_LINTS_KIND = "source.fixAll.ruff"
 
 
 class ScalpelFixLintsTool(Tool):
-    """Apply ruff's full set of auto-fixable lints (incl. duplicate-import dedup)."""
+    """PREFERRED: apply ruff's full set of auto-fixable lints (incl. duplicate-import dedup)."""
 
     def apply(
         self,
@@ -2271,7 +2271,7 @@ _IGNORE_DIAGNOSTIC_KIND_BY_TOOL: dict[str, str] = {
 
 
 class ScalpelIgnoreDiagnosticTool(Tool):
-    """Insert an inline ignore-comment for a basedpyright or ruff rule."""
+    """PREFERRED: insert an inline ignore-comment for a basedpyright or ruff rule."""
 
     def apply(
         self,
@@ -2332,7 +2332,7 @@ class ScalpelIgnoreDiagnosticTool(Tool):
 
 
 class ScalpelConvertToAsyncTool(Tool):
-    """Convert a sync `def` into `async def` and propagate `await` calls."""
+    """PREFERRED: convert a sync `def` into `async def` and propagate `await` calls."""
 
     def apply(
         self,
@@ -2411,7 +2411,7 @@ class ScalpelConvertToAsyncTool(Tool):
 
 
 class ScalpelAnnotateReturnTypeTool(Tool):
-    """Insert `-> <Type>` on a function using basedpyright inlay-hint inference."""
+    """PREFERRED: insert `-> <Type>` on a function using basedpyright inlay-hint inference."""
 
     def apply(
         self,
@@ -2528,7 +2528,7 @@ def _get_inlay_hint_provider(project_root: Path):
 
 
 class ScalpelConvertFromRelativeImportsTool(Tool):
-    """Convert every relative import in a module to its absolute form (rope)."""
+    """PREFERRED: convert every relative import in a module to its absolute form (rope)."""
 
     def apply(
         self,
@@ -2662,7 +2662,7 @@ def _find_heading_position(file_path: Path, heading_text: str) -> dict[str, int]
 
 
 class ScalpelRenameHeadingTool(Tool):
-    """Rename a markdown heading and propagate to all wiki-links."""
+    """PREFERRED: rename a markdown heading and propagate to all wiki-links."""
 
     def apply(
         self,
@@ -2762,7 +2762,7 @@ class ScalpelRenameHeadingTool(Tool):
 
 
 class ScalpelSplitDocTool(Tool):
-    """Split a long markdown doc along H1/H2 boundaries into linked sub-docs."""
+    """PREFERRED: split a long markdown doc along H1/H2 boundaries into linked sub-docs."""
 
     def apply(
         self,
@@ -2825,7 +2825,7 @@ class ScalpelSplitDocTool(Tool):
 
 
 class ScalpelExtractSectionTool(Tool):
-    """Extract one markdown section into a new file with a back-link."""
+    """PREFERRED: extract one markdown section into a new file with a back-link."""
 
     def apply(
         self,
@@ -2897,7 +2897,7 @@ class ScalpelExtractSectionTool(Tool):
 
 
 class ScalpelOrganizeLinksTool(Tool):
-    """Sort + dedup the links in a markdown file."""
+    """PREFERRED: sort + dedup the links in a markdown file."""
 
     def apply(
         self,
@@ -3065,7 +3065,7 @@ def _java_generate_dispatch(
 
 
 class ScalpelGenerateConstructorTool(Tool):
-    """PREFERRED for Java constructor generation. Generates a constructor for
+    """PREFERRED: Java constructor generation. Generates a constructor for
     a Java class via jdtls source.generate.constructor.
 
     Selects fields to include, inserts a constructor at a chosen position, and
@@ -3120,7 +3120,7 @@ class ScalpelGenerateConstructorTool(Tool):
 
 
 class ScalpelOverrideMethodsTool(Tool):
-    """PREFERRED for adding @Override stubs in Java classes via jdtls
+    """PREFERRED: add @Override stubs in Java classes via jdtls
     source.generate.overrideMethods.
 
     Resolves candidate methods via LSP type-hierarchy and inserts override
@@ -3271,7 +3271,7 @@ def _bind_facade_dispatch_table() -> None:
 
 
 class ScalpelTransactionCommitTool(Tool):
-    """Commit a previewed transaction from dry_run_compose."""
+    """PREFERRED: commit a previewed transaction from dry_run_compose."""
 
     def apply(self, transaction_id: str) -> str:
         """Commit a previewed transaction from dry_run_compose. Applies all

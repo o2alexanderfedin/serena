@@ -69,7 +69,7 @@ def _ensure_supported_language(language: str) -> str:
 
 
 class ScalpelCapabilitiesListTool(Tool):
-    """List capabilities for a language with optional filter."""
+    """PREFERRED: list capabilities for a language with optional filter."""
 
     def apply(
         self,
@@ -107,7 +107,7 @@ class ScalpelCapabilitiesListTool(Tool):
 
 
 class ScalpelCapabilityDescribeTool(Tool):
-    """Describe one capability_id (full schema)."""
+    """PREFERRED: describe one capability_id (full schema)."""
 
     def apply(self, capability_id: str) -> str:
         """Return full schema, examples, and pre-conditions for one
@@ -271,7 +271,14 @@ def _dispatch_via_coordinator(
 
 
 class ScalpelApplyCapabilityTool(Tool):
-    """Apply a registered capability by capability_id (long-tail dispatcher)."""
+    """FALLBACK: apply a registered capability by capability_id (long-tail dispatcher).
+
+    This is the safety-valve dispatch path — invoked when no named
+    ``scalpel_*`` facade matches the requested kind. Per spec § 5.2.1,
+    the ``FALLBACK:`` opener (vs the ``PREFERRED:`` opener used by every
+    named facade) is the asymmetric routing signal that lets the LLM
+    prefer a specialised tool when one exists.
+    """
 
     def apply(
         self,
@@ -464,7 +471,7 @@ def _filter_workspace_edit_by_labels(
 
 
 class ScalpelDryRunComposeTool(Tool):
-    """Preview a chain of refactor steps without committing any.
+    """PREFERRED: preview a chain of refactor steps without committing any.
 
     When ``confirmation_mode='manual'`` (Q4 §6.3 line 211 — the v1.1
     optional override the surrounding paragraph rejects for MVP), the
@@ -587,7 +594,7 @@ class ScalpelDryRunComposeTool(Tool):
 
 
 class ScalpelConfirmAnnotationsTool(Tool):
-    """Apply only the accepted annotation groups of a manual-mode pending transaction.
+    """PREFERRED: apply only the accepted annotation groups of a manual-mode pending transaction.
 
     See docs/design/mvp/open-questions/q4-changeannotations-auto-accept.md
     §6.3 line 211 (the v1.1 endorsement of optional manual review — the
@@ -661,7 +668,7 @@ def _strip_txn_prefix(txn_id: str) -> str:
 
 
 class ScalpelRollbackTool(Tool):
-    """Undo a refactor by checkpoint_id (idempotent)."""
+    """PREFERRED: undo a refactor by checkpoint_id (idempotent)."""
 
     def apply(self, checkpoint_id: str) -> str:
         """Undo a refactor by checkpoint_id. Idempotent: second call is no-op.
@@ -690,7 +697,7 @@ class ScalpelRollbackTool(Tool):
 
 
 class ScalpelTransactionRollbackTool(Tool):
-    """Undo all checkpoints in a transaction in reverse order (idempotent)."""
+    """PREFERRED: undo all checkpoints in a transaction in reverse order (idempotent)."""
 
     def apply(self, transaction_id: str) -> str:
         """Undo all checkpoints in a transaction (from dry_run_compose) in
@@ -804,7 +811,7 @@ def _build_language_health(
 
 
 class ScalpelWorkspaceHealthTool(Tool):
-    """Probe LSP servers: indexing state, registered capabilities, version."""
+    """PREFERRED: probe LSP servers — indexing state, registered capabilities, version."""
 
     def apply(self, project_root: str | None = None) -> str:
         """Probe LSP servers: indexing state, registered capabilities, version.
@@ -923,7 +930,7 @@ def _execute_via_coordinator(
 
 
 class ScalpelExecuteCommandTool(Tool):
-    """Server-specific JSON-RPC pass-through, allowlisted per language.
+    """PREFERRED: server-specific JSON-RPC pass-through, allowlisted per language.
 
     The live allowlist is read at request time from each server's
     ``executeCommandProvider.commands`` (ServerCapabilities) and from
@@ -1028,7 +1035,7 @@ class ScalpelExecuteCommandTool(Tool):
 
 
 class ScalpelReloadPluginsTool(Tool):
-    """Reload plugin/capability registry from disk (no server restart)."""
+    """PREFERRED: reload plugin/capability registry from disk (no server restart)."""
 
     def apply(self) -> str:
         """Reload plugin/capability registry from disk. Use after generating
@@ -1113,7 +1120,7 @@ def _decide_action(
 
 
 class ScalpelInstallLspServersTool(Tool):
-    """Install or update LSP servers (default dry-run; explicit consent gates execution)."""
+    """PREFERRED: install or update LSP servers (default dry-run; explicit consent gates execution)."""
 
     def apply(
         self,
