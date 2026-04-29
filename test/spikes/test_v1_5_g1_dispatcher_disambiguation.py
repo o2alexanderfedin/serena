@@ -14,10 +14,7 @@ Asserts:
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from serena.tools.scalpel_facades import (
     _select_candidate_action,
@@ -81,7 +78,9 @@ def test_select_title_match_ambiguous_returns_envelope():
     assert status is not None
     assert status["status"] == "skipped"
     assert status["reason"] == "multiple_candidates_matched_title_match"
-    assert len(status["candidates"]) == 2
+    candidates = status["candidates"]
+    assert isinstance(candidates, list)
+    assert len(candidates) == 2
 
 
 def test_select_title_match_no_match_returns_envelope():
@@ -103,11 +102,11 @@ def test_dispatcher_default_path_unchanged_for_existing_callers(tmp_path):
     fake_coord = MagicMock()
     fake_coord.supports_kind.return_value = True
 
-    async def _fake_actions(**kw):
+    async def _fake_actions(**_kw):
         return [_action("a", "Promote local to constant")]
 
     fake_coord.merge_code_actions = _fake_actions
-    fake_coord.get_action_edit = lambda aid: {
+    fake_coord.get_action_edit = lambda _aid: {
         "changes": {
             src.as_uri(): [{
                 "range": {"start": {"line": 0, "character": 0},
@@ -141,7 +140,7 @@ def test_dispatcher_title_match_routes_to_correct_action(tmp_path):
     fake_coord = MagicMock()
     fake_coord.supports_kind.return_value = True
 
-    async def _fake_actions(**kw):
+    async def _fake_actions(**_kw):
         return [
             _action("a", "Change visibility to pub"),
             _action("b", "Change visibility to pub(crate)"),
@@ -192,7 +191,7 @@ def test_dispatcher_title_match_ambiguous_returns_envelope_no_disk_change(tmp_pa
     fake_coord = MagicMock()
     fake_coord.supports_kind.return_value = True
 
-    async def _fake_actions(**kw):
+    async def _fake_actions(**_kw):
         return [
             _action("a", "Change visibility to pub(crate)"),
             _action("b", "Change visibility to pub(crate) and re-export"),
@@ -230,7 +229,7 @@ def test_python_dispatcher_title_match_routes_correctly(tmp_path):
     fake_coord = MagicMock()
     fake_coord.supports_kind.return_value = True
 
-    async def _fake_actions(**kw):
+    async def _fake_actions(**_kw):
         return [
             _action("a", "Inline variable"),
             _action("b", "Inline function"),
