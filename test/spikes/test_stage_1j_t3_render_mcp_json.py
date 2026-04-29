@@ -15,16 +15,22 @@ def test_mcp_json_has_named_server_for_rust(fake_strategy_rust) -> None:
     srv = data["mcpServers"]["scalpel-rust"]
     assert srv["command"] == "uvx"
     assert "--from" in srv["args"]
-    assert "serena-mcp" in srv["args"]
-    assert "--language" in srv["args"]
-    assert "rust" in srv["args"]
+    # The MCP server is invoked as `serena start-mcp-server` (verified entry
+    # point in vendor/serena/src/serena/cli.py); the previous `serena-mcp`
+    # invocation referenced a non-existent CLI entry. Per-language scoping
+    # comes from the plugin's identity in marketplace.json — the MCP server
+    # itself discovers from workspace, no `--language` flag needed.
+    assert "serena" in srv["args"]
+    assert "start-mcp-server" in srv["args"]
 
 
 def test_mcp_json_for_python(fake_strategy_python) -> None:
     out = _render_mcp_json(fake_strategy_python)
     data = json.loads(out)
     assert "scalpel-python" in data["mcpServers"]
-    assert "python" in data["mcpServers"]["scalpel-python"]["args"]
+    srv = data["mcpServers"]["scalpel-python"]
+    assert "serena" in srv["args"]
+    assert "start-mcp-server" in srv["args"]
 
 
 def test_mcp_json_is_deterministic(fake_strategy_rust) -> None:
