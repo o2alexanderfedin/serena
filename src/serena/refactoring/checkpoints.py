@@ -131,7 +131,7 @@ class Checkpoint:
     inverse directly.
     """
 
-    __slots__ = ("id", "applied", "snapshot", "inverse", "created_at_ns")
+    __slots__ = ("id", "applied", "snapshot", "inverse", "created_at_ns", "reverted")
 
     def __init__(
         self,
@@ -147,6 +147,12 @@ class Checkpoint:
         # FIFO retention uses filesystem mtime (more authoritative across
         # sessions); this field is informational metadata.
         self.created_at_ns: int = time.time_ns()
+        # v1.7 P7 — once ``ScalpelRollbackTool`` has run the inverse-applier
+        # against this checkpoint, it sets ``reverted=True`` so subsequent
+        # rollbacks short-circuit to ``no_op=True`` (idempotent contract).
+        # The flag is in-memory only; cross-session idempotency is not
+        # promised because the persisted schema does not carry it.
+        self.reverted: bool = False
 
     def to_persisted(self) -> PersistedCheckpoint:
         """Project to the on-disk schema. Lossy on ``applied``/``snapshot`` —
@@ -174,6 +180,7 @@ class Checkpoint:
         ckpt.snapshot = {}
         ckpt.inverse = dict(persisted.inverse_edit)
         ckpt.created_at_ns = persisted.created_at_ns
+        ckpt.reverted = False
         return ckpt
 
 
