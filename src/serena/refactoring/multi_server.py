@@ -42,7 +42,7 @@ ProvenanceLiteral = Literal[
     "clangd",
     "jdtls",
     "lean",
-    "smt2-lsp",
+    "dolmenls",
     "swipl-lsp",
     "problog-lsp",
     "csharp-ls",

@@ -426,9 +426,9 @@ _LANGUAGE_METADATA: dict[str, _StrategyView] = {
         ),
     ),
     "smt2": _StrategyView(
-        # Stream 6 / Leaf F: SMT-LIB 2 constraint format.
-        # No production LSP exists as of 2026-04-27; Smt2Installer raises
-        # NotImplementedError with guidance.  The seam is preserved here.
+        # Stream 6 / Leaf F (v1.4.1): SMT-LIB 2 backed by `dolmenls` (Dolmen
+        # monorepo, https://github.com/Gbury/dolmen). Diagnostics-focused LSP;
+        # dolmenls speaks stdio with no required args, hence ``("dolmenls",)``.
         #
         # SMT-LIB 2 is a constraint specification format — rename/extract have
         # no solver-level semantics.  Only quickfix (diagnostic auto-corrections)
@@ -436,7 +436,7 @@ _LANGUAGE_METADATA: dict[str, _StrategyView] = {
         language="smt2",
         display_name="SMT-LIB 2",
         file_extensions=(".smt2", ".smt"),
-        lsp_server_cmd=("smt2-lsp", "--stdio"),
+        lsp_server_cmd=("dolmenls",),
         facades=(
             _Facade(
                 name="fix_lints",

@@ -1,27 +1,19 @@
-"""SMT-LIB v2 LSP adapter — Stream 6 / Leaf F.
+"""SMT-LIB v2 LSP adapter — Stream 6 / Leaf F (v1.4.1: dolmenls-backed).
 
 SMT-LIB 2 (https://smtlib.cs.uiowa.edu/) is the standard input language for
 Satisfiability Modulo Theories (SMT) solvers such as Z3, CVC5, and Yices.
 Files use ``.smt2`` (canonical) or ``.smt`` extensions.
 
-**LSP ecosystem status (as of 2026-04-27):**
+**Backend (v1.4.1):** `dolmenls`_, the language server shipped from the
+`Dolmen`_ monorepo (Guillaume Bury). Dolmenls is a diagnostics-focused LSP:
+it parses, sort-checks, and reports errors over `textDocument/publishDiagnostics`.
+Hover / goto-definition / references / rename / formatting are NOT implemented
+upstream as of v0.10 — the runtime
+:class:`~solidlsp.dynamic_capabilities.DynamicCapabilityRegistry` gates these
+honestly per session.
 
-No production-quality, standalone LSP server for SMT-LIB 2 exists in the
-broader ecosystem.  The closest candidates that have been found are:
-
-  - VSCode extension wrappers that bundle solver-specific diagnostics but do
-    not expose a generic stdio LSP endpoint.
-  - Unpublished or abandoned research prototypes (checked: GitHub searches
-    for ``smt2-lsp``, ``smt-lsp``, ``smtlib lsp`` all return 404 or
-    unmaintained stubs as of 2026-04-27).
-
-**Design decision — ship the seam, not silence:**
-
-Rather than silently skipping SMT2 support, the adapter class is provided so
-that the strategy layer, plugin generator, and capability catalog have a
-stable hook.  The installer raises ``NotImplementedError`` with a guidance
-message (see ``Smt2Installer``).  When a production LSP for SMT-LIB eventually
-matures, only the installer + this adapter need updating.
+.. _dolmenls: https://github.com/Gbury/dolmen/blob/master/doc/lsp.md
+.. _Dolmen: https://github.com/Gbury/dolmen
 
 **Capability surface:**
 
@@ -29,12 +21,14 @@ SMT-LIB 2 is a **constraint specification format**, not a general-purpose
 programming language.  Refactoring operations (rename, extract) have no
 well-defined semantics at the solver level — renaming a sort or function
 symbol across a multi-file benchmark suite requires solver-aware dependency
-tracking that no current tool provides.  The strategy therefore advertises
-``quickfix`` only — diagnostic-driven auto-corrections such as syntax fixes or
-sort-mismatch suggestions, once a capable LSP lands.
+tracking that dolmen does not currently provide.  The strategy therefore
+advertises ``quickfix`` only — diagnostic-driven auto-corrections such as
+syntax fixes or sort-mismatch suggestions surfaced by dolmenls.
 
-Binary entry point: TBD (no stable binary as of 2026-04-27).
-Install: see ``Smt2Installer`` — raises ``NotImplementedError`` with guidance.
+Binary entry point: ``dolmenls`` (bare; stdio transport; no required args).
+Install: see :class:`~serena.installer.smt2_installer.Smt2Installer` — pulls
+pre-built binaries (``dolmenls-{linux,macos,windows}-amd64``) from the
+``Gbury/dolmen`` GitHub Releases (pinned to v0.10).
 """
 
 from __future__ import annotations
@@ -55,32 +49,27 @@ from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
-# Sentinel binary name used as placeholder until a stable SMT2 LSP ships.
-# The value is deliberately non-existent so that ``shutil.which`` returns
-# ``None`` and the adapter falls back to the nominal path, surfacing a clear
-# error when ``start_server`` is called without a real binary installed.
-_SMT2_LSP_BINARY = "smt2-lsp"
+# Real binary as of v1.4.1: dolmenls from Gbury/dolmen (v0.10 pin).
+# The Smt2Installer pulls platform-tagged binaries from GitHub Releases.
+_SMT2_LSP_BINARY = "dolmenls"
 
 
 class Smt2Server(SolidLanguageServer):
-    """SMT-LIB 2 LSP adapter (stub; no stable server as of 2026-04-27).
+    """SMT-LIB 2 LSP adapter backed by ``dolmenls`` (v1.4.1).
 
-    This adapter provides the full LSP wire shape so that the strategy layer,
-    capability catalog, and plugin generator have a stable seam.  The adapter
-    will raise at spawn-time because no production SMT2 LSP binary is
-    currently available.  See module docstring for the full rationale.
+    Dolmenls is diagnostics-focused: parses, sort-checks, and emits
+    ``textDocument/publishDiagnostics``. Other LSP methods are gated at
+    runtime by :class:`~solidlsp.dynamic_capabilities.DynamicCapabilityRegistry`
+    based on the ``ServerCapabilities`` returned at initialize.
 
-    When a production SMT-LIB LSP server ships, update:
-      1. ``_SMT2_LSP_BINARY`` (this module) to the real binary name.
-      2. ``Smt2Installer`` (smt2_installer.py) — remove the
-         ``NotImplementedError`` and implement the real install path.
-      3. Re-run ``pytest --update-catalog-baseline`` to refresh the golden
-         capability baseline.
-
-    Capability surface: ``quickfix`` only — see module docstring.
+    Capability surface advertised here is permissive (definition / references /
+    hover / documentSymbol) so that the static catalog tracks dolmenls's
+    aspirational evolution; the dynamic registry filters per session.
+    Code-action kinds are restricted to ``quickfix`` — SMT-LIB has no
+    solver-level rename/extract semantics regardless of LSP capability.
     """
 
-    server_id: ClassVar[str] = "smt2-lsp"
+    server_id: ClassVar[str] = "dolmenls"
 
     def __init__(
         self,
@@ -92,15 +81,16 @@ class Smt2Server(SolidLanguageServer):
         if binary is None:
             log.debug(
                 "%s binary not on PATH; spawn will fail — "
-                "no production SMT-LIB 2 LSP is available yet (see Smt2Installer).",
+                "install via Smt2Installer (scalpel_install_lsp_servers).",
                 _SMT2_LSP_BINARY,
             )
             binary = _SMT2_LSP_BINARY  # nominal — start_server will surface the failure
+        # dolmenls speaks LSP over stdio with no required args.
         super().__init__(
             config,
             repository_root_path,
             ProcessLaunchInfo(
-                cmd=f"{binary} --stdio",
+                cmd=binary,
                 cwd=repository_root_path,
             ),
             "smt2",

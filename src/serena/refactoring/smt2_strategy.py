@@ -1,15 +1,15 @@
-"""SMT-LIB 2 refactoring strategy — Stream 6 / Leaf F.
+"""SMT-LIB 2 refactoring strategy — Stream 6 / Leaf F (v1.4.1: dolmenls).
 
-Single-LSP strategy: ``smt2-lsp`` (stub; no stable server as of 2026-04-27).
+Single-LSP strategy: ``dolmenls`` (Dolmen monorepo, https://github.com/Gbury/dolmen).
 
 Mirrors ``LeanStrategy`` (the conservative single-LSP reference for Stream 6
 Leaf E — another constraint/theorem domain with restricted refactor surface):
 
   - identity constants (``language_id``, ``extension_allow_list``,
     ``code_action_allow_list``);
-  - ``build_servers`` returns ``{"smt2-lsp": <SolidLanguageServer>}``;
+  - ``build_servers`` returns ``{"dolmenls": <SolidLanguageServer>}``;
   - ``execute_command_whitelist()`` classmethod returns ``frozenset()`` —
-    no stable LSP means no ``workspace/executeCommand`` verbs.
+    dolmenls advertises no ``workspace/executeCommand`` verbs.
 
 Why only ``quickfix``?
 -----------------------
@@ -30,11 +30,6 @@ fixes, assertion syntax errors) — these are semantics-preserving.
 This conservative allow-list is documented per DRY rule in
 ``Smt2Server._get_initialize_params`` (which also advertises only ``quickfix``
 to the server, so the server never offers unsafe kinds).
-
-Additionally, **no stable SMT2 LSP binary exists** as of 2026-04-27 (see
-``Smt2Server`` module docstring).  The strategy is shipped to preserve the
-seam for future LSP maturity; ``Smt2Installer`` raises ``NotImplementedError``
-with guidance until a stable server ships.
 
 SMT-LIB 2 code action kinds:
 
@@ -70,12 +65,7 @@ _SMT2_CODE_ACTION_KINDS: frozenset[str] = frozenset(
 
 
 class Smt2Strategy(LanguageStrategy):
-    """Single-LSP ``LanguageStrategy`` for SMT-LIB 2 (``smt2-lsp`` stub).
-
-    No stable SMT2 LSP binary exists as of 2026-04-27.  This strategy ships
-    to preserve the seam: the strategy layer, plugin generator, and capability
-    catalog all have a stable hook.  ``Smt2Installer`` raises
-    ``NotImplementedError`` with guidance until a real server ships.
+    """Single-LSP ``LanguageStrategy`` for SMT-LIB 2 (dolmenls-backed, v1.4.1).
 
     The code-action surface is intentionally minimal (``quickfix`` only).
     See module docstring for the full constraint-format rationale.
@@ -89,20 +79,19 @@ class Smt2Strategy(LanguageStrategy):
         self._pool = pool
 
     def build_servers(self, project_root: Path) -> dict[str, Any]:
-        """Return ``{"smt2-lsp": <SolidLanguageServer>}`` from the pool.
+        """Return ``{"dolmenls": <SolidLanguageServer>}`` from the pool.
 
         Single-LSP language; the dict has exactly one entry.
         """
         key = LspPoolKey(language=self.language_id, project_root=str(project_root))
         server = self._pool.acquire(key)
-        return {"smt2-lsp": server}
+        return {"dolmenls": server}
 
     @classmethod
     def execute_command_whitelist(cls) -> frozenset[str]:
         """Return the set of ``workspace/executeCommand`` verbs this strategy
         will dispatch.
 
-        No stable SMT2 LSP exists; the whitelist is empty.  When a real server
-        ships and exposes executeCommand verbs, add them here.
+        Dolmenls (v0.10) advertises no executeCommand verbs; whitelist is empty.
         """
         return frozenset()
