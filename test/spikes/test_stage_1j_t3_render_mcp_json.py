@@ -58,3 +58,38 @@ def test_mcp_json_no_o2services_in_url(fake_strategy_rust) -> None:
     """§ 3.4: o2services owner must not appear in any generated URL."""
     out = _render_mcp_json(fake_strategy_rust)
     assert "o2services" not in out
+
+
+# --- § dedup-distinguisher: --server-name makes each plugin's args unique ----
+
+
+def test_mcp_json_rust_has_server_name_arg(fake_strategy_rust) -> None:
+    """Each plugin passes --server-name <id> so Claude Code plugin manager
+    treats them as distinct MCP servers rather than deduplicating them."""
+    out = _render_mcp_json(fake_strategy_rust)
+    data = json.loads(out)
+    args = data["mcpServers"]["scalpel-rust"]["args"]
+    assert "--server-name" in args
+    name_idx = args.index("--server-name") + 1
+    assert args[name_idx] == "scalpel-rust"
+
+
+def test_mcp_json_python_has_server_name_arg(fake_strategy_python) -> None:
+    out = _render_mcp_json(fake_strategy_python)
+    data = json.loads(out)
+    args = data["mcpServers"]["scalpel-python"]["args"]
+    assert "--server-name" in args
+    name_idx = args.index("--server-name") + 1
+    assert args[name_idx] == "scalpel-python"
+
+
+def test_mcp_json_rust_and_python_args_differ(
+    fake_strategy_rust, fake_strategy_python
+) -> None:
+    """Rust and Python plugins must produce different args so Claude Code
+    plugin manager does not skip one as a duplicate of the other."""
+    rust_out = json.loads(_render_mcp_json(fake_strategy_rust))
+    python_out = json.loads(_render_mcp_json(fake_strategy_python))
+    rust_args = rust_out["mcpServers"]["scalpel-rust"]["args"]
+    python_args = python_out["mcpServers"]["scalpel-python"]["args"]
+    assert rust_args != python_args
