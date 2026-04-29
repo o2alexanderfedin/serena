@@ -11,6 +11,7 @@ Docstrings on every ``apply`` method are <=30 words (router signage,
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from collections.abc import Coroutine
 from pathlib import Path
@@ -33,6 +34,7 @@ from serena.tools.scalpel_schemas import (
     DiagnosticSeverityBreakdown,
     ErrorCode,
     FailureInfo,
+    FileChange,
     LanguageHealth,
     LspOpStat,
     RefactorResult,
@@ -408,26 +410,143 @@ class ScalpelApplyCapabilityTool(Tool):
 # ---------------------------------------------------------------------------
 
 
+def _payload_to_step_changes(
+    payload: dict[str, Any],
+) -> tuple[FileChange, ...]:
+    """Project ``RefactorResult.changes`` from a JSON-decoded payload.
+
+    Returns ``()`` if the field is missing or unparseable. We re-validate
+    each change through the pydantic ``FileChange`` model to maintain the
+    type guarantee on the ``StepPreview.changes`` field.
+    """
+    raw = payload.get("changes") or ()
+    if not isinstance(raw, (list, tuple)):
+        return ()
+    out: list[FileChange] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            out.append(FileChange.model_validate(entry))
+        except Exception:  # noqa: BLE001 — drop unparseable rows
+            continue
+    return tuple(out)
+
+
+def _payload_to_diagnostics_delta(
+    payload: dict[str, Any],
+) -> DiagnosticsDelta:
+    """Project ``RefactorResult.diagnostics_delta`` or fall back to empty."""
+    raw = payload.get("diagnostics_delta")
+    if isinstance(raw, dict):
+        try:
+            return DiagnosticsDelta.model_validate(raw)
+        except Exception:  # noqa: BLE001 — surface as empty
+            pass
+    return _empty_diagnostics_delta()
+
+
+def _payload_to_failure(payload: dict[str, Any]) -> FailureInfo | None:
+    """Project ``RefactorResult.failure`` or return ``None``."""
+    raw = payload.get("failure")
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return FailureInfo.model_validate(raw)
+    except Exception:  # noqa: BLE001 — surface as no failure rather than crash
+        return None
+
+
 def _dry_run_one_step(
     step: ComposeStep,
     *,
     project_root: Path,
     step_index: int,
 ) -> StepPreview:
-    """Virtually apply one step against the in-memory shadow workspace.
+    """Virtually apply one step by dispatching to its facade in dry_run mode.
 
-    Stage 1G ships the compose *grammar* (transaction id allocation,
-    per-step preview rows, fail-fast walking, 5-min TTL). The actual
-    shadow-workspace mutation lives in Stage 2A — the ergonomic facades
-    are the only callers that mutate state.
+    Looks up ``step.tool`` in ``_FACADE_DISPATCH`` (lazy-imported from
+    ``scalpel_facades`` — the dispatch table is built at module-init and is
+    stable thereafter; lazy import avoids the parent-module cycle that PR 1
+    surfaced). The dispatched facade is invoked with
+    ``step.args | {"dry_run": True}``, returning a ``RefactorResult``
+    JSON envelope which we project into ``StepPreview.changes /
+    diagnostics_delta / failure``.
+
+    Unknown tool → ``INVALID_ARGUMENT`` failure. Facade exception →
+    ``INTERNAL_ERROR`` failure (wrapped, never propagated). Malformed
+    payload → ``INTERNAL_ERROR`` failure.
+
+    v1.6 P4 (Plan 4): replaces the previous hardcoded empty StepPreview
+    that lied to the LLM about every step's effect.
     """
-    del project_root  # Stage 2A wires shadow-workspace mutation
+    del project_root  # facade picks up project_root via its own get_project_root().
+    from serena.tools.scalpel_facades import _FACADE_DISPATCH
+
+    handler = _FACADE_DISPATCH.get(step.tool)
+    if handler is None:
+        return StepPreview(
+            step_index=step_index,
+            tool=step.tool,
+            changes=(),
+            diagnostics_delta=_empty_diagnostics_delta(),
+            failure=FailureInfo(
+                stage="_dry_run_one_step",
+                reason=f"Unknown tool {step.tool!r}; not registered in _FACADE_DISPATCH.",
+                code=ErrorCode.INVALID_ARGUMENT,
+                recoverable=False,
+            ),
+        )
+    args = {**(step.args or {}), "dry_run": True}
+    try:
+        raw_payload = handler(**args)
+    except Exception as exc:  # noqa: BLE001 — surface as failure
+        return StepPreview(
+            step_index=step_index,
+            tool=step.tool,
+            changes=(),
+            diagnostics_delta=_empty_diagnostics_delta(),
+            failure=FailureInfo(
+                stage="_dry_run_one_step",
+                reason=f"Facade {step.tool!r} raised: {exc}",
+                code=ErrorCode.INTERNAL_ERROR,
+                recoverable=True,
+            ),
+        )
+    try:
+        payload = json.loads(raw_payload)
+    except Exception as exc:  # noqa: BLE001
+        return StepPreview(
+            step_index=step_index,
+            tool=step.tool,
+            changes=(),
+            diagnostics_delta=_empty_diagnostics_delta(),
+            failure=FailureInfo(
+                stage="_dry_run_one_step",
+                reason=f"Facade {step.tool!r} returned invalid JSON: {exc}",
+                code=ErrorCode.INTERNAL_ERROR,
+                recoverable=True,
+            ),
+        )
+    if not isinstance(payload, dict):
+        return StepPreview(
+            step_index=step_index,
+            tool=step.tool,
+            changes=(),
+            diagnostics_delta=_empty_diagnostics_delta(),
+            failure=FailureInfo(
+                stage="_dry_run_one_step",
+                reason=f"Facade {step.tool!r} returned non-object payload {type(payload).__name__}.",
+                code=ErrorCode.INTERNAL_ERROR,
+                recoverable=True,
+            ),
+        )
     return StepPreview(
         step_index=step_index,
         tool=step.tool,
-        changes=(),
-        diagnostics_delta=_empty_diagnostics_delta(),
-        failure=None,
+        changes=_payload_to_step_changes(payload),
+        diagnostics_delta=_payload_to_diagnostics_delta(payload),
+        failure=_payload_to_failure(payload),
     )
 
 
