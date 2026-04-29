@@ -163,6 +163,133 @@ def _resolve_winner_edit(coord: Any, winner: Any) -> dict[str, Any] | None:
     return edit if isinstance(edit, dict) else None
 
 
+def capture_pre_edit_snapshot(workspace_edit: dict[str, Any]) -> dict[str, str]:
+    """Read pre-edit file bytes for every URI touched by ``workspace_edit``.
+
+    v1.6 Plan 1 (PR 2) shifts checkpoint snapshots from the v0.2.0 empty
+    ``snapshot={}`` placeholder to honest "what was there before" content
+    so :class:`serena.refactoring.checkpoints.CheckpointStore` can support
+    real rollback in v1.7.
+
+    Walks both edit shapes:
+
+    - ``changes`` (``{uri: [TextEdit]}``) — every URI's pre-edit content
+      is read off disk via :func:`_uri_to_path` + ``Path.read_text``.
+    - ``documentChanges`` (heterogeneous list):
+
+      - ``TextDocumentEdit`` (no ``kind``): same as a ``changes`` entry.
+      - ``CreateFile`` (``kind="create"``): record
+        :data:`_SNAPSHOT_NONEXISTENT` for the new URI — the pre-state was
+        "doesn't exist".
+      - ``DeleteFile`` (``kind="delete"``): record
+        :data:`_SNAPSHOT_NONEXISTENT`. The LSP delete-op carries no payload
+        and the post-state is "doesn't exist"; a future rollback recreates
+        the file from the inverse-edit's pre-bytes (lifted into the
+        snapshot path here).
+      - ``RenameFile`` (``kind="rename"``): snapshot the OLD URI's pre-edit
+        content. The NEW URI didn't exist pre-edit and isn't recorded.
+
+    Files that resolve to a path but are missing on disk fall back to
+    :data:`_SNAPSHOT_NONEXISTENT` (matches the "create" semantics for
+    edits that materialise a brand-new file via TextDocumentEdit).
+
+    Returns ``{}`` for an empty / malformed edit. Best-effort: I/O errors
+    are surfaced as the sentinel rather than crashing the apply path.
+    """
+    snapshot: dict[str, str] = {}
+    # changes shape: {uri: [TextEdit, ...]}
+    for uri in (workspace_edit.get("changes") or {}).keys():
+        snapshot[uri] = _read_pre_edit_or_sentinel(uri)
+    # documentChanges shape: heterogeneous list.
+    for dc in workspace_edit.get("documentChanges") or []:
+        if not isinstance(dc, dict):
+            continue
+        kind = dc.get("kind")
+        if kind == "create":
+            uri = dc.get("uri")
+            if isinstance(uri, str):
+                snapshot[uri] = _SNAPSHOT_NONEXISTENT
+        elif kind == "delete":
+            uri = dc.get("uri")
+            if isinstance(uri, str):
+                snapshot[uri] = _SNAPSHOT_NONEXISTENT
+        elif kind == "rename":
+            old_uri = dc.get("oldUri")
+            if isinstance(old_uri, str):
+                snapshot[old_uri] = _read_pre_edit_or_sentinel(old_uri)
+        else:
+            # TextDocumentEdit: no ``kind`` key.
+            text_doc = dc.get("textDocument") or {}
+            uri = text_doc.get("uri")
+            if isinstance(uri, str):
+                snapshot[uri] = _read_pre_edit_or_sentinel(uri)
+    return snapshot
+
+
+def _read_pre_edit_or_sentinel(uri: str) -> str:
+    """Read the file at ``uri`` or return :data:`_SNAPSHOT_NONEXISTENT`.
+
+    Helper for :func:`capture_pre_edit_snapshot`: non-``file://`` URIs,
+    missing files, and read errors all collapse onto the sentinel so the
+    snapshot dict stays a uniform ``{uri: str}`` shape.
+    """
+    target = _uri_to_path(uri)
+    if target is None or not target.exists():
+        return _SNAPSHOT_NONEXISTENT
+    try:
+        return target.read_text(encoding="utf-8")
+    except OSError:
+        return _SNAPSHOT_NONEXISTENT
+
+
+def apply_action_and_checkpoint(
+    coord: Any,
+    action: Any,
+) -> tuple[str, dict[str, Any]]:
+    """Resolve, snapshot, apply, and checkpoint a winner action in one step.
+
+    Replaces the 5-line snippet duplicated across 9 facade dispatch sites:
+
+        edit = _resolve_winner_edit(coord, action)
+        if isinstance(edit, dict) and edit:
+            _apply_workspace_edit_to_disk(edit)
+        else:
+            edit = {"changes": {}}
+        cid = record_checkpoint_for_workspace_edit(edit, snapshot={})
+
+    The new behaviour, encapsulated here:
+
+    1. Resolve the WorkspaceEdit via :func:`_resolve_winner_edit`.
+    2. If an edit was resolved, capture the pre-edit snapshot via
+       :func:`capture_pre_edit_snapshot` BEFORE applying so the snapshot
+       is honest about "what was there before".
+    3. Apply via :func:`_apply_workspace_edit_to_disk` when an edit
+       resolved; otherwise fall through with an empty edit.
+    4. Always record a checkpoint via
+       :func:`record_checkpoint_for_workspace_edit` (matching the v0.2.0
+       contract where ``applied=True`` always carries a non-empty
+       ``checkpoint_id``, even for legacy fakes whose synthetic action
+       ids don't resolve to a real edit).
+
+    :returns: ``(checkpoint_id, applied_edit)``. ``applied_edit`` is the
+      resolved edit when available, else ``{"changes": {}}``. The
+      checkpoint id is always non-empty.
+    """
+    edit = _resolve_winner_edit(coord, action)
+    if isinstance(edit, dict) and edit:
+        snapshot = capture_pre_edit_snapshot(edit)
+        _apply_workspace_edit_to_disk(edit)
+    else:
+        # Resolve failed (legacy fake, untracked id, non-dict). Fall back to
+        # the v0.2.0 empty-edit checkpoint so callers still emit a
+        # non-empty ``checkpoint_id`` and downstream rollback gets a
+        # well-formed (empty) record rather than a missing one.
+        edit = {"changes": {}}
+        snapshot = {}
+    cid = record_checkpoint_for_workspace_edit(edit, snapshot=snapshot)
+    return (cid, edit)
+
+
 FACADE_TO_CAPABILITY_ID: dict[str, dict[str, str]] = {
     "scalpel_split_file": {
         "rust": "rust.refactor.move.module",
@@ -357,9 +484,11 @@ __all__ = [
     "_resolve_winner_edit",
     "_splice_text_edit",
     "_uri_to_path",
+    "apply_action_and_checkpoint",
     "apply_workspace_edit_via_editor",
     "attach_apply_source",
     "build_failure_result",
+    "capture_pre_edit_snapshot",
     "coordinator_for_facade",
     "get_apply_source",
     "record_checkpoint_for_workspace_edit",
