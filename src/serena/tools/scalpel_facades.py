@@ -648,6 +648,73 @@ def _post_process_extract_edit(
     return out
 
 
+# v1.5 G6 ME-3 — rope's ``introduce_parameter`` action emits the new
+# parameter under an auto-generated name (``p`` or ``param`` depending
+# on rope version). Caller's ``parameter_name`` substitutes for these
+# tokens inside emitted ``newText`` hunks via word-boundary regex; pre-
+# existing source surrounding the hunks is untouched.
+_INTRODUCE_PARAMETER_AUTO_NAMES: tuple[str, ...] = ("p", "param")
+
+
+def _substitute_introduced_parameter_name(
+    workspace_edit: dict[str, Any],
+    *,
+    parameter_name: str,
+) -> dict[str, Any]:
+    """Substitute rope's introduce_parameter auto-name with the caller's
+    ``parameter_name`` inside emitted ``newText`` hunks.
+
+    Mirrors :func:`_post_process_extract_edit` shape. ``parameter_name``
+    must be a non-empty identifier; for the default ``"p"`` the function
+    is a no-op (caller would never reach here in that case).
+    """
+    import re as _re
+
+    if not parameter_name or parameter_name in _INTRODUCE_PARAMETER_AUTO_NAMES:
+        return workspace_edit
+
+    def _patch_text(text: str) -> str:
+        out = text
+        for auto in _INTRODUCE_PARAMETER_AUTO_NAMES:
+            out = _re.sub(
+                rf"\b{_re.escape(auto)}\b", parameter_name, out,
+            )
+        return out
+
+    if not isinstance(workspace_edit, dict):
+        return workspace_edit
+    out: dict[str, Any] = {}
+    for key, val in workspace_edit.items():
+        if key == "changes" and isinstance(val, dict):
+            new_changes: dict[str, list[dict[str, Any]]] = {}
+            for uri, edits in val.items():
+                new_edits: list[Any] = []
+                for e in edits or []:
+                    if isinstance(e, dict) and isinstance(e.get("newText"), str):
+                        new_edits.append({**e, "newText": _patch_text(e["newText"])})
+                    else:
+                        new_edits.append(e)
+                new_changes[uri] = new_edits
+            out[key] = new_changes
+        elif key == "documentChanges" and isinstance(val, list):
+            new_dcs: list[Any] = []
+            for dc in val:
+                if isinstance(dc, dict) and "edits" in dc:
+                    new_edits = []
+                    for e in dc.get("edits") or []:
+                        if isinstance(e, dict) and isinstance(e.get("newText"), str):
+                            new_edits.append({**e, "newText": _patch_text(e["newText"])})
+                        else:
+                            new_edits.append(e)
+                    new_dcs.append({**dc, "edits": new_edits})
+                else:
+                    new_dcs.append(dc)
+            out[key] = new_dcs
+        else:
+            out[key] = val
+    return out
+
+
 # v1.5 P2 — per-language target-validity matrix for ``ScalpelExtractTool``.
 # Spec § 4.2.1 (rust/python/java × variable/function/constant/static/type_alias/module).
 # Combinations not listed in the language's set return CAPABILITY_NOT_AVAILABLE
@@ -1919,6 +1986,17 @@ _TIDY_STRUCTURE_KINDS: tuple[str, ...] = (
     "refactor.rewrite.reorder_fields",
 )
 
+# v1.5 G6 ME-1 — per-scope filter. ``file`` keeps the all-three behavior
+# (status quo). ``type`` narrows to ``reorder_fields`` (struct/enum field
+# ordering). ``impl`` narrows to ``reorder_impl_items`` (impl-block item
+# ordering). ``sort_items`` only ever applies at the file scope; including
+# it under ``type``/``impl`` would dispatch beyond the cursor's container.
+_TIDY_STRUCTURE_SCOPE_TO_KINDS: dict[str, tuple[str, ...]] = {
+    "file": _TIDY_STRUCTURE_KINDS,
+    "type": ("refactor.rewrite.reorder_fields",),
+    "impl": ("refactor.rewrite.reorder_impl_items",),
+}
+
 
 class ScalpelTidyStructureTool(Tool):
     """PREFERRED: reorder impl items, sort items, and reorder struct fields in a file."""
@@ -1936,8 +2014,11 @@ class ScalpelTidyStructureTool(Tool):
         """Reorder impl items, sort items, and reorder struct fields. Composite.
 
         :param file: source file to tidy.
-        :param scope: 'file' (whole file), 'type' (a struct/enum at position),
-            'impl' (an impl block at position).
+        :param scope: 'file' (whole file — dispatches all 3 kinds),
+            'type' (a struct/enum at position — only reorder_fields),
+            'impl' (an impl block at position — only reorder_impl_items).
+            v1.5 G6 ME-1 wires scope into a per-kind filter so the LSP
+            request is bracketed to the caller's intent.
         :param position: cursor when scope='type' or 'impl'.
         :param dry_run: preview only.
         :param preview_token: continuation from a prior dry-run.
@@ -1945,7 +2026,7 @@ class ScalpelTidyStructureTool(Tool):
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
-        del preview_token, scope
+        del preview_token
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -1963,9 +2044,14 @@ class ScalpelTidyStructureTool(Tool):
             ).model_dump_json(indent=2)
         coord = coordinator_for_facade(language=lang, project_root=project_root)
         cursor = position or {"line": 0, "character": 0}
+        # v1.5 G6 ME-1 — scope filter: 'file' → all 3, 'type' → reorder_fields,
+        # 'impl' → reorder_impl_items. Unknown scope falls back to 'file' kinds.
+        kinds_for_scope = _TIDY_STRUCTURE_SCOPE_TO_KINDS.get(
+            scope, _TIDY_STRUCTURE_KINDS,
+        )
         t0 = time.monotonic()
         all_actions: list[Any] = []
-        for kind in _TIDY_STRUCTURE_KINDS:
+        for kind in kinds_for_scope:
             # Gate: skip individual kinds not advertised by the server
             # (spec § 4.5 P4 — per-kind gate inside multi-kind loop).
             if not coord.supports_kind(lang, kind):
@@ -2538,6 +2624,7 @@ def _python_dispatch_single_kind(
     dry_run: bool,
     server_label: str = "pylsp-rope",
     title_match: str | None = None,
+    edit_postprocessor: Any = None,
 ) -> str:
     """Python-specific shared dispatcher; mirrors ``_dispatch_single_kind_facade``
     but pins ``language='python'`` and labels lsp_ops by the rope/ruff/pyright
@@ -2545,6 +2632,12 @@ def _python_dispatch_single_kind(
 
     ``title_match`` (v1.5 G1): see :func:`_select_candidate_action`. Defaults
     to ``None`` so the pre-G1 callers retain their status-quo behavior.
+
+    ``edit_postprocessor`` (v1.5 G6 ME-3): optional callable
+    ``(workspace_edit: dict) -> dict`` invoked between resolve and apply.
+    Used by callers that need to substitute auto-generated names (e.g.
+    ``introduce_parameter`` rewrites rope's ``p`` → caller's
+    ``parameter_name``). Defaults to ``None`` (no-op).
     """
     coord = coordinator_for_facade(language="python", project_root=project_root)
     if not coord.supports_kind("python", kind):
@@ -2574,6 +2667,8 @@ def _python_dispatch_single_kind(
     # v0.3.0 facade-application: same pattern as the Rust dispatcher.
     workspace_edit = _resolve_winner_edit(coord, chosen)
     if isinstance(workspace_edit, dict) and workspace_edit:
+        if edit_postprocessor is not None:
+            workspace_edit = edit_postprocessor(workspace_edit)
         _apply_workspace_edit_to_disk(workspace_edit)
     else:
         workspace_edit = {"changes": {}}
@@ -2734,14 +2829,18 @@ class ScalpelIntroduceParameterTool(Tool):
 
         :param file: Python source file.
         :param position: LSP cursor on the expression.
-        :param parameter_name: requested parameter name.
+        :param parameter_name: requested parameter name. v1.5 G6 ME-3
+            substitutes this for rope's auto-generated names (``p`` /
+            ``param``) inside the emitted ``newText`` hunks via
+            :func:`_substitute_introduced_parameter_name`. Pre-existing
+            source surrounding the hunks is untouched.
         :param dry_run: preview only.
         :param preview_token: continuation from a prior dry-run.
         :param language: 'rust' or 'python'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
-        del preview_token, parameter_name, language
+        del preview_token, language
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -2749,10 +2848,17 @@ class ScalpelIntroduceParameterTool(Tool):
         )
         if guard is not None:
             return guard.model_dump_json(indent=2)
+
+        def _postproc(edit: dict[str, Any]) -> dict[str, Any]:
+            return _substitute_introduced_parameter_name(
+                edit, parameter_name=parameter_name,
+            )
+
         return _python_dispatch_single_kind(
             stage_name="scalpel_introduce_parameter",
             file=file, position=position, kind=_INTRODUCE_PARAMETER_KIND,
             project_root=project_root, dry_run=dry_run,
+            edit_postprocessor=_postproc if parameter_name not in ("", "p") else None,
         )
 
 
@@ -2858,14 +2964,19 @@ class ScalpelAutoImportSpecializedTool(Tool):
 
         :param file: Python source file containing the undefined name.
         :param position: LSP cursor on the undefined name.
-        :param symbol_name: the unresolved name (informational).
+        :param symbol_name: the unresolved name. v1.5 G6 ME-2 threads this
+            into the shared dispatcher's ``title_match`` substring so the
+            ``from <pkg> import <symbol_name>`` candidate selected by rope
+            matches the caller's intent. When no candidate's title contains
+            ``symbol_name`` the dispatcher returns the ``MULTIPLE_CANDIDATES``
+            INPUT_NOT_HONORED envelope and the file is left untouched.
         :param dry_run: preview only.
         :param preview_token: continuation from a prior dry-run.
         :param language: 'rust' or 'python'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
-        del preview_token, symbol_name, language
+        del preview_token, language
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -2877,6 +2988,7 @@ class ScalpelAutoImportSpecializedTool(Tool):
             stage_name="scalpel_auto_import_specialized",
             file=file, position=position, kind=_AUTO_IMPORT_KIND,
             project_root=project_root, dry_run=dry_run,
+            title_match=symbol_name,
         )
 
 
@@ -3761,15 +3873,22 @@ def _java_generate_dispatch(
         file=file, name_path=class_name_path,
         project_root=str(project_root),
     ))
+    # v1.5 G6 ME-6 — close the last HI-13 (0,0)→(0,0) site. Previously the
+    # facade silently fell back to a (0,0)→(0,0) range when the class
+    # symbol was unresolvable, which could route the generate against the
+    # wrong enclosing class on multi-class files. Surface SYMBOL_NOT_FOUND
+    # honestly so the caller can fix ``class_name_path``.
     if rng is None:
-        # Fallback: dispatch against the file's leading line; jdtls's
-        # source.generate kinds operate against the enclosing class regardless
-        # of cursor position, so a (0,0)-(0,0) range is acceptable when the
-        # class symbol is unresolvable (e.g. mocked-out coordinator in tests).
-        rng = {
-            "start": {"line": 0, "character": 0},
-            "end": {"line": 0, "character": 0},
-        }
+        return build_failure_result(
+            code=ErrorCode.SYMBOL_NOT_FOUND,
+            stage=stage_name,
+            reason=(
+                f"Could not resolve class_name_path={class_name_path!r} in "
+                f"{file!r}. The (0,0)→(0,0) fallback was removed in v1.5 G6 "
+                f"ME-6; pass a class_name_path that find_symbol_range can "
+                f"locate."
+            ),
+        ).model_dump_json(indent=2)
     if not coord.supports_kind("java", kind):
         return json.dumps(_capability_not_available_envelope(
             language="java", kind=kind, server_id=server_label,
@@ -3838,8 +3957,14 @@ class ScalpelGenerateConstructorTool(Tool):
 
         :param file: target ``.java`` file.
         :param class_name_path: LSP name-path of the class.
-        :param include_fields: optional list of field names; defaults to all
-            non-static fields (jdtls applies its built-in default).
+        :param include_fields: optional list of field names; ``None``
+            (the default) preserves jdtls's built-in default of all
+            non-static fields. v1.5 G6 ME-4 — when a non-empty list is
+            supplied the facade returns an INPUT_NOT_HONORED envelope
+            (``status='skipped'`` / reason mentions ``include_fields``)
+            because jdtls's per-field selection is exposed via an
+            interactive picker that is not plumbed over the wire in
+            v1.5 P2. Wiring the picker is a Phase 2.5 enhancement.
         :param preview: when True, returns a WorkspaceEdit preview-token
             without applying.
         :param language: optional explicit language (``"java"``); inferred
@@ -3848,9 +3973,23 @@ class ScalpelGenerateConstructorTool(Tool):
         :return: JSON RefactorResult (or CAPABILITY_NOT_AVAILABLE envelope
             when jdtls is missing or fails to advertise the kind).
         """
-        del include_fields  # forwarded to jdtls's interactive picker; not
-        # plumbed end-to-end in v1.5 P2 (the kind dispatch covers all fields
-        # by default; per-field selection is a Phase 2.5 enhancement).
+        # v1.5 G6 ME-4 — surface per-field selection lists honestly:
+        # jdtls picker isn't wired in v1.5 P2, so non-empty include_fields
+        # would be silently discarded if we proceeded to dispatch. Return
+        # an INPUT_NOT_HONORED-shaped envelope instead. None / empty list
+        # preserves today's behavior (jdtls applies its default).
+        if include_fields:
+            return json.dumps({
+                "status": "skipped",
+                "code": ErrorCode.INVALID_ARGUMENT.value,
+                "reason": (
+                    "include_fields={!r} cannot be honored: jdtls's per-field "
+                    "picker is not wired over the wire in v1.5 P2 "
+                    "(Phase 2.5 deferral). Re-call with include_fields=None "
+                    "to apply jdtls's default (all non-static fields)."
+                ).format(list(include_fields)),
+                "include_fields": list(include_fields),
+            })
         lang = _infer_extract_language(file, language)
         if lang != "java":
             return build_failure_result(
@@ -3893,8 +4032,14 @@ class ScalpelOverrideMethodsTool(Tool):
 
         :param file: target ``.java`` file.
         :param class_name_path: LSP name-path of the class.
-        :param method_names: optional list; defaults to all not-yet-overridden
-            abstract methods (jdtls applies its built-in default).
+        :param method_names: optional list; ``None`` (the default)
+            preserves jdtls's built-in default of all not-yet-overridden
+            abstract methods. v1.5 G6 ME-4 — when a non-empty list is
+            supplied the facade returns an INPUT_NOT_HONORED envelope
+            (``status='skipped'`` / reason mentions ``method_names``)
+            because jdtls's per-method selection is exposed via an
+            interactive picker that is not plumbed over the wire in
+            v1.5 P2. Wiring the picker is a Phase 2.5 enhancement.
         :param preview: when True, returns a WorkspaceEdit preview-token
             without applying.
         :param language: optional explicit language (``"java"``); inferred
@@ -3903,9 +4048,20 @@ class ScalpelOverrideMethodsTool(Tool):
         :return: JSON RefactorResult (or CAPABILITY_NOT_AVAILABLE envelope
             when jdtls is missing or fails to advertise the kind).
         """
-        del method_names  # forwarded to jdtls's interactive picker; not
-        # plumbed end-to-end in v1.5 P2 (the kind dispatch covers all
-        # candidates by default; per-method selection is Phase 2.5).
+        # v1.5 G6 ME-4 — see the matching block on
+        # ScalpelGenerateConstructorTool.apply for the rationale.
+        if method_names:
+            return json.dumps({
+                "status": "skipped",
+                "code": ErrorCode.INVALID_ARGUMENT.value,
+                "reason": (
+                    "method_names={!r} cannot be honored: jdtls's per-method "
+                    "picker is not wired over the wire in v1.5 P2 "
+                    "(Phase 2.5 deferral). Re-call with method_names=None "
+                    "to apply jdtls's default (all not-yet-overridden methods)."
+                ).format(list(method_names)),
+                "method_names": list(method_names),
+            })
         lang = _infer_extract_language(file, language)
         if lang != "java":
             return build_failure_result(

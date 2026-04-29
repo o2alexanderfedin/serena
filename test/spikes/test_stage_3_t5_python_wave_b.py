@@ -122,12 +122,18 @@ def test_auto_import_specialized_picks_first_candidate(tmp_path: Path):
     src = tmp_path / "module.py"
     src.write_text("Path('/')\n")
     tool = _make_tool(ScalpelAutoImportSpecializedTool, tmp_path)
-    coord = _fake_coord({
-        "quickfix.import": [
-            _fake_action("quickfix.import"),
-            _fake_action("quickfix.import"),
-        ],
-    })
+    # v1.5 G6 ME-2 — symbol_name now flows into title_match. Both fake
+    # actions need a title containing 'Path' for the dispatcher to
+    # accept either. Test still asserts both candidates were surfaced
+    # (count==2) — the dispatcher's MULTIPLE_CANDIDATES envelope kicks
+    # in only when ≥2 hits match the substring; that's tested in
+    # test_v1_5_g6_medium_tier.py. Here we have one match (the second
+    # fake's title 'X' is excluded), so dispatcher selects uniquely.
+    a1 = _fake_action("quickfix.import")
+    a1.title = "from pathlib import Path"
+    a2 = _fake_action("quickfix.import")
+    a2.title = "X"  # does NOT match symbol_name='Path'
+    coord = _fake_coord({"quickfix.import": [a1, a2]})
     with patch("serena.tools.scalpel_facades.coordinator_for_facade", return_value=coord):
         out = tool.apply(
             file=str(src), position={"line": 0, "character": 0},
