@@ -156,14 +156,20 @@ def coordinator_for_facade(
     language: str,
     project_root: Path,
 ):
-    """Acquire the MultiServerCoordinator for ``language`` rooted at ``project_root``."""
+    """Acquire the MultiServerCoordinator for ``language`` rooted at ``project_root``.
+
+    Supported languages: any value of ``solidlsp.ls_config.Language``. v1.5
+    Phase 2 added ``"java"`` so ``ScalpelExtractTool`` and the new
+    ``ScalpelGenerateConstructorTool`` / ``ScalpelOverrideMethodsTool`` can
+    route through jdtls.
+    """
     from solidlsp.ls_config import Language
     try:
         lang_enum = Language(language)
     except ValueError as exc:
         raise ValueError(
             f"coordinator_for_facade: unknown language {language!r}; "
-            f"expected 'rust' or 'python'"
+            f"expected a Language enum value (e.g. 'rust', 'python', 'java')"
         ) from exc
     return ScalpelRuntime.instance().coordinator_for(lang_enum, project_root)
 

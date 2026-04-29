@@ -398,6 +398,17 @@
       "kind": "refactor.extract",
       "language": "java",
       "params_schema": {},
+      "preferred_facade": "scalpel_extract",
+      "source_server": "jdtls"
+    },
+    {
+      "extension_allow_list": [
+        ".java"
+      ],
+      "id": "java.refactor.extract.constant",
+      "kind": "refactor.extract.constant",
+      "language": "java",
+      "params_schema": {},
       "preferred_facade": null,
       "source_server": "jdtls"
     },
@@ -407,6 +418,17 @@
       ],
       "id": "java.refactor.extract.field",
       "kind": "refactor.extract.field",
+      "language": "java",
+      "params_schema": {},
+      "preferred_facade": null,
+      "source_server": "jdtls"
+    },
+    {
+      "extension_allow_list": [
+        ".java"
+      ],
+      "id": "java.refactor.extract.function",
+      "kind": "refactor.extract.function",
       "language": "java",
       "params_schema": {},
       "preferred_facade": null,
@@ -486,7 +508,7 @@
       "kind": "source.generate.constructor",
       "language": "java",
       "params_schema": {},
-      "preferred_facade": null,
+      "preferred_facade": "scalpel_generate_constructor",
       "source_server": "jdtls"
     },
     {
@@ -519,7 +541,7 @@
       "kind": "source.generate.overrideMethods",
       "language": "java",
       "params_schema": {},
-      "preferred_facade": null,
+      "preferred_facade": "scalpel_override_methods",
       "source_server": "jdtls"
     },
     {
