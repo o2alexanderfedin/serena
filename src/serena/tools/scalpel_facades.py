@@ -14,6 +14,13 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 from serena.tools.facade_support import (
+    _SNAPSHOT_NONEXISTENT,
+    _apply_text_edits_to_file_uri,
+    _apply_workspace_edit_to_disk,
+    _lsp_position_to_offset,
+    _resolve_winner_edit,
+    _splice_text_edit,
+    _uri_to_path,
     attach_apply_source,
     build_failure_result,
     coordinator_for_facade,
@@ -106,92 +113,12 @@ def _run_async(coro):
     return asyncio.new_event_loop().run_until_complete(coro)
 
 
-def _apply_workspace_edit_to_disk(workspace_edit: dict[str, Any]) -> int:
-    """Apply an LSP-spec WorkspaceEdit to the filesystem (v0.3.0).
-
-    Walks both the ``changes`` (dict shape) and ``documentChanges`` (array
-    shape) forms; routes every TextDocumentEdit's ``edits`` list through
-    ``_apply_text_edits_to_file`` which sorts by descending position so
-    earlier edits don't invalidate later positions.
-
-    Resource operations (CreateFile / RenameFile / DeleteFile) inside
-    ``documentChanges`` are recognised but skipped — they ship in v1.1
-    alongside resource-management auditing.
-
-    Returns the count of TextEdits actually applied (excluding skipped
-    non-file URIs and missing target files). Caller uses the return value
-    to distinguish ``applied=True`` (count > 0) from ``no_op`` (count == 0).
-    """
-    applied = 0
-    # changes shape: {uri: [TextEdit, ...]}
-    for uri, edits in (workspace_edit.get("changes") or {}).items():
-        applied += _apply_text_edits_to_file_uri(uri, edits or [])
-    # documentChanges shape: [TextDocumentEdit | CreateFile | RenameFile | DeleteFile, ...]
-    for dc in workspace_edit.get("documentChanges") or []:
-        if not isinstance(dc, dict):
-            continue
-        if "kind" in dc:
-            # Resource op — skip per v1.1 deferral.
-            continue
-        text_doc = dc.get("textDocument") or {}
-        uri = text_doc.get("uri")
-        if not isinstance(uri, str):
-            continue
-        applied += _apply_text_edits_to_file_uri(uri, dc.get("edits") or [])
-    return applied
-
-
-def _apply_text_edits_to_file_uri(uri: str, edits: list[dict[str, Any]]) -> int:
-    """Resolve ``uri`` to a local path and apply the edits in descending order.
-
-    Returns the count of edits applied (0 when the URI isn't a ``file://``
-    URI or the target file doesn't exist on disk).
-    """
-    if not uri.startswith("file://"):
-        return 0
-    if not edits:
-        return 0
-    from urllib.parse import urlparse, unquote
-    parsed = urlparse(uri)
-    target = Path(unquote(parsed.path))
-    if not target.exists():
-        return 0
-    source = target.read_text(encoding="utf-8")
-    sorted_edits = sorted(
-        edits,
-        key=lambda e: (
-            e["range"]["start"]["line"], e["range"]["start"]["character"],
-        ),
-        reverse=True,
-    )
-    for edit in sorted_edits:
-        source = _splice_text_edit(source, edit)
-    target.write_text(source, encoding="utf-8")
-    return len(sorted_edits)
-
-
-def _splice_text_edit(source: str, edit: dict[str, Any]) -> str:
-    """Replace ``source`` between LSP positions with ``edit['newText']``."""
-    start = edit["range"]["start"]
-    end = edit["range"]["end"]
-    new_text = edit["newText"]
-    lines = source.splitlines(keepends=True)
-    start_offset = _lsp_position_to_offset(lines, start["line"], start["character"])
-    end_offset = _lsp_position_to_offset(lines, end["line"], end["character"])
-    return source[:start_offset] + new_text + source[end_offset:]
-
-
-def _lsp_position_to_offset(lines: list[str], line: int, character: int) -> int:
-    """Convert an LSP (line, character) to a flat offset in the joined source."""
-    if line < 0:
-        return 0
-    if line >= len(lines):
-        return sum(len(lll) for lll in lines)
-    prefix = sum(len(lines[i]) for i in range(line))
-    target_line = lines[line]
-    # Strip trailing newline for the column clamp; columns are over visible chars.
-    visible = target_line.rstrip("\n").rstrip("\r")
-    return prefix + min(character, len(visible))
+# NOTE: ``_apply_workspace_edit_to_disk``, ``_apply_text_edits_to_file_uri``,
+# ``_splice_text_edit``, ``_lsp_position_to_offset``, ``_uri_to_path``,
+# ``_resolve_winner_edit``, and the ``_SNAPSHOT_NONEXISTENT`` sentinel
+# now live in ``serena.tools.facade_support`` (v1.6 Plan 0). They are
+# re-imported at the top of this module so existing test imports keep
+# working without modification.
 
 
 # ---------------------------------------------------------------------------
@@ -1175,21 +1102,8 @@ def _dispatch_single_kind_facade(
     ).model_dump_json(indent=2)
 
 
-def _resolve_winner_edit(coord: Any, winner: Any) -> dict[str, Any] | None:
-    """Best-effort extract of the resolved WorkspaceEdit for ``winner``.
-
-    Looks up the action by id via ``coord.get_action_edit`` (added in
-    v0.3.0). Returns ``None`` when the coord doesn't expose the lookup
-    (legacy fakes) or the id isn't tracked.
-    """
-    aid = getattr(winner, "id", None) or getattr(winner, "action_id", None)
-    if not isinstance(aid, str):
-        return None
-    fn = getattr(coord, "get_action_edit", None)
-    if not callable(fn):
-        return None
-    edit = fn(aid)
-    return edit if isinstance(edit, dict) else None
+# ``_resolve_winner_edit`` lives in serena.tools.facade_support per v1.6 Plan 0
+# (re-imported at module top).
 
 
 _MODULE_LAYOUT_TO_KIND: dict[str, str] = {
