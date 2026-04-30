@@ -107,20 +107,19 @@ def test_rename_unknown_symbol_returns_symbol_not_found(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_rename_real_disk_records_edit_in_checkpoint_but_does_not_apply(tmp_path):
-    """G7-C documenting test — see deferred-items.md "Wave 4 discovery".
+def test_rename_real_disk_lands_new_name_on_disk(tmp_path):
+    """G7-C acid test — sibling of test_*_real_disk_lands_* in G7-A/B.
 
-    ScalpelRenameTool.apply (scalpel_facades.py:1182-1320) does NOT
-    invoke ``_apply_workspace_edit_to_disk(workspace_edit)``: it only
-    records the WorkspaceEdit in a checkpoint and reports
-    ``applied=True``. This is a pre-existing gap (NOT a Wave-2 / Wave-3
-    regression) — fixing it is scoped to v1.6.
+    ScalpelRenameTool.apply MUST invoke
+    ``_apply_workspace_edit_to_disk(workspace_edit)`` so that
+    ``Path.read_text()`` post-apply reflects the rename. Pre-v1.5
+    cleanup the call was missing (see deferred-items.md "Wave 4
+    discovery"); this test pins down the fixed behavior matching the
+    other 9 G7-A/B siblings (``after != before``).
 
-    This test pins down the current honest behavior so any future
-    regression in observable shape (applied flag, checkpoint
-    presence, disk untouched) surfaces. When the v1.6 applier-wire
-    leaf lands, this test is rewritten to assert ``after != before``
-    matching the other 9 G7-A/B sibling tests.
+    Discipline: the acid is on observable disk state, not on the
+    response envelope alone — decorative ``applied=True`` without disk
+    mutation is exactly the class of bug the v1.5 milestone closes.
     """
     target = tmp_path / "lib.rs"
     target.write_text("pub struct Engine;\n", encoding="utf-8")
@@ -161,13 +160,15 @@ def test_rename_real_disk_records_edit_in_checkpoint_but_does_not_apply(tmp_path
             language="rust",
         )
     payload = json.loads(out)
-    # Current behavior: applied=True + checkpoint recorded …
     assert payload["applied"] is True
     assert payload.get("checkpoint_id") is not None
-    # … but the file on disk is untouched (deferred to v1.6 applier
-    # wire-through; documented in
-    # docs/superpowers/plans/2026-04-29-v1-5-facade-stub-fixes/deferred-items.md).
-    assert target.read_text(encoding="utf-8") == before
+    after = target.read_text(encoding="utf-8")
+    # The acid: the file must actually change on disk. Prior to the
+    # G7-C fix, the WorkspaceEdit was only recorded in the checkpoint
+    # without being routed through ``_apply_workspace_edit_to_disk``.
+    assert after != before
+    assert "Core" in after
+    assert "Engine" not in after
 
 
 def test_rename_workspace_boundary_blocked(tmp_path):

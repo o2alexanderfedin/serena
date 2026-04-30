@@ -1302,8 +1302,19 @@ class ScalpelRenameTool(Tool):
                 duration_ms=elapsed_ms,
                 warnings=rename_warnings,
             ).model_dump_json(indent=2)
+        # v1.5 post-G7-C — Rule-1 fix: route the WorkspaceEdit through the
+        # disk applier before recording the checkpoint. Prior to this
+        # call, ScalpelRenameTool.apply reported ``applied=True`` and
+        # captured the edit in a checkpoint but never mutated the
+        # filesystem (decorative facade — same class of bug the v1.5
+        # milestone targets). See deferred-items.md "Wave 4 discovery"
+        # for the regression history. Mirrors the pattern in
+        # ScalpelExtractTool / ScalpelInlineTool / ScalpelSplitFileTool.
+        wedit = merged_dict.get("workspace_edit", {}) or {}
+        if wedit:
+            _apply_workspace_edit_to_disk(wedit)
         cid = record_checkpoint_for_workspace_edit(
-            workspace_edit=merged_dict.get("workspace_edit", {}), snapshot={},
+            workspace_edit=wedit, snapshot={},
         )
         return RefactorResult(
             applied=True,
@@ -1359,6 +1370,14 @@ class ScalpelRenameTool(Tool):
                 diagnostics_delta=_empty_diagnostics_delta(),
                 preview_token=f"pv_rename_mod_{int(time.time())}",
             )
+        # v1.5 post-G7-C — Rule-1 fix: route the Rope-shaped WorkspaceEdit
+        # through the disk applier (which handles ``documentChanges``
+        # rename ops via _apply_resource_rename + ``edits`` via
+        # _apply_text_edits_to_file). Prior to this call, the
+        # python-module rename path captured the edit in a checkpoint
+        # but never moved the file or rewrote its importers.
+        if edit:
+            _apply_workspace_edit_to_disk(edit)
         cid = record_checkpoint_for_workspace_edit(edit, snapshot={})
         return RefactorResult(
             applied=True,
