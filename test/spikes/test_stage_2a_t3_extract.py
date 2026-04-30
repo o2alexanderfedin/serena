@@ -127,6 +127,70 @@ def test_extract_workspace_boundary_violation_blocked(tmp_path):
     assert payload["failure"]["code"] == "WORKSPACE_BOUNDARY_VIOLATION"
 
 
+# ---------------------------------------------------------------------------
+# v1.5 G7-C — sibling real-disk acid test.
+#
+# The mock-only tests above assert dispatch shape only. This sibling
+# extends the discipline: tmp_path workspace + mock coord whose
+# resolved WorkspaceEdit lands actual content on disk.
+# ---------------------------------------------------------------------------
+
+
+def test_extract_function_real_disk_lands_new_function_on_disk(tmp_path):
+    """Acid-test sibling: extract function from `1 + 2` selection;
+    assert the WorkspaceEdit's resolved newText reaches disk."""
+    target = tmp_path / "lib.rs"
+    target.write_text("pub fn x() { let a = 1 + 2; }\n", encoding="utf-8")
+    before = target.read_text(encoding="utf-8")
+    tool = _make_tool(tmp_path)
+    fake_coord = MagicMock()
+
+    async def _merge(**kwargs):
+        assert kwargs["only"] == ["refactor.extract.function"]
+        return [MagicMock(
+            action_id="ra:1", id="ra:1", title="extract",
+            kind="refactor.extract.function", provenance="rust-analyzer",
+            is_preferred=False,
+        )]
+
+    fake_coord.merge_code_actions = _merge
+    fake_coord.get_action_edit = lambda _aid: {
+        "changes": {
+            target.as_uri(): [{
+                "range": {
+                    "start": {"line": 0, "character": 21},
+                    "end": {"line": 0, "character": 26},
+                },
+                "newText": "add_one_two()",
+            }, {
+                "range": {
+                    "start": {"line": 0, "character": 0},
+                    "end": {"line": 0, "character": 0},
+                },
+                "newText": "fn add_one_two() -> i32 { 1 + 2 }\n",
+            }],
+        },
+    }
+    with patch(
+        "serena.tools.scalpel_facades.coordinator_for_facade",
+        return_value=fake_coord,
+    ):
+        out = tool.apply(
+            file=str(target),
+            range={"start": {"line": 0, "character": 21},
+                   "end": {"line": 0, "character": 26}},
+            target="function",
+            new_name="add_one_two",
+            language="rust",
+        )
+    payload = json.loads(out)
+    assert payload["applied"] is True
+    after = target.read_text(encoding="utf-8")
+    assert after != before
+    assert "fn add_one_two()" in after
+    assert "add_one_two()" in after
+
+
 def test_extract_dry_run_no_checkpoint(tmp_path):
     target = tmp_path / "x.py"
     target.write_text("def f(): return 1+2\n")

@@ -102,6 +102,74 @@ def test_rename_unknown_symbol_returns_symbol_not_found(tmp_path):
     assert payload["failure"]["code"] == "SYMBOL_NOT_FOUND"
 
 
+# ---------------------------------------------------------------------------
+# v1.5 G7-C — sibling real-disk acid test.
+# ---------------------------------------------------------------------------
+
+
+def test_rename_real_disk_records_edit_in_checkpoint_but_does_not_apply(tmp_path):
+    """G7-C documenting test — see deferred-items.md "Wave 4 discovery".
+
+    ScalpelRenameTool.apply (scalpel_facades.py:1182-1320) does NOT
+    invoke ``_apply_workspace_edit_to_disk(workspace_edit)``: it only
+    records the WorkspaceEdit in a checkpoint and reports
+    ``applied=True``. This is a pre-existing gap (NOT a Wave-2 / Wave-3
+    regression) — fixing it is scoped to v1.6.
+
+    This test pins down the current honest behavior so any future
+    regression in observable shape (applied flag, checkpoint
+    presence, disk untouched) surfaces. When the v1.6 applier-wire
+    leaf lands, this test is rewritten to assert ``after != before``
+    matching the other 9 G7-A/B sibling tests.
+    """
+    target = tmp_path / "lib.rs"
+    target.write_text("pub struct Engine;\n", encoding="utf-8")
+    before = target.read_text(encoding="utf-8")
+    tool = _make_tool(tmp_path)
+    fake_coord = MagicMock()
+
+    edit = {
+        "changes": {
+            target.as_uri(): [{
+                "range": {
+                    "start": {"line": 0, "character": 11},
+                    "end": {"line": 0, "character": 17},
+                },
+                "newText": "Core",
+            }],
+        },
+    }
+
+    async def _merge_rename(relative_file_path, line, column, new_name, language="python"):
+        del relative_file_path, line, column, new_name, language
+        return (edit, [])
+
+    fake_coord.merge_rename = _merge_rename
+
+    async def _find_pos(**_kw):
+        return {"line": 0, "character": 11}
+
+    fake_coord.find_symbol_position = _find_pos
+    with patch(
+        "serena.tools.scalpel_facades.coordinator_for_facade",
+        return_value=fake_coord,
+    ):
+        out = tool.apply(
+            file=str(target),
+            name_path="Engine",
+            new_name="Core",
+            language="rust",
+        )
+    payload = json.loads(out)
+    # Current behavior: applied=True + checkpoint recorded …
+    assert payload["applied"] is True
+    assert payload.get("checkpoint_id") is not None
+    # … but the file on disk is untouched (deferred to v1.6 applier
+    # wire-through; documented in
+    # docs/superpowers/plans/2026-04-29-v1-5-facade-stub-fixes/deferred-items.md).
+    assert target.read_text(encoding="utf-8") == before
+
+
 def test_rename_workspace_boundary_blocked(tmp_path):
     tool = _make_tool(tmp_path)
     out = tool.apply(

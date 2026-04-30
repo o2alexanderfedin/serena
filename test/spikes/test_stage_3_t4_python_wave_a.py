@@ -202,3 +202,62 @@ def test_workspace_boundary_blocks(tmp_path: Path):
         position={"line": 0, "character": 0}, language="python",
     )
     assert json.loads(out)["failure"]["code"] == "WORKSPACE_BOUNDARY_VIOLATION"
+
+
+# ---------------------------------------------------------------------------
+# v1.5 G7-C — sibling real-disk acid test.
+#
+# The mock-only tests above assert dispatch shape only. This sibling
+# extends the discipline: tmp_path workspace + mock coord whose
+# resolved WorkspaceEdit lands actual content on disk.
+# ---------------------------------------------------------------------------
+
+
+def test_local_to_field_real_disk_lands_self_field_on_disk(tmp_path: Path):
+    """Acid-test sibling: local_to_field rewrite; assert the post-apply
+    file has the local promoted to ``self.x``."""
+    src = tmp_path / "module.py"
+    src.write_text(
+        "class C:\n    def m(self):\n        x = 1\n        return x\n",
+        encoding="utf-8",
+    )
+    before = src.read_text(encoding="utf-8")
+    tool = _make_tool(ScalpelLocalToFieldTool, tmp_path)
+
+    coord = MagicMock()
+    coord.supports_kind.return_value = True
+
+    async def _merge(**_kw):
+        return [MagicMock(
+            action_id="rope:l2f", id="rope:l2f", title="local to field",
+            kind="refactor.rewrite.local_to_field",
+            provenance="pylsp-rope", is_preferred=False,
+        )]
+
+    coord.merge_code_actions = _merge
+    coord.get_action_edit = lambda _aid: {
+        "changes": {
+            src.as_uri(): [{
+                "range": {
+                    "start": {"line": 2, "character": 8},
+                    "end": {"line": 3, "character": 16},
+                },
+                "newText": "self.x = 1\n        return self.x",
+            }],
+        },
+    }
+    with patch(
+        "serena.tools.scalpel_facades.coordinator_for_facade",
+        return_value=coord,
+    ):
+        out = tool.apply(
+            file=str(src),
+            position={"line": 2, "character": 8},
+            language="python",
+        )
+    payload = json.loads(out)
+    assert payload["applied"] is True
+    after = src.read_text(encoding="utf-8")
+    assert after != before
+    assert "self.x = 1" in after
+    assert "return self.x" in after
