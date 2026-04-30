@@ -586,7 +586,10 @@ def _dispatch_facade_in_shadow(
         if handler is None:
             raise KeyError(tool_name)
         return handler(**args)
-    tool = cls.__new__(cls)
+    # ``cls.__new__(cls)`` skips ``__init__`` so the tool isn't bound to the
+    # live agent's project root; pyright's overload resolution doesn't see
+    # this dynamic-dispatch shape, so cast through ``object.__new__``.
+    tool = object.__new__(cls)
     tool.get_project_root = lambda: str(shadow_root)  # type: ignore[method-assign]
     return tool.apply(**args)
 
