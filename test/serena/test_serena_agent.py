@@ -52,6 +52,10 @@ _REQUIRES_HAXE = pytest.mark.skipif(
     shutil.which("haxe") is None,
     reason="haxe compiler not on PATH; haxe-language-server cannot return hover/symbol info",
 )
+_REQUIRES_KOTLIN = pytest.mark.skipif(
+    shutil.which("kotlin-language-server") is None,
+    reason="kotlin-language-server not on PATH; install via brew/scoop or upstream releases",
+)
 _REQUIRES_LEAN = pytest.mark.skipif(
     shutil.which("lean") is None,
     reason="lean (via elan) not on PATH; lean4 language server cannot start",
@@ -223,7 +227,7 @@ class TestSerenaAgent:
                 "Model",
                 "Struct",
                 "Model.kt",
-                marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
+                marks=[pytest.mark.kotlin, _REQUIRES_KOTLIN] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
             ),
             pytest.param(Language.TYPESCRIPT, "DemoClass", "Class", "index.ts", marks=pytest.mark.typescript),
             pytest.param(Language.PHP, "helperFunction", "Function", "helper.php", marks=pytest.mark.php),
@@ -326,7 +330,7 @@ class TestSerenaAgent:
                 "Model",
                 os.path.join("src", "main", "kotlin", "test_repo", "Model.kt"),
                 os.path.join("src", "main", "kotlin", "test_repo", "Main.kt"),
-                marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
+                marks=[pytest.mark.kotlin, _REQUIRES_KOTLIN] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
             ),
             pytest.param(Language.RUST, "add", os.path.join("src", "lib.rs"), os.path.join("src", "main.rs"), marks=pytest.mark.rust),
             pytest.param(Language.PHP, "helperFunction", "helper.php", "index.php", marks=pytest.mark.php),
@@ -669,7 +673,7 @@ class TestSerenaAgent:
                 Language.KOTLIN,
                 "Model",
                 os.path.join("src", "main", "kotlin", "test_repo", "Model.kt"),
-                marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
+                marks=[pytest.mark.kotlin, _REQUIRES_KOTLIN] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
             ),
             pytest.param(
                 Language.TYPESCRIPT,
@@ -712,7 +716,7 @@ class TestSerenaAgent:
                 Language.KOTLIN,
                 "ModelUser",
                 os.path.join("src", "main", "kotlin", "test_repo", "ModelUser.kt"),
-                marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
+                marks=[pytest.mark.kotlin, _REQUIRES_KOTLIN] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
             ),
             pytest.param(
                 Language.TYPESCRIPT,
