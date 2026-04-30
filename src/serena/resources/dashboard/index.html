@@ -4,10 +4,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Serena Dashboard</title>
-    <link rel="icon" type="image/png" sizes="16x16" href="serena-icon-16.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="serena-icon-32.png">
-    <link rel="icon" type="image/png" sizes="48x48" href="serena-icon-48.png">
+    <title>O2 Scalpel Dashboard</title>
+    <link rel="icon" type="image/png" sizes="16x16" href="scalpel-icon-16.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="scalpel-icon-32.png">
+    <link rel="icon" type="image/png" sizes="48x48" href="scalpel-icon-48.png">
     <link rel="stylesheet" href="dashboard.css">
     <script src="jquery.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -21,13 +21,7 @@
     <div class="header-left">
 
         <div class="logo-container">
-            <img id="serena-logo" class="theme-aware-img" src="serena-logo.svg" data-src-light="serena-logo.svg" data-src-dark="serena-logo-dark-mode.svg" alt="Serena">
-        </div>
-
-        <!-- Platinum Banners in Header -->
-        <div id="platinum-banners" class="header-banner">
-            <button class="banner-arrow banner-arrow-left" data-target="platinum" aria-label="Previous banner">&#8249;</button>
-            <button class="banner-arrow banner-arrow-right" data-target="platinum" aria-label="Next banner">&#8250;</button>
+            <img id="scalpel-logo" src="scalpel-banner.png" alt="O2 Scalpel — semantic code surgery">
         </div>
     </div>
 
@@ -147,11 +141,6 @@
                     </div>
                 </section>
 
-                <!-- Gold Banners -->
-                <section id="gold-banners" class="gold-banners-section">
-                    <button class="banner-arrow banner-arrow-left" data-target="gold" aria-label="Previous banner">&#8249;</button>
-                    <button class="banner-arrow banner-arrow-right" data-target="gold" aria-label="Next banner">&#8250;</button>
-                </section>
             </div>
         </div>
     </div>
@@ -233,7 +222,7 @@
             <span class="modal-close">&times;</span>
             <h3>Add Language</h3>
             <p id="modal-project-info" style="margin: 15px 0; color: var(--text-primary); line-height: 1.5;">
-                Adding a language to serena config of project <strong id="modal-project-name"></strong>.
+                Adding a language to O2 Scalpel config of project <strong id="modal-project-name"></strong>.
             </p>
             <p style="margin: 15px 0; color: var(--text-muted); font-size: 13px; line-height: 1.5;">
                 Note that this may download some dependencies needed for the language server and then start it,
@@ -347,7 +336,7 @@
             <span class="modal-close modal-close-cancel-execution">&times;</span>
             <p style="margin: 20px 0; color: var(--text-primary); line-height: 1.5; font-size: 15px;">
                 Are you sure? The execution will continue running until timeout, it will simply no longer be in the queue.
-                Abandoning a running execution is only advised as a measure for unblocking Serena.
+                Abandoning a running execution is only advised as a measure for unblocking O2 Scalpel.
             </p>
             <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
                 <button id="cancel-execution-cancel-btn" class="btn"
@@ -362,9 +351,9 @@
     <div id="edit-serena-config-modal" class="modal" style="display:none">
         <div class="modal-content modal-content-large">
             <span class="modal-close modal-close-edit-serena-config">&times;</span>
-            <h3 style="margin-bottom: 10px;">Global Serena Configuration</h3>
+            <h3 style="margin-bottom: 10px;">Global O2 Scalpel Configuration</h3>
             <p style="margin: 10px 0 20px 0; color: var(--text-muted); font-size: 13px; line-height: 1.5;">
-                Note: Changes to the configuration will only take effect after Serena is restarted.
+                Note: Changes to the configuration will only take effect after O2 Scalpel is restarted.
             </p>
             <textarea id="edit-serena-config-content" class="memory-editor" rows="20"
                       style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary); font-family: 'Courier New', monospace; font-size: 13px; resize: vertical;"></textarea>

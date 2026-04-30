@@ -847,21 +847,21 @@ class SerenaDashboardViewer(WebViewWithTray):
         dashboard_path = Path(SERENA_DASHBOARD_DIR)
 
         # .ico is Windows-only; macOS expects a PNG for the window/dock icon.
-        app_icon_filename = "serena.ico" if sys.platform == "win32" else "serena-icon-1024-mac.png"
+        app_icon_filename = "scalpel.ico" if sys.platform == "win32" else "scalpel-icon-1024-mac.png"
         app_icon_path = str(dashboard_path / app_icon_filename)
 
-        tray_icon_filename = "serena-icon-tray-mac.png" if sys.platform == "darwin" else "serena-icon-48.png"
+        tray_icon_filename = "scalpel-icon-tray-mac.png" if sys.platform == "darwin" else "scalpel-icon-48.png"
         tray_icon_path = str(dashboard_path / tray_icon_filename)
 
         super().__init__(
             url,
-            title="Serena Dashboard",
+            title="O2 Scalpel Dashboard",
             tray=tray,
             width=width,
             height=height,
             start_minimized=start_minimized,
             parent_process_id=parent_process_id,
-            app_id="oraios.serena",
+            app_id="o2alexanderfedin.scalpel",
             app_icon_path=app_icon_path,
             tray_icon_path=tray_icon_path,
         )
@@ -1138,7 +1138,7 @@ class SerenaDashboardTrayManager:
         dashboard_path = Path(SERENA_DASHBOARD_DIR)
 
         # select the appropriate icon for the platform
-        icon_filename = "serena-icon-tray-mac.png" if sys.platform == "darwin" else "serena-icon-48.png"
+        icon_filename = "scalpel-icon-tray-mac.png" if sys.platform == "darwin" else "scalpel-icon-48.png"
         icon_img = Image.open(dashboard_path / icon_filename)
 
         # start Flask in a background thread
@@ -1160,9 +1160,9 @@ class SerenaDashboardTrayManager:
             kwargs["darwin_nsapplication"] = NSApplication.sharedApplication()
 
         self._tray_icon = pystray.Icon(
-            "serena_tray_manager",
+            "scalpel_tray_manager",
             icon_img,
-            "Serena",
+            "O2 Scalpel",
             menu=pystray.Menu(self._build_menu_items),
             **kwargs,
         )
