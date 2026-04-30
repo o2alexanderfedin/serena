@@ -77,7 +77,7 @@ class WebViewWithTray:
         if self._app_id is not None and sys.platform == "win32":
             import ctypes
 
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("oraios.serena")
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(self._app_id)
 
         if self._use_tray:
             self.window.events.closing += self._on_closing

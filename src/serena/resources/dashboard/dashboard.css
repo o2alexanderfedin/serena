@@ -198,6 +198,9 @@ body {
 
 .logo-container img {
     height: calc(var(--header-height) - 20px);
+    width: auto;
+    max-width: 360px;
+    object-fit: contain;
     margin-top: 10px;
     display: block;
 }
@@ -1027,7 +1030,8 @@ body {
     }
 
     .logo-container img {
-        max-width: 200px;
+        max-width: 240px;
+        height: auto;
     }
 
     .header-nav {

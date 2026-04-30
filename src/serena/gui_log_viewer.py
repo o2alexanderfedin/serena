@@ -232,7 +232,7 @@ class GuiLogViewer:
             if sys.platform == "win32":
                 import ctypes
 
-                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("oraios.serena")
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("o2alexanderfedin.scalpel")
 
             self.root = tk.Tk()
             self.root.title(self.title)
@@ -249,7 +249,7 @@ class GuiLogViewer:
             # Load and display the logo image
             try:
                 # construct path relative to path of this file
-                image_path = dashboard_path / "serena-logs.png"
+                image_path = dashboard_path / "scalpel-logs.png"
                 self.logo_image = tk.PhotoImage(file=image_path)
 
                 # Create a label to display the logo
@@ -308,9 +308,9 @@ class GuiLogViewer:
                 self.root.config(menu=self.menubar)
 
             # Configure icons
-            icon_16 = tk.PhotoImage(file=dashboard_path / "serena-icon-16.png")
-            icon_32 = tk.PhotoImage(file=dashboard_path / "serena-icon-32.png")
-            icon_48 = tk.PhotoImage(file=dashboard_path / "serena-icon-48.png")
+            icon_16 = tk.PhotoImage(file=dashboard_path / "scalpel-icon-16.png")
+            icon_32 = tk.PhotoImage(file=dashboard_path / "scalpel-icon-32.png")
+            icon_48 = tk.PhotoImage(file=dashboard_path / "scalpel-icon-48.png")
             self.root.iconphoto(False, icon_48, icon_32, icon_16)
 
             # Start the Tkinter event loop
