@@ -101,6 +101,60 @@ def test_inline_unknown_target_fails(tmp_path):
     assert payload["failure"]["code"] == "INVALID_ARGUMENT"
 
 
+# ---------------------------------------------------------------------------
+# v1.5 G7-C — sibling real-disk acid test.
+# ---------------------------------------------------------------------------
+
+
+def test_inline_real_disk_lands_inlined_value_on_disk(tmp_path):
+    """Acid-test sibling: inline the helper() call site; assert the
+    on-disk text replaced helper() with its body."""
+    target = tmp_path / "lib.rs"
+    target.write_text(
+        "fn helper() -> i32 { 1 }\nfn x() { let a = helper(); }\n",
+        encoding="utf-8",
+    )
+    before = target.read_text(encoding="utf-8")
+    tool = _make_tool(tmp_path)
+    fake_coord = MagicMock()
+    fake_coord.supports_kind.return_value = True
+
+    async def _merge(**_kw):
+        return [MagicMock(
+            action_id="ra:1", id="ra:1", title="inline",
+            kind="refactor.inline.call", provenance="rust-analyzer",
+            is_preferred=False,
+        )]
+
+    fake_coord.merge_code_actions = _merge
+    fake_coord.get_action_edit = lambda _aid: {
+        "changes": {
+            target.as_uri(): [{
+                "range": {
+                    "start": {"line": 1, "character": 17},
+                    "end": {"line": 1, "character": 25},
+                },
+                "newText": "1",
+            }],
+        },
+    }
+    with patch(
+        "serena.tools.scalpel_facades.coordinator_for_facade",
+        return_value=fake_coord,
+    ):
+        out = tool.apply(
+            file=str(target),
+            position={"line": 1, "character": 18},
+            target="call", scope="single_call_site",
+            language="rust",
+        )
+    payload = json.loads(out)
+    assert payload["applied"] is True
+    after = target.read_text(encoding="utf-8")
+    assert after != before
+    assert "let a = 1;" in after
+
+
 def test_inline_workspace_boundary_blocked(tmp_path):
     tool = _make_tool(tmp_path)
     out = tool.apply(

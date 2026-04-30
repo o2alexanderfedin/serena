@@ -108,6 +108,61 @@ def test_organize_imports_engine_filter_logged(tmp_path):
     assert any("basedpyright" in w for w in payload["warnings"])
 
 
+# ---------------------------------------------------------------------------
+# v1.5 G7-C — sibling real-disk acid test.
+# ---------------------------------------------------------------------------
+
+
+def test_organize_imports_real_disk_lands_reorder_on_disk(tmp_path):
+    """Acid-test sibling: dispatch one of the sub-kinds whose resolved
+    edit reorders the imports; assert disk reflects the new order."""
+    target = tmp_path / "x.py"
+    target.write_text(
+        "import sys\nimport os\n\nprint(os.getcwd(), sys.argv)\n",
+        encoding="utf-8",
+    )
+    before = target.read_text(encoding="utf-8")
+    tool = _make_tool(tmp_path)
+    fake_coord = MagicMock()
+    fake_coord.supports_kind.return_value = True
+
+    async def _merge(**kwargs):
+        only = (kwargs.get("only") or [""])[0]
+        # Only the sortImports sub-kind surfaces an action (the other
+        # two are no-ops); proves the per-flag merge picks the right
+        # sub-kind without contaminating the result.
+        if "sortImports" in only:
+            return [MagicMock(
+                action_id="ruff:sort", id="ruff:sort", title="sort",
+                kind=only, provenance="ruff", is_preferred=False,
+            )]
+        return []
+
+    fake_coord.merge_code_actions = _merge
+    fake_coord.get_action_edit = lambda _aid: {
+        "changes": {
+            target.as_uri(): [{
+                "range": {
+                    "start": {"line": 0, "character": 0},
+                    "end": {"line": 2, "character": 0},
+                },
+                "newText": "import os\nimport sys\n",
+            }],
+        },
+    }
+    with patch(
+        "serena.tools.scalpel_facades.coordinator_for_facade",
+        return_value=fake_coord,
+    ):
+        out = tool.apply(files=[str(target)], language="python")
+    payload = json.loads(out)
+    assert payload["applied"] is True
+    after = target.read_text(encoding="utf-8")
+    assert after != before
+    # `os` now precedes `sys`:
+    assert after.index("import os") < after.index("import sys")
+
+
 def test_organize_imports_workspace_boundary_blocked(tmp_path):
     tool = _make_tool(tmp_path)
     out = tool.apply(

@@ -154,3 +154,79 @@ def test_split_file_rust_dispatches_coordinator(python_workspace):
         )
     payload = json.loads(out)
     assert payload["applied"] is True
+
+
+# ---------------------------------------------------------------------------
+# v1.5 G7-C — sibling real-disk acid test for the rust split path.
+#
+# The mock-only test above asserts dispatch shape only. This sibling
+# extends the discipline: tmp_path workspace + mock coord whose
+# resolved WorkspaceEdit lands actual content on disk. Pattern mirrors
+# test_v1_5_g7a_rust_real_disk.py.
+# ---------------------------------------------------------------------------
+
+
+def test_split_file_rust_real_disk_per_group_mutation(python_workspace):
+    """Two groups → two extract.module dispatches → both produce
+    on-disk mutations. Acid-test: Path.read_text() post-apply."""
+    target = python_workspace / "lib.rs"
+    target.write_text("pub fn add() {}\npub fn sub() {}\n")
+    before = target.read_text(encoding="utf-8")
+
+    tool = _make_tool(python_workspace)
+    fake_coord = MagicMock()
+    fake_coord.supports_kind.return_value = True
+
+    async def _fake_find(file, name_path, project_root):  # noqa: ARG001
+        return {
+            "start": {"line": 0 if name_path == "add" else 1, "character": 0},
+            "end": {"line": 0 if name_path == "add" else 1, "character": 15},
+        }
+
+    fake_coord.find_symbol_range = _fake_find
+
+    async def _fake_merge(**_kw):
+        return [MagicMock(
+            action_id="ra:1", id="ra:1", title="Move to module",
+            kind="refactor.extract.module", provenance="rust-analyzer",
+            is_preferred=False,
+        )]
+
+    fake_coord.merge_code_actions = _fake_merge
+    # The applier-wire-through proof: each get_action_edit returns a
+    # WorkspaceEdit that puts a `// moved-N` marker at the symbol's line.
+    edit_n = {"n": 0}
+
+    def _fake_resolve(_aid):
+        edit_n["n"] += 1
+        line = 0 if edit_n["n"] == 1 else 1
+        return {
+            "changes": {
+                target.as_uri(): [{
+                    "range": {
+                        "start": {"line": line, "character": 0},
+                        "end": {"line": line, "character": 0},
+                    },
+                    "newText": f"// moved-{edit_n['n']}\n",
+                }],
+            },
+        }
+
+    fake_coord.get_action_edit = _fake_resolve
+    with patch(
+        "serena.tools.scalpel_facades.coordinator_for_facade",
+        return_value=fake_coord,
+    ):
+        out = tool.apply(
+            file=str(target),
+            groups={"helpers": ["add"], "ops": ["sub"]},
+            language="rust",
+        )
+
+    payload = json.loads(out)
+    assert payload["applied"] is True
+    after = target.read_text(encoding="utf-8")
+    assert after != before
+    # Two mutations landed on disk:
+    assert "// moved-1" in after
+    assert "// moved-2" in after

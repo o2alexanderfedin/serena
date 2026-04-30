@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TypeVar
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -36,9 +37,12 @@ def reset_runtime():
     ScalpelRuntime.reset_for_testing()
 
 
-def _make_tool(cls, project_root: Path):
+_T = TypeVar("_T")
+
+
+def _make_tool(cls: type[_T], project_root: Path) -> _T:
     tool = cls.__new__(cls)
-    tool.get_project_root = lambda: str(project_root)  # type: ignore[method-assign]
+    tool.get_project_root = lambda: str(project_root)  # type: ignore[attr-defined]
     return tool
 
 
@@ -386,3 +390,63 @@ def test_tool_names_match_scope_report_naming():
     }
     for cls, name in expected.items():
         assert cls.get_name_from_cls() == name
+
+
+# ---------------------------------------------------------------------------
+# v1.5 G7-C — sibling real-disk acid test.
+#
+# The mock-only tests above assert dispatch shape only. This sibling
+# extends the discipline: tmp_path workspace + mock coord whose
+# resolved WorkspaceEdit lands actual content on disk.
+# ---------------------------------------------------------------------------
+
+
+def test_change_visibility_real_disk_lands_pub_crate_on_disk(tmp_path: Path):
+    """Acid-test sibling: change_visibility=pub_crate; the mock coord
+    resolves the winner action to a WorkspaceEdit that prefixes
+    `pub(crate) ` at line 0 column 0; assert disk reflects it."""
+    src = tmp_path / "lib.rs"
+    src.write_text("fn private_fn() {}\n", encoding="utf-8")
+    before = src.read_text(encoding="utf-8")
+    tool = _make_tool(ScalpelChangeVisibilityTool, tmp_path)
+
+    # Coord with a Change-Visibility action whose resolved edit lands
+    # `pub(crate) ` on disk.
+    coord = MagicMock()
+    coord.supports_kind.return_value = True
+
+    async def _merge(**_kw):
+        return [MagicMock(
+            action_id="ra:vis", id="ra:vis",
+            title="Change visibility to pub(crate)",
+            kind="refactor.rewrite.change_visibility",
+            provenance="rust-analyzer", is_preferred=False,
+        )]
+
+    coord.merge_code_actions = _merge
+    coord.get_action_edit = lambda _aid: {
+        "changes": {
+            src.as_uri(): [{
+                "range": {
+                    "start": {"line": 0, "character": 0},
+                    "end": {"line": 0, "character": 0},
+                },
+                "newText": "pub(crate) ",
+            }],
+        },
+    }
+    with patch(
+        "serena.tools.scalpel_facades.coordinator_for_facade",
+        return_value=coord,
+    ):
+        out = tool.apply(
+            file=str(src),
+            position={"line": 0, "character": 3},
+            target_visibility="pub_crate",
+            language="rust",
+        )
+    payload = json.loads(out)
+    assert payload["applied"] is True
+    after = src.read_text(encoding="utf-8")
+    assert after != before
+    assert "pub(crate) fn private_fn()" in after
