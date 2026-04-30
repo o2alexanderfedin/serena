@@ -52,193 +52,6 @@ function updateThemeAwareImage($img, theme=null) {
     }
 }
 
-/**
- * Manages banner loading, display, and navigation.
- *
- * When automaticRotationEnabled is true, banners rotate on a timer and arrow
- * buttons are hidden.  When false (the current default), a random initial
- * banner is shown and the user navigates manually via arrow buttons.
- */
-class BannerRotation {
-    constructor() {
-        this.automaticRotationEnabled = false;
-
-        this.platinumIndex = 0;
-        this.goldIndex = 0;
-        this.platinumTimer = null;
-        this.goldTimer = null;
-        this.platinumInterval = 15000;
-        this.goldInterval = 15000;
-
-        this.init();
-    }
-
-    init() {
-        let self = this;
-        this.loadBanners(function() {
-            self.randomizeInitialBanner('platinum');
-            self.randomizeInitialBanner('gold');
-
-            if (self.automaticRotationEnabled) {
-                self.startPlatinumRotation();
-                self.startGoldRotation();
-                // Hide arrows entirely when rotation is automatic
-                $('.banner-arrow').hide();
-            } else {
-                self.hideArrowsIfSingle();
-                self.bindArrowButtons();
-            }
-        });
-    }
-
-    loadBanners(onSuccess) {
-        $.ajax({
-            url: 'https://oraios-software.de/serena-banners/manifest.php',
-            type: 'GET',
-            success: function (response) {
-                console.log('Banners loaded:', response);
-
-                function fillBanners($container, banners, className) {
-                    $.each(banners, function (index, banner) {
-                        let $img = $('<img src="' + banner.image + '" alt="' + banner.alt + '" class="banner-image">');
-                        if (banner.image_dark) {
-                            $img.addClass('theme-aware-img');
-                            $img.attr('data-src-dark', banner.image_dark);
-                            $img.attr('data-src-light', banner.image);
-                            updateThemeAwareImage($img);
-                        }
-                        let $anchor = $('<a href="' + banner.link + '" target="_blank"></a>');
-                        $anchor.append($img);
-                        let $banner = $('<div class="' + className + '-slide" data-banner="' + (index + 1) + '"></div>');
-                        $banner.append($anchor);
-                        if (index === 0) {
-                            $banner.addClass('active');
-                        }
-                        if (banner.border) {
-                            $img.addClass('banner-border');
-                        }
-                        $container.append($banner);
-                    });
-                }
-
-                fillBanners($('#gold-banners'), response.gold, 'gold-banner');
-                fillBanners($('#platinum-banners'), response.platinum, 'platinum-banner');
-                onSuccess();
-            },
-            error: function (xhr, status, error) {
-                console.error('Error loading banners:', error);
-            }
-        });
-    }
-
-    startPlatinumRotation() {
-        const self = this;
-        this.platinumTimer = setInterval(() => {
-            self.rotatePlatinum('next');
-        }, this.platinumInterval);
-    }
-
-    randomizeInitialBanner(type) {
-        const slideClass = type === 'platinum' ? '.platinum-banner-slide' : '.gold-banner-slide';
-        const $slides = $(slideClass);
-        const total = $slides.length;
-
-        if (total === 0) return;
-
-        const randomIndex = Math.floor(Math.random() * total);
-        if (type === 'platinum') {
-            this.platinumIndex = randomIndex;
-        } else {
-            this.goldIndex = randomIndex;
-        }
-        $slides.removeClass('active');
-        $slides.eq(randomIndex).addClass('active');
-    }
-
-    startGoldRotation() {
-        const self = this;
-        this.goldTimer = setInterval(() => {
-            self.rotateGold('next');
-        }, this.goldInterval);
-    }
-
-    hideArrowsIfSingle() {
-        if ($('.platinum-banner-slide').length <= 1) {
-            $('#platinum-banners .banner-arrow').hide();
-        }
-        if ($('.gold-banner-slide').length <= 1) {
-            $('#gold-banners .banner-arrow').hide();
-        }
-    }
-
-    bindArrowButtons() {
-        let self = this;
-        $('.banner-arrow').on('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            const target = $(this).data('target');
-            const direction = $(this).hasClass('banner-arrow-right') ? 'next' : 'prev';
-            if (target === 'platinum') {
-                self.rotatePlatinum(direction);
-            } else {
-                self.rotateGold(direction);
-            }
-        });
-    }
-
-    rotatePlatinum(direction) {
-        const $slides = $('.platinum-banner-slide');
-        const total = $slides.length;
-
-        if (total === 0) return;
-
-        // Remove active class from current slide
-        $slides.eq(this.platinumIndex).removeClass('active');
-
-        // Calculate next index
-        if (direction === 'next') {
-            this.platinumIndex = (this.platinumIndex + 1) % total;
-        } else {
-            this.platinumIndex = (this.platinumIndex - 1 + total) % total;
-        }
-
-        // Add active class to new slide
-        $slides.eq(this.platinumIndex).addClass('active');
-
-        // Reset timer when in automatic rotation mode
-        if (this.automaticRotationEnabled) {
-            clearInterval(this.platinumTimer);
-            this.startPlatinumRotation();
-        }
-    }
-
-    rotateGold(direction) {
-        const $groups = $('.gold-banner-slide');
-        const total = $groups.length;
-
-        if (total === 0) return;
-
-        // Remove active class from current group
-        $groups.eq(this.goldIndex).removeClass('active');
-
-        // Calculate next index
-        if (direction === 'next') {
-            this.goldIndex = (this.goldIndex + 1) % total;
-        } else {
-            this.goldIndex = (this.goldIndex - 1 + total) % total;
-        }
-
-        // Add active class to new group
-        $groups.eq(this.goldIndex).addClass('active');
-
-        // Reset timer when in automatic rotation mode
-        if (this.automaticRotationEnabled) {
-            clearInterval(this.goldTimer);
-            this.startGoldRotation();
-        }
-    }
-}
-
 class Dashboard {
     constructor() {
         let self = this;
@@ -463,9 +276,6 @@ class Dashboard {
         // Initialize theme
         this.initializeTheme();
 
-        // Initialize banner rotation
-        this.bannerRotation = new BannerRotation();
-
         // Add ESC key handler for closing modals
         $(document).keydown(function (e) {
             if (e.key === 'Escape' || e.keyCode === 27) {
@@ -578,12 +388,14 @@ class Dashboard {
             },
             error: function (xhr, status, error) {
                 console.error('Error loading config overview:', error);
-                self.$configDisplay.html('<div class="error-message">Error loading configuration</div>');
-                self.$basicStatsDisplay.html('<div class="error-message">Error loading stats</div>');
-                self.$projectsDisplay.html('<div class="error-message">Error loading projects</div>');
-                self.$availableToolsDisplay.html('<div class="error-message">Error loading tools</div>');
-                self.$availableModesDisplay.html('<div class="error-message">Error loading modes</div>');
-                self.$availableContextsDisplay.html('<div class="error-message">Error loading contexts</div>');
+                const detail = xhr && xhr.status ? ' (HTTP ' + xhr.status + ')' : '';
+                const hint = '<div class="error-message">O2 Scalpel agent did not respond' + detail + ' — is the MCP server running?</div>';
+                self.$configDisplay.html(hint);
+                self.$basicStatsDisplay.html(hint);
+                self.$projectsDisplay.html(hint);
+                self.$availableToolsDisplay.html(hint);
+                self.$availableModesDisplay.html(hint);
+                self.$availableContextsDisplay.html(hint);
             },
             complete: function () {
                 self.waitingForConfigPollingResult = false;
@@ -894,7 +706,8 @@ class Dashboard {
             },
             error: function (xhr, status, error) {
                 console.error('Error loading executions:', error);
-                self.$activeExecutionQueueDisplay.html('<div class="error-message">Error loading executions</div>');
+                const detail = xhr && xhr.status ? ' (HTTP ' + xhr.status + ')' : '';
+                self.$activeExecutionQueueDisplay.html('<div class="error-message">O2 Scalpel agent did not respond' + detail + ' — is the MCP server running?</div>');
             },
             complete: onComplete
         });
@@ -915,7 +728,8 @@ class Dashboard {
             },
             error: function (xhr, status, error) {
                 console.error('Error loading last execution:', error);
-                self.$lastExecutionDisplay.html('<div class="error-message">Error loading last execution</div>');
+                const detail = xhr && xhr.status ? ' (HTTP ' + xhr.status + ')' : '';
+                self.$lastExecutionDisplay.html('<div class="error-message">O2 Scalpel agent did not respond' + detail + ' — is the MCP server running?</div>');
             },
             complete: onComplete
         });
@@ -1177,7 +991,7 @@ class Dashboard {
     }
 
     updateTitle(activeProject) {
-        document.title = activeProject ? `${activeProject} – Serena Dashboard` : 'Serena Dashboard';
+        document.title = activeProject ? `${activeProject} – O2 Scalpel Dashboard` : 'O2 Scalpel Dashboard';
     }
 
     updateLogButtons(hasLogs) {
@@ -1193,7 +1007,7 @@ class Dashboard {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `serena-logs-${timestamp}.txt`;
+        a.download = `scalpel-logs-${timestamp}.txt`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
