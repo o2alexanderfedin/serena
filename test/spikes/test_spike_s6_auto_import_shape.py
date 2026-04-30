@@ -44,43 +44,62 @@ def test_s6_auto_import_shape(rust_lsp: SolidLanguageServer, seed_rust_root: Pat
     resolved: list[dict[str, Any]] = []
 
     lib_path = str(seed_rust_root / "src" / "lib.rs")
+    lib_path_obj = Path(lib_path)
 
-    with srv.open_file("src/lib.rs") as fb:
-        time.sleep(1.5)
-        original_text = fb.contents
-        polluted = original_text + _POLLUTANT
-        # Send polluted buffer via didChange ONLY — no disk write, no didSave.
-        # rust-analyzer advertises Incremental sync (kind=2); a single contentChange
-        # without `range` is the LSP §3.18.6 "replace whole document" form and is honored.
-        fb.version += 1
-        fb.contents = polluted
-        srv.server.notify.did_change_text_document(
-            {
-                "textDocument": {"uri": fb.uri, "version": fb.version},
-                "contentChanges": [{"text": polluted}],
-            }
-        )
-        time.sleep(2.5)  # let RA re-analyze
+    # Snapshot the on-disk content so we can restore it on test exit even if
+    # the assertion path raises mid-spike. ``open_file`` reads from disk, so
+    # writing polluted to disk BEFORE entering the context keeps fb.contents
+    # and the disk in lockstep.
+    original_disk_text = lib_path_obj.read_text(encoding="utf-8")
+    polluted_disk = original_disk_text + _POLLUTANT
+    # The rust-analyzer adapter's EOF preflight (``request_code_actions``)
+    # validates against the on-disk file via ``compute_file_range``, so a
+    # didChange-only-no-didSave delivery (the original spike's claim) breaks
+    # the wrapper's invariant after S5 grew the seed fixture from 36→60 LoC
+    # (S6 test then targets line 61). Writing through to disk satisfies the
+    # preflight; the spike's outcome question (edit: vs command: shape) is
+    # unaffected by the delivery medium.
+    lib_path_obj.write_text(polluted_disk, encoding="utf-8")
+    try:
+        with srv.open_file("src/lib.rs") as fb:
+            time.sleep(1.5)
+            polluted = fb.contents  # already == polluted_disk
+            # Drive a didChange too so the LSP server's in-memory view stays
+            # version-aligned with disk; harmless given content already
+            # matches.  rust-analyzer advertises Incremental sync (kind=2);
+            # a single contentChange without ``range`` is the LSP §3.18.6
+            # "replace whole document" form and is honored.
+            fb.version += 1
+            srv.server.notify.did_change_text_document(
+                {
+                    "textDocument": {"uri": fb.uri, "version": fb.version},
+                    "contentChanges": [{"text": polluted}],
+                }
+            )
+            time.sleep(2.5)  # let RA re-analyze
 
-        # Find HashMap token in the appended region; offset -> (line, character).
-        hm_offset = polluted.index("HashMap", len(original_text))
-        hm_line = polluted.count("\n", 0, hm_offset)
-        hm_char = hm_offset - (polluted.rfind("\n", 0, hm_offset) + 1)
-        start = {"line": hm_line, "character": hm_char}
-        end = {"line": hm_line, "character": hm_char + len("HashMap")}
-        # No `only` filter — auto-imports surface variously under quickfix / quickfix.import.*;
-        # post-filter on title/kind. T6 facade replaces raw send_request.
-        raw = srv.request_code_actions(lib_path, start=start, end=end, diagnostics=[])
-        actions.extend(a for a in raw if isinstance(a, dict))
+            # Find HashMap token in the appended region; offset -> (line, character).
+            hm_offset = polluted.index("HashMap", len(original_disk_text))
+            hm_line = polluted.count("\n", 0, hm_offset)
+            hm_char = hm_offset - (polluted.rfind("\n", 0, hm_offset) + 1)
+            start = {"line": hm_line, "character": hm_char}
+            end = {"line": hm_line, "character": hm_char + len("HashMap")}
+            # No `only` filter — auto-imports surface variously under quickfix / quickfix.import.*;
+            # post-filter on title/kind. T6 facade replaces raw send_request.
+            raw = srv.request_code_actions(lib_path, start=start, end=end, diagnostics=[])
+            actions.extend(a for a in raw if isinstance(a, dict))
 
-        # S3 finding: rust-analyzer returns deferred-resolution actions; resolve BEFORE classify.
-        # T7 facade replaces raw send_request("codeAction/resolve", ...).
-        for a in actions:
-            try:
-                r = srv.resolve_code_action(a)
-                resolved.append(r if isinstance(r, dict) else a)
-            except Exception:
-                resolved.append(a)
+            # S3 finding: rust-analyzer returns deferred-resolution actions; resolve BEFORE classify.
+            # T7 facade replaces raw send_request("codeAction/resolve", ...).
+            for a in actions:
+                try:
+                    r = srv.resolve_code_action(a)
+                    resolved.append(r if isinstance(r, dict) else a)
+                except Exception:
+                    resolved.append(a)
+    finally:
+        # Always restore the seed fixture so subsequent spike runs start clean.
+        lib_path_obj.write_text(original_disk_text, encoding="utf-8")
 
     auto_imports = [a for a in resolved if _is_auto_import(a)]
     counts = {"edit_only": 0, "command_only": 0, "both": 0, "neither": 0}
