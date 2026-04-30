@@ -21,9 +21,15 @@ from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name,
 # server still boots and reports ``is_running`` correctly, but hover/completion
 # return ``None``. Tests that depend on documentation enrichment must gate on
 # the host having ``ansible-lint`` installed — honest-skip rather than fail.
+#
+# v1.10 addendum: even with ``ansible-lint`` on PATH, the hover lookup also
+# requires the Python ``ansible`` collections to be discoverable (so the LS
+# can resolve ``ansible.builtin.*`` module docs). pipx-installed ``ansible-lint``
+# ships in its own venv and does not expose ``ansible-doc`` to the host PATH —
+# treat the absence of ``ansible-doc`` the same way (honest-skip).
 _ANSIBLE_LINT_REQUIRED = pytest.mark.skipif(
-    shutil.which("ansible-lint") is None,
-    reason="ansible-lint not on PATH; ansible-language-server cannot return hover/completion docs",
+    shutil.which("ansible-lint") is None or shutil.which("ansible-doc") is None,
+    reason="ansible-lint or ansible-doc not on PATH; ansible-language-server cannot return hover/completion docs",
 )
 
 
