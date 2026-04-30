@@ -1499,18 +1499,24 @@ class MultiServerCoordinator:
             return None
         rel_path = _to_relative_path(file, project_root)
         for server in self._servers.values():
-            doc_symbols = await asyncio.to_thread(
-                server.request_document_symbols, rel_path,
-            )
+            try:
+                doc_symbols = await asyncio.to_thread(
+                    server.request_document_symbols, rel_path,
+                )
+            except Exception:  # noqa: BLE001 — server doesn't advertise documentSymbol
+                continue
             pos = _walk_document_symbols(doc_symbols, segments)
             if pos is not None:
                 return pos
         # Document-level walk missed — try workspace_symbol scoped to file.
         target_uri = Path(file).as_uri()
         for server in self._servers.values():
-            ws_results = await asyncio.to_thread(
-                server.request_workspace_symbol, segments[-1],
-            )
+            try:
+                ws_results = await asyncio.to_thread(
+                    server.request_workspace_symbol, segments[-1],
+                )
+            except Exception:  # noqa: BLE001 — server doesn't advertise workspaceSymbol
+                continue
             if not ws_results:
                 continue
             for hit in ws_results:
@@ -1552,18 +1558,27 @@ class MultiServerCoordinator:
             return None
         rel_path = _to_relative_path(file, project_root)
         for server in self._servers.values():
-            doc_symbols = await asyncio.to_thread(
-                server.request_document_symbols, rel_path,
-            )
+            try:
+                doc_symbols = await asyncio.to_thread(
+                    server.request_document_symbols, rel_path,
+                )
+            except Exception:  # noqa: BLE001 — server doesn't advertise documentSymbol
+                # Some servers in the multi-server pool (e.g. ruff) reject
+                # ``textDocument/documentSymbol`` with method-not-found.
+                # Skip per-server failures and let the rest contribute.
+                continue
             rng = _walk_document_symbols_for_range(doc_symbols, segments)
             if rng is not None:
                 return rng
         # Document-level walk missed — try workspace_symbol scoped to file.
         target_uri = Path(file).as_uri()
         for server in self._servers.values():
-            ws_results = await asyncio.to_thread(
-                server.request_workspace_symbol, segments[-1],
-            )
+            try:
+                ws_results = await asyncio.to_thread(
+                    server.request_workspace_symbol, segments[-1],
+                )
+            except Exception:  # noqa: BLE001 — server doesn't advertise workspaceSymbol
+                continue
             if not ws_results:
                 continue
             for hit in ws_results:
