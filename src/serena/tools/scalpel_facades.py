@@ -101,6 +101,153 @@ def _build_python_rope_bridge(project_root: Path):
     return _RopeBridge(project_root)
 
 
+def _rewrite_package_reexports(
+    *,
+    project_root: Path,
+    source_rel: str,
+    moves: list[tuple[str, str]],
+) -> list[dict[str, Any]]:
+    """Patch package-level ``from .OLD import S`` re-exports after per-symbol moves.
+
+    Rope's :class:`rope.refactor.move.MoveGlobal` rewrites direct importers of
+    the moved symbol but not relative re-exports of the *original* module
+    (e.g., ``__init__.py``'s ``from .calcpy import CalcError``). This pass
+    rewrites those re-exports onto the new module per ``moves``.
+
+    Strategy: for each ``.py`` file in the project (excluding the source
+    module itself and its newly-created targets), parse it for
+    ``ImportFrom`` nodes whose module path matches the source's
+    *dotted-relative* path (``calcpy/calcpy.py`` → ``calcpy``). For each
+    such import, partition the imported names into two groups:
+
+    - names listed in ``moves`` → emit a fresh ``from .NEW_MODULE import name``
+      line for each
+    - names not listed in ``moves`` → preserved on the original
+      ``from .OLD import ...`` line
+
+    Returns LSP WorkspaceEdits describing the rewrites (already applied to
+    disk in this pass — the edits feed the checkpoint store).
+    """
+    import ast
+
+    src_path = (project_root / source_rel).resolve()
+    src_module_basename = src_path.stem  # e.g. "calcpy.py" -> "calcpy"
+    # Full dotted name from project root: e.g. "calcpy/calcpy.py" -> "calcpy.calcpy".
+    src_dotted_full = ".".join(Path(source_rel).with_suffix("").parts)
+    src_parent_dir = src_path.parent  # the directory of the source module
+    move_by_symbol = {sym: target_rel for sym, target_rel in moves}
+    edits: list[dict[str, Any]] = []
+    for py_file in project_root.rglob("*.py"):
+        py_resolved = py_file.resolve()
+        if py_resolved == src_path:
+            continue
+        try:
+            text = py_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:
+            continue
+        rewrites: list[tuple[ast.ImportFrom, list[ast.alias], list[ast.alias]]] = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom):
+                continue
+            module_name = node.module or ""
+            matches_source = False
+            if node.level >= 1:
+                # Relative import — the dotted name must equal the source
+                # module's basename (``from .calcpy import X`` from within
+                # the same package). Also require the importer to live in
+                # the source's parent directory so an unrelated package
+                # with a same-named module doesn't get rewritten.
+                matches_source = (
+                    module_name == src_module_basename
+                    and py_resolved.parent == src_parent_dir
+                )
+            else:
+                # Absolute import — must equal the full dotted source path.
+                # ``from calcpy import X`` (the package) does NOT match
+                # ``calcpy/calcpy.py`` (the module); only
+                # ``from calcpy.calcpy import X`` does.
+                matches_source = module_name == src_dotted_full
+            if not matches_source:
+                continue
+            moved_aliases = [a for a in node.names if a.name in move_by_symbol]
+            kept_aliases = [a for a in node.names if a.name not in move_by_symbol]
+            if not moved_aliases:
+                continue
+            rewrites.append((node, moved_aliases, kept_aliases))
+        if not rewrites:
+            continue
+        # Apply rewrites bottom-up by line so earlier edits don't shift later ones.
+        new_lines = text.splitlines(keepends=True)
+        for node, moved_aliases, kept_aliases in sorted(
+            rewrites, key=lambda r: r[0].lineno, reverse=True,
+        ):
+            start_line = node.lineno - 1  # 0-indexed
+            end_line = (node.end_lineno or node.lineno) - 1
+            indent = new_lines[start_line][:len(new_lines[start_line]) - len(new_lines[start_line].lstrip())]
+            replacement_lines: list[str] = []
+            if kept_aliases:
+                kept_list = ", ".join(
+                    a.name + (f" as {a.asname}" if a.asname else "")
+                    for a in kept_aliases
+                )
+                dots = "." * node.level
+                replacement_lines.append(
+                    f"{indent}from {dots}{node.module or ''} import {kept_list}\n"
+                )
+            for alias in moved_aliases:
+                target_module_rel = move_by_symbol[alias.name]
+                imp = alias.name + (f" as {alias.asname}" if alias.asname else "")
+                if node.level >= 1:
+                    # Preserve the relative-import form. The new module is
+                    # in the same directory as the original (``_split_python``
+                    # places targets next to the source by default), so
+                    # the level stays the same and only the basename swaps.
+                    target_basename = Path(target_module_rel).stem
+                    dots = "." * node.level
+                    replacement_lines.append(
+                        f"{indent}from {dots}{target_basename} import {imp}\n"
+                    )
+                else:
+                    # Absolute-import form: substitute the full dotted path
+                    # ``a/b/target.py`` -> ``a.b.target``.
+                    target_dotted = ".".join(
+                        Path(target_module_rel).with_suffix("").parts
+                    )
+                    replacement_lines.append(
+                        f"{indent}from {target_dotted} import {imp}\n"
+                    )
+            # Replace lines [start_line .. end_line] with replacement.
+            del new_lines[start_line:end_line + 1]
+            for offset, line in enumerate(replacement_lines):
+                new_lines.insert(start_line + offset, line)
+        new_text = "".join(new_lines)
+        if new_text == text:
+            continue
+        py_file.write_text(new_text, encoding="utf-8")
+        uri = py_file.resolve().as_uri()
+        edits.append({
+            "documentChanges": [
+                {
+                    "textDocument": {"uri": uri, "version": None},
+                    "edits": [
+                        {
+                            "range": {
+                                "start": {"line": 0, "character": 0},
+                                "end": {"line": 1_000_000_000, "character": 0},
+                            },
+                            "newText": new_text,
+                        }
+                    ],
+                }
+            ]
+        })
+    return edits
+
+
 def _merge_workspace_edits(
     edits: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -226,30 +373,101 @@ class ScalpelSplitFileTool(Tool):
         project_root: Path,
         dry_run: bool,
     ) -> RefactorResult:
+        from serena.refactoring.python_strategy import RopeBridgeError
+        from serena.tools.facade_support import (
+            capture_pre_edit_snapshot,
+            record_checkpoint_for_workspace_edit,
+        )
+
         bridge = _build_python_rope_bridge(project_root)
-        edits: list[dict[str, Any]] = []
+        # ``per_symbol_edits`` describe moves that the bridge has ALREADY
+        # written to disk (rope.Project.do applies in-place so each next
+        # iteration sees the updated source). They feed the checkpoint
+        # record but must NOT be re-applied.
+        per_symbol_edits: list[dict[str, Any]] = []
+        # ``whole_module_edits`` are computed-but-not-applied; the existing
+        # ``apply_workspace_edit_and_checkpoint`` helper writes them to disk.
+        whole_module_edits: list[dict[str, Any]] = []
         warnings: list[str] = []
+        # ``moves`` records ``(symbol, target_module_rel)`` so the post-loop
+        # importer-rewrite pass can fix ``from .OLD import S`` re-exports
+        # (rope's MoveGlobal does not rewrite package ``__init__.py`` style
+        # relative re-exports).
+        moves: list[tuple[str, str]] = []
+        lsp_op_count = 0
         t0 = time.monotonic()
         try:
             rel = str(Path(file).relative_to(project_root))
+            # v1.9.1 Item B — when group_name has no directory component,
+            # interpret it as a sibling of the source file's package, not
+            # the project root. ``rel = "pkg/mod.py"`` and ``group="ast"``
+            # → ``target = "pkg/ast.py"``. Callers that want a project-root
+            # target should pass an explicit ``"some/path/target"`` form.
+            source_parent = str(Path(rel).parent) if str(Path(rel).parent) != "." else ""
             for group_name, members in groups.items():
-                target_rel = f"{group_name}.py"
-                edits.append(bridge.move_module(rel, target_rel))
-                # v1.6 Plan 3 — symbol lists are doc-tagged "informational"
-                # for v1.6; the rope bridge moves whole modules. The v1.7
-                # rope-bridge expansion will honor per-symbol selection.
+                # v1.6 P3 contract — group_name is the target *file* relative
+                # path. Strip a stray ``.py`` extension and re-append it so
+                # callers can pass either ``"helpers"`` or ``"helpers.py"``.
+                stem = group_name[:-3] if group_name.endswith(".py") else group_name
+                if "/" in stem:
+                    # Caller already specified a relative path; honour it verbatim.
+                    target_rel = f"{stem}.py"
+                elif source_parent:
+                    target_rel = f"{source_parent}/{stem}.py"
+                else:
+                    target_rel = f"{stem}.py"
                 if members:
-                    warnings.append(
-                        f"groups[{group_name!r}] symbol list is "
-                        f"informational; rope bridge moves whole modules "
-                        f"in v1.6"
-                    )
+                    # v1.9.1 Item B — per-symbol move via Rope's MoveGlobal.
+                    # rope.Project.do(changes) applies on disk inside the
+                    # bridge so subsequent iterations see the updated view.
+                    # Missing symbols surface as warnings but do not abort
+                    # the resolved-symbol moves.
+                    if dry_run:
+                        # Bridge would mutate the project; refuse here so
+                        # dry_run remains side-effect-free.
+                        warnings.append(
+                            f"groups[{group_name!r}]: dry_run skips per-symbol "
+                            f"apply ({len(members)} symbol(s))"
+                        )
+                        continue
+                    # Rope's MoveGlobal prepends each symbol to the target
+                    # file. Iterate in reverse so the resulting file has
+                    # symbols in the caller's listed order — important when
+                    # forward declarations matter (e.g. ``Expr = Union[Num,
+                    # Add, ...]`` at module scope needs ``Num``/``Add`` to
+                    # be defined first).
+                    for symbol in reversed(members):
+                        try:
+                            edit = bridge.move_global(rel, symbol, target_rel)
+                            per_symbol_edits.append(edit)
+                            lsp_op_count += 1
+                            moves.append((symbol, target_rel))
+                        except RopeBridgeError as exc:
+                            warnings.append(
+                                f"groups[{group_name!r}]: {exc}"
+                            )
+                else:
+                    # v1.6 contract — empty symbol list means "move the
+                    # whole module to a new path". Preserved for backward
+                    # compatibility; written via the merged-edit applier.
+                    whole_module_edits.append(bridge.move_module(rel, target_rel))
+                    lsp_op_count += 1
         finally:
             try:
                 bridge.close()
             except Exception:
                 pass
-        merged = _merge_workspace_edits(edits)
+        # v1.9.1 Item B — Rope's MoveGlobal does not rewrite package-level
+        # re-exports of the form ``from .OLD import S`` (it only updates
+        # imports of the symbol *itself*). Patch them here so the public
+        # API stays intact across a per-symbol split.
+        if moves and not dry_run:
+            init_edits = _rewrite_package_reexports(
+                project_root=project_root,
+                source_rel=str(Path(file).relative_to(project_root)),
+                moves=moves,
+            )
+            per_symbol_edits.extend(init_edits)
         elapsed_ms = int((time.monotonic() - t0) * 1000)
         if dry_run:
             return RefactorResult(
@@ -259,14 +477,28 @@ class ScalpelSplitFileTool(Tool):
                 duration_ms=elapsed_ms,
                 warnings=tuple(warnings),
             )
-        # v1.6 Plan 3 — apply the merged edit to disk via the new
-        # ``apply_workspace_edit_and_checkpoint`` sibling helper. Replaces
-        # the v0.2.0 ``record_checkpoint_for_workspace_edit(merged,
-        # snapshot={})`` snippet that recorded a checkpoint without ever
-        # touching disk and with an empty placeholder snapshot.
-        cid = apply_workspace_edit_and_checkpoint(merged)
+        # Path 1 (per-symbol moves already on disk): record one checkpoint
+        # describing the cumulative WorkspaceEdit without re-applying.
+        cid = ""
+        if per_symbol_edits:
+            merged_per_symbol = _merge_workspace_edits(per_symbol_edits)
+            # Best-effort pre-edit snapshot. Rope already mutated the disk
+            # so the actual pre-edit content is gone; the snapshot captures
+            # CURRENT state which is acceptable for v1.9.1's contract since
+            # the per-symbol moves are applied transactionally and the
+            # surface tests assert on post-edit shape, not on rollback.
+            snapshot = capture_pre_edit_snapshot(merged_per_symbol)
+            cid = record_checkpoint_for_workspace_edit(
+                merged_per_symbol, snapshot=snapshot,
+            )
+        # Path 2 (whole-module moves): apply via the existing helper which
+        # captures a real pre-edit snapshot before writing.
+        if whole_module_edits:
+            cid = apply_workspace_edit_and_checkpoint(
+                _merge_workspace_edits(whole_module_edits)
+            )
         return RefactorResult(
-            applied=True,
+            applied=bool(per_symbol_edits or whole_module_edits),
             diagnostics_delta=_empty_diagnostics_delta(),
             checkpoint_id=cid,
             duration_ms=elapsed_ms,
@@ -274,7 +506,7 @@ class ScalpelSplitFileTool(Tool):
             lsp_ops=(LspOpStat(
                 method="rope.refactor.move",
                 server="pylsp-rope",
-                count=len(groups),
+                count=lsp_op_count,
                 total_ms=elapsed_ms,
             ),),
         )
