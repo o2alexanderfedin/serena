@@ -168,18 +168,26 @@ def test_split_python_dry_run_does_not_apply(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# RED 4 — non-empty groups[*] symbol list emits informational warning
+# RED 4 (v1.9.1 Item B) — non-empty groups[*] symbol list dispatches to
+# per-symbol move via the rope bridge's ``move_global``. The v1.6
+# informational warning is gone — the bridge now honours per-symbol
+# selection. ``test_v19_b_split_python_per_symbol_move`` covers the
+# full v1.9.1 contract; this regression test pins the v1.6 wire so the
+# informational warning does NOT come back.
 # ---------------------------------------------------------------------------
 
 
-def test_split_python_groups_keys_only_emits_warning_when_values_present(
+def test_split_python_groups_keys_with_values_routes_to_per_symbol_move(
     tmp_path: Path,
 ) -> None:
     workspace = _python_workspace(tmp_path)
     src = workspace / "calcpy.py"
     uri = src.as_uri()
     fake_bridge = MagicMock()
-    fake_bridge.move_module.return_value = _make_replace_alpha_edit(uri)
+    fake_bridge.move_global.return_value = _make_replace_alpha_edit(uri)
+    fake_bridge.move_module.side_effect = AssertionError(
+        "v1.9.1: non-empty symbol list must route to move_global, not move_module"
+    )
     tool = _make_tool(workspace)
     with patch(
         "serena.tools.scalpel_facades._build_python_rope_bridge",
@@ -191,8 +199,10 @@ def test_split_python_groups_keys_only_emits_warning_when_values_present(
             language="python",
         )
     payload = json.loads(raw)
+    assert payload["applied"] is True
+    fake_bridge.move_global.assert_called_once()
+    fake_bridge.move_module.assert_not_called()
     warnings = payload.get("warnings") or ()
-    assert any(
-        ("informational" in w) or ("groups[" in w)
-        for w in warnings
-    ), f"Expected informational warning about groups[*] symbol list, got {warnings!r}"
+    assert not any(
+        "informational" in w.lower() for w in warnings
+    ), f"v1.6 informational warning must not return; got {warnings!r}"

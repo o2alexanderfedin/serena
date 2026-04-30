@@ -35,9 +35,14 @@ def _make_tool(project_root: Path) -> ScalpelSplitFileTool:
 
 
 def test_split_file_python_groups_dispatches_rope_per_group(python_workspace):
+    """v1.9.1 Item B — non-empty symbol list dispatches per-symbol via
+    ``bridge.move_global``. (Pre-v1.9.1 this test asserted ``move_module``;
+    the v1.6 contract treated symbol lists as informational and moved the
+    whole module.)
+    """
     tool = _make_tool(python_workspace)
     fake_bridge = MagicMock()
-    fake_bridge.move_module.return_value = {"documentChanges": [
+    fake_bridge.move_global.return_value = {"documentChanges": [
         {"textDocument": {"uri": "file:///x.py", "version": None},
          "edits": [{"range": {"start": {"line": 0, "character": 0},
                               "end": {"line": 1, "character": 0}}, "newText": "x"}]}
@@ -54,7 +59,8 @@ def test_split_file_python_groups_dispatches_rope_per_group(python_workspace):
     payload = json.loads(out)
     assert payload["applied"] is True
     assert payload["checkpoint_id"] is not None
-    assert fake_bridge.move_module.call_count >= 1
+    assert fake_bridge.move_global.call_count >= 1
+    fake_bridge.move_module.assert_not_called()
 
 
 def test_split_file_rejects_out_of_workspace(tmp_path):

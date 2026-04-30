@@ -422,6 +422,61 @@ class ChangeSignatureSpec(BaseModel):
     new_parameters: list[str]
 
 
+def _locate_global_symbol_offset(source_text: str, symbol_name: str) -> int | None:
+    """Return the character offset of a top-level definition's *identifier*.
+
+    Walks the AST to find the matching top-level binding, then returns the
+    file offset of the first character of the *name token* (not the ``def``
+    / ``class`` / ``async def`` keyword). Rope's
+    :class:`rope.refactor.move.MoveGlobal` requires the offset to land on
+    the identifier itself; passing the keyword's offset triggers a
+    ``BadIdentifierError`` because Rope tries to evaluate the keyword as a
+    Python expression.
+
+    Returns ``None`` when no top-level binding for ``symbol_name`` exists.
+    Looks at ``FunctionDef`` / ``AsyncFunctionDef`` / ``ClassDef`` /
+    ``Assign`` (with simple ``Name`` target) / ``AnnAssign`` (likewise).
+    """
+    import ast
+
+    try:
+        tree = ast.parse(source_text)
+    except SyntaxError:
+        return None
+    # Map line -> char offset of that line's first byte. ``ast`` reports
+    # 1-indexed line numbers and 0-indexed column offsets; combining the
+    # two yields the start offset of any node.
+    line_starts: list[int] = [0]
+    for idx, ch in enumerate(source_text):
+        if ch == "\n":
+            line_starts.append(idx + 1)
+
+    def _identifier_offset(node_lineno: int, node_col_offset: int) -> int | None:
+        """Find the first occurrence of ``symbol_name`` at or after the node start.
+
+        Works for ``def``/``async def``/``class`` keywords because rope only
+        cares that the offset lands on the identifier; the source-level scan
+        is robust against future keyword spellings (``def async`` etc.) and
+        cheaper than re-deriving the keyword length per node type.
+        """
+        node_offset = line_starts[node_lineno - 1] + node_col_offset
+        idx = source_text.find(symbol_name, node_offset)
+        return idx if idx != -1 else None
+
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if node.name == symbol_name:
+                return _identifier_offset(node.lineno, node.col_offset)
+        elif isinstance(node, ast.AnnAssign):
+            if isinstance(node.target, ast.Name) and node.target.id == symbol_name:
+                return line_starts[node.target.lineno - 1] + node.target.col_offset
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == symbol_name:
+                    return line_starts[target.lineno - 1] + target.col_offset
+    return None
+
+
 def _rope_changes_to_workspace_edit(project: Any, changes: Any) -> dict[str, Any]:
     """Convert a ``rope.base.change.ChangeSet`` into LSP ``WorkspaceEdit``.
 
@@ -525,6 +580,85 @@ class _RopeBridge:
         except Exception as exc:  # noqa: BLE001
             raise RopeBridgeError(f"move_module failed: {exc!r}") from exc
         return _rope_changes_to_workspace_edit(self._project, changes)
+
+    def move_global(
+        self,
+        source_rel: str,
+        symbol_name: str,
+        target_rel: str,
+    ) -> dict[str, Any]:
+        """Move a top-level symbol from ``source_rel`` to ``target_rel``.
+
+        Drives Rope's :class:`rope.refactor.move.MoveGlobal`: locates
+        ``symbol_name`` in the source module, ensures the target module
+        exists (creating an empty file if needed), asks Rope to compute
+        the changes that relocate the symbol and rewrite every importer,
+        **applies them in-place via** :meth:`rope.base.project.Project.do`
+        so subsequent ``move_global`` calls in the same loop see the
+        updated source, then returns the LSP ``WorkspaceEdit`` describing
+        what was just applied (for checkpoint capture downstream).
+
+        The in-place apply is mandatory: ``MoveGlobal.get_changes`` is
+        computed against the project's current view, so per-symbol moves
+        in a loop only converge when each iteration updates rope's view.
+        Returning the WorkspaceEdit description (rather than nothing) lets
+        the checkpoint store record the cumulative pre-edit snapshot.
+
+        Symbol resolution uses the source module's AST so the bridge does
+        not have to maintain its own parser. The first top-level
+        ``FunctionDef`` / ``AsyncFunctionDef`` / ``ClassDef`` / target
+        whose ``Name`` matches ``symbol_name`` wins. Nested definitions
+        are not eligible (Rope's ``MoveGlobal`` only handles globals).
+
+        Raises :class:`RopeBridgeError` when the symbol is missing from the
+        source module or Rope itself rejects the refactor.
+        """
+        try:
+            source_resource = self._project.get_resource(source_rel)
+            source_text = source_resource.read()
+            offset = _locate_global_symbol_offset(source_text, symbol_name)
+            if offset is None:
+                raise RopeBridgeError(
+                    f"symbol not found: {symbol_name} in {source_rel}"
+                )
+            target_resource = self._ensure_target_module(target_rel)
+            from rope.refactor.move import MoveGlobal
+            mover = MoveGlobal(self._project, source_resource, offset)
+            changes = mover.get_changes(target_resource)
+            edit = _rope_changes_to_workspace_edit(self._project, changes)
+            # In-place apply so the next iteration sees a refreshed view.
+            self._project.do(changes)
+        except RopeBridgeError:
+            raise
+        except SyntaxError as exc:
+            raise RopeBridgeError(f"move_global failed: {exc!r}") from exc
+        except Exception as exc:  # noqa: BLE001
+            raise RopeBridgeError(f"move_global failed: {exc!r}") from exc
+        return edit
+
+    def _ensure_target_module(self, target_rel: str):
+        """Return a Rope ``File`` resource for ``target_rel``, creating it if absent.
+
+        ``MoveGlobal.get_changes`` requires the destination to exist on
+        disk. v1.6's whole-module move side-stepped this (rope's
+        ``MoveModule`` only takes a folder); per-symbol moves require an
+        actual file with at least an empty body.
+        """
+        try:
+            return self._project.get_resource(target_rel)
+        except Exception:  # noqa: BLE001
+            pass
+        target_dir_rel, _, target_basename = target_rel.rpartition("/")
+        try:
+            parent = (
+                self._project.get_resource(target_dir_rel)
+                if target_dir_rel else self._project.root
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise RopeBridgeError(
+                f"target directory missing: {target_dir_rel!r}"
+            ) from exc
+        return parent.create_file(target_basename)
 
     def change_signature(self, spec: ChangeSignatureSpec) -> dict[str, Any]:
         """Apply a ChangeSignature refactor at the given offset."""
