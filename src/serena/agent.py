@@ -424,7 +424,7 @@ class DashboardManager:
         try:
             SerenaDashboardViewer(url, start_minimized=minimized, parent_process_id=parent_process_id).run()
         except webview.errors.WebViewException as e:
-            log.warning(f"Could not open Serena Dashboard viewer. Cause:\n{e}")
+            log.warning(f"Could not open O2 Scalpel Dashboard viewer. Cause:\n{e}")
             # Fall back to opening the browser window if the window was supposed to be shown directly
             if not minimized:
                 open_url_in_browser(url, use_subprocess=True)
