@@ -339,7 +339,7 @@ class Project(ToStringMixin):
                     pattern = pattern.replace(os.path.sep, "/")
                     processed_patterns.append(pattern)
                 log.debug(f"Processing {len(processed_patterns)} ignored paths")
-                self.__ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, processed_patterns)
+                self.__ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, processed_patterns)  # pyright: ignore[reportPrivateImportUsage]
             except Exception as e:
                 log.error(f"Error while gathering ignore spec for project {self.project_config.project_name}: {e}", exc_info=e)
 

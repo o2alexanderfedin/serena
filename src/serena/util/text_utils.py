@@ -5,7 +5,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any, Literal, Self
+from typing import Any, Literal, Self, cast
 
 from bs4 import BeautifulSoup
 from joblib import Parallel, delayed
@@ -393,7 +393,7 @@ def search_files(
     matches = []
     skipped_file_error_tuples = []
 
-    for result in results:
+    for result in cast(list[dict[str, Any]], results):
         if result["error"]:
             skipped_file_error_tuples.append((result["path"], result["error"]))
         else:

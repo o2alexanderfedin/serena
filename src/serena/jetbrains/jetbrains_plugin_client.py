@@ -3,6 +3,7 @@ Client for the Serena JetBrains Plugin
 """
 
 import concurrent
+import concurrent.futures  # noqa: F401  # ensure ``concurrent.futures`` attribute is bound for type-checkers
 import json
 import logging
 import re
@@ -223,13 +224,13 @@ class JetBrainsPluginClient(ToStringMixin):
         resolved_path = Path(project.project_root).resolve()
 
         if cls._last_port is not None:
-            client = JetBrainsPluginClient(cls._last_port)
+            client = cls(cls._last_port)
             if client.matches(resolved_path):
                 return client
 
-        client = JetBrainsPluginClientManager().find_client(resolved_path)
-        cls._last_port = client._port
-        return client
+        found = JetBrainsPluginClientManager().find_client(resolved_path)
+        cls._last_port = found._port
+        return cast(Self, found)
 
     @staticmethod
     def _paths_match(resolved_serena_path: str, plugin_path: str) -> bool:
@@ -357,7 +358,7 @@ class JetBrainsPluginClient(ToStringMixin):
             else:
                 return x
 
-        return convert(response)
+        return cast(T, convert(response))
 
     def _postprocess_symbol_collection_response(self, response_dict: jb.SymbolCollectionResponse) -> None:
         """
@@ -368,7 +369,7 @@ class JetBrainsPluginClient(ToStringMixin):
 
         def convert_html(key: Literal["documentation", "quick_info"], symbol: jb.SymbolDTO) -> None:
             if key in symbol:
-                doc_html: str = symbol[key]
+                doc_html: str = symbol[key]  # pyright: ignore[reportTypedDictNotRequiredAccess]
                 doc_text = render_html(doc_html)
                 if doc_text:
                     symbol[key] = doc_text
