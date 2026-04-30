@@ -11,7 +11,7 @@ import asyncio
 import json
 import time
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, ClassVar, Literal, cast
 
 from serena.tools.facade_support import (
     _SNAPSHOT_NONEXISTENT,
@@ -611,6 +611,8 @@ class ScalpelExtractTool(Tool):
     assist offers a single rewrite per cursor).
     """
 
+    routing_aliases: ClassVar[tuple[str, ...]] = ("pull", "selection", "helper")
+
     def apply(
         self,
         file: str,
@@ -866,6 +868,8 @@ class ScalpelInlineTool(Tool):
     / pylsp-rope picks the action per cursor (callers must pass ``position``
     to anchor the inline; ``remove_definition`` follows the assist's default).
     """
+
+    routing_aliases: ClassVar[tuple[str, ...]] = ("replace", "callsite", "body", "everywhere")
 
     def apply(
         self,
@@ -1369,6 +1373,8 @@ class ScalpelImportsOrganizeTool(Tool):
     ``source.organizeImports`` action; sub-kinds are not advertised today).
     """
 
+    routing_aliases: ClassVar[tuple[str, ...]] = ("sort", "dedupe", "tidy", "statements")
+
     def apply(
         self,
         files: list[str],
@@ -1855,6 +1861,8 @@ class ScalpelChangeVisibilityTool(Tool):
     Note: target_visibility is informational; rust-analyzer picks the
     action per cursor.
     """
+
+    routing_aliases: ClassVar[tuple[str, ...]] = ("pub", "fn", "publicly", "visible")
 
     def apply(
         self,
@@ -2453,6 +2461,8 @@ class ScalpelExpandMacroTool(Tool):
     ``dry_run`` parameter was informational and silently dropped.)
     """
 
+    routing_aliases: ClassVar[tuple[str, ...]] = ("invocation", "expansion")
+
     def apply(
         self,
         file: str,
@@ -3040,6 +3050,8 @@ _FIX_LINTS_KIND = "source.fixAll.ruff"
 
 class ScalpelFixLintsTool(Tool):
     """PREFERRED: apply ruff's full set of auto-fixable lints (incl. duplicate-import dedup)."""
+
+    routing_aliases: ClassVar[tuple[str, ...]] = ("fix", "lint", "fixall", "source", "available")
 
     def apply(
         self,

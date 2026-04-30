@@ -22,6 +22,31 @@ PathLike = Union[str, Path]
 """Accepts ``str`` paths as well as ``pathlib.Path`` for caller convenience."""
 
 
+def compute_text_range(text: str) -> tuple[LSPPosition, LSPPosition]:
+    r"""Return ``(start, end)`` LSP positions covering ``text`` end-to-end.
+
+    Pure-string variant of :func:`compute_file_range`. Used by callers that
+    have buffer contents in memory (e.g. an LSP didChange-only buffer
+    polluted past on-disk EOF) and need preflight EOF math without round-
+    tripping through disk.
+    """
+    if not text:
+        return (
+            {"line": 0, "character": 0},
+            {"line": 0, "character": 0},
+        )
+    # Normalise CRLF -> LF first so a 2-byte terminator counts as one
+    # line break. Then collapse lone CR (legacy classic-Mac) onto LF.
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    lines = normalized.split("\n")
+    last_index = len(lines) - 1
+    last_char = len(lines[-1])
+    return (
+        {"line": 0, "character": 0},
+        {"line": last_index, "character": last_char},
+    )
+
+
 def compute_file_range(path: PathLike) -> tuple[LSPPosition, LSPPosition]:
     r"""Return ``(start, end)`` LSP positions covering the entire file.
 
@@ -48,20 +73,4 @@ def compute_file_range(path: PathLike) -> tuple[LSPPosition, LSPPosition]:
     :raises FileNotFoundError: if ``path`` does not exist.
     :raises UnicodeDecodeError: if ``path`` is not valid UTF-8.
     """
-    text = Path(path).read_text(encoding="utf-8")
-    if not text:
-        return (
-            {"line": 0, "character": 0},
-            {"line": 0, "character": 0},
-        )
-
-    # Normalise CRLF -> LF first so a 2-byte terminator counts as one
-    # line break. Then collapse lone CR (legacy classic-Mac) onto LF.
-    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
-    lines = normalized.split("\n")
-    last_index = len(lines) - 1
-    last_char = len(lines[-1])
-    return (
-        {"line": 0, "character": 0},
-        {"line": last_index, "character": last_char},
-    )
+    return compute_text_range(Path(path).read_text(encoding="utf-8"))

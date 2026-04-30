@@ -868,14 +868,13 @@ class ScalpelRollbackTool(Tool):
     """
 
     def apply(self, checkpoint_id: str) -> str:
-        """Undo a refactor by checkpoint_id. Idempotent: second call is no-op.
+        """Undo a refactor by checkpoint_id (idempotent: second call is no-op).
 
-        Restores edits to disk via the captured pre-edit snapshot and marks
-        the checkpoint reverted in the store. Returns warnings for any
-        irreversible resource operations (e.g., delete with no captured
-        snapshot).
-
-        :param checkpoint_id: id returned by a prior apply call.
+        :param checkpoint_id: id returned by a prior apply call. Restores
+            edits to disk via the captured pre-edit snapshot, marks the
+            checkpoint reverted in the store, and returns warnings for any
+            irreversible resource operations (e.g., delete with no captured
+            snapshot).
         :return: JSON RefactorResult with applied=True if any ops applied,
             else no_op=True.
         """
@@ -932,15 +931,13 @@ class ScalpelTransactionRollbackTool(Tool):
     """
 
     def apply(self, transaction_id: str) -> str:
-        """Undo all checkpoints in a transaction (from dry_run_compose) in
-        reverse order. Idempotent.
+        """Undo all checkpoints in a dry_run_compose transaction in reverse (idempotent).
 
-        Restores edits to disk via each checkpoint's captured pre-edit
-        snapshot, walking steps in reverse chronological order so dependent
-        edits unwind cleanly. Reverses resource ops per step and returns
-        warnings for any irreversible resource operations.
-
-        :param transaction_id: id returned by dry_run_compose.
+        :param transaction_id: id returned by dry_run_compose. Restores
+            edits to disk via each checkpoint's captured pre-edit snapshot,
+            walking steps in reverse chronological order so dependent edits
+            unwind cleanly. Reverses resource ops per step and returns
+            warnings for any irreversible resource operations.
         :return: JSON TransactionResult.
         """
         runtime = ScalpelRuntime.instance()
