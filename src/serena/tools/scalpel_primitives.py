@@ -77,7 +77,7 @@ def _ensure_supported_language(language: str) -> str:
     return language
 
 
-class ScalpelCapabilitiesListTool(Tool):
+class CapabilitiesListTool(Tool):
     """PREFERRED: list capabilities for a language with optional filter."""
 
     def apply(
@@ -115,7 +115,7 @@ class ScalpelCapabilitiesListTool(Tool):
         return "[" + ",".join(r.model_dump_json() for r in rows) + "]"
 
 
-class ScalpelCapabilityDescribeTool(Tool):
+class CapabilityDescribeTool(Tool):
     """PREFERRED: describe one capability_id (full schema)."""
 
     def apply(self, capability_id: str) -> str:
@@ -151,7 +151,7 @@ class ScalpelCapabilityDescribeTool(Tool):
             if any(part in r.id for part in capability_id.split("."))
         )[:5]
         failure = FailureInfo(
-            stage="scalpel_capability_describe",
+            stage="capability_describe",
             symbol=capability_id,
             reason=f"Unknown capability_id: {capability_id!r}",
             code=ErrorCode.CAPABILITY_NOT_AVAILABLE,
@@ -162,7 +162,7 @@ class ScalpelCapabilityDescribeTool(Tool):
 
 
 # ---------------------------------------------------------------------------
-# T4: ScalpelApplyCapabilityTool — long-tail dispatcher
+# T4: ApplyCapabilityTool — long-tail dispatcher
 # ---------------------------------------------------------------------------
 
 
@@ -344,7 +344,7 @@ def _dispatch_via_coordinator(
     )
 
 
-class ScalpelApplyCapabilityTool(Tool):
+class ApplyCapabilityTool(Tool):
     """FALLBACK: apply a registered capability by capability_id (long-tail dispatcher).
 
     This is the safety-valve dispatch path — invoked when no named
@@ -412,7 +412,7 @@ class ScalpelApplyCapabilityTool(Tool):
 
 
 # ---------------------------------------------------------------------------
-# T5: ScalpelDryRunComposeTool — multi-step preview composer
+# T5: DryRunComposeTool — multi-step preview composer
 # ---------------------------------------------------------------------------
 
 
@@ -467,7 +467,7 @@ def _shadow_workspace(live_root: Path):
     """Context manager that copies ``live_root`` to a temp dir, yields the
     shadow path, and cleans up on exit.
 
-    v1.9.2 Item C — used by ``ScalpelDryRunComposeTool`` when ``shadow_mode=True``
+    v1.9.2 Item C — used by ``DryRunComposeTool`` when ``shadow_mode=True``
     to fence facade dispatch off from the user's live workspace. Any side
     effect a misbehaving facade ships (writes despite ``dry_run=True``,
     in-place rope mutations, etc.) lands inside the shadow tempdir and
@@ -502,25 +502,39 @@ def _shadow_workspace(live_root: Path):
 
 
 def _facade_class_by_tool_name(tool_name: str) -> type | None:
-    """Return the ``Scalpel*Tool`` class whose snake_case MCP name equals ``tool_name``.
+    """Return the facade ``Tool`` class whose snake_case MCP name equals ``tool_name``.
 
     Walks ``serena.tools.scalpel_facades`` and ``serena.tools.scalpel_primitives``
-    for ``Scalpel*Tool`` classes and matches the snake_case projection of the
-    class name. Mirrors ``test_routing_benchmark._classname_to_tool_name``.
+    for ``*Tool`` classes defined in those modules and matches the snake_case
+    projection of the class name. Mirrors ``test_routing_benchmark._classname_to_tool_name``.
+
+    v2.0 wire-name cleanup (spec 2026-05-03 § 5.1): the ``scalpel_`` class
+    prefix was dropped, so discovery filters by source module + ``Tool``
+    suffix + ``Tool`` subclass relation, not by class-name prefix. Legacy
+    aliases that begin with ``scalpel_`` are normalised to the canonical
+    name first.
     """
     import re
 
     from serena.tools import scalpel_facades, scalpel_primitives
+    from serena.tools.tools_base import Tool
+
+    # v2.0: accept legacy ``scalpel_<verb>`` aliases too.
+    canonical = tool_name[len("scalpel_"):] if tool_name.startswith("scalpel_") else tool_name
     for module in (scalpel_facades, scalpel_primitives):
         for attr_name in dir(module):
-            if not attr_name.startswith("Scalpel") or not attr_name.endswith("Tool"):
+            if not attr_name.endswith("Tool"):
                 continue
             cls = getattr(module, attr_name)
             if not isinstance(cls, type):
                 continue
+            if not issubclass(cls, Tool) or cls is Tool:
+                continue
+            if cls.__module__ != module.__name__:
+                continue
             stripped = attr_name[: -len("Tool")]
             snake = re.sub(r"(?<!^)(?=[A-Z])", "_", stripped).lower()
-            if snake == tool_name:
+            if snake == canonical:
                 return cls
     return None
 
@@ -586,7 +600,10 @@ def _dispatch_facade_in_shadow(
         if handler is None:
             raise KeyError(tool_name)
         return handler(**args)
-    tool = cls.__new__(cls)  # pyright: ignore[reportCallIssue]
+    # ``cls.__new__(cls)`` skips ``__init__`` so the tool isn't bound to the
+    # live agent's project root; pyright's overload resolution doesn't see
+    # this dynamic-dispatch shape, so cast through ``object.__new__``.
+    tool = object.__new__(cls)
     tool.get_project_root = lambda: str(shadow_root)  # type: ignore[method-assign]
     return tool.apply(**args)
 
@@ -883,7 +900,7 @@ def _filter_workspace_edit_by_labels(
     return filtered
 
 
-class ScalpelDryRunComposeTool(Tool):
+class DryRunComposeTool(Tool):
     """PREFERRED: preview a chain of refactor steps without committing any.
 
     When ``confirmation_mode='manual'`` (Q4 §6.3 line 211 — the v1.1
@@ -1030,11 +1047,11 @@ class ScalpelDryRunComposeTool(Tool):
 
 
 # ---------------------------------------------------------------------------
-# Leaf 06: ScalpelConfirmAnnotationsTool — manual-review confirmation tool
+# Leaf 06: ConfirmAnnotationsTool — manual-review confirmation tool
 # ---------------------------------------------------------------------------
 
 
-class ScalpelConfirmAnnotationsTool(Tool):
+class ConfirmAnnotationsTool(Tool):
     """PREFERRED: apply only the accepted annotation groups of a manual-mode pending transaction.
 
     See docs/design/mvp/open-questions/q4-changeannotations-auto-accept.md
@@ -1086,7 +1103,7 @@ class ScalpelConfirmAnnotationsTool(Tool):
 
 
 # ---------------------------------------------------------------------------
-# T6: ScalpelRollbackTool + ScalpelTransactionRollbackTool
+# T6: RollbackTool + TransactionRollbackTool
 # ---------------------------------------------------------------------------
 
 
@@ -1100,7 +1117,7 @@ def _strip_txn_prefix(txn_id: str) -> str:
     return txn_id
 
 
-class ScalpelRollbackTool(Tool):
+class RollbackTool(Tool):
     """PREFERRED: undo a refactor by checkpoint_id (idempotent).
 
     Restores edits to disk via the captured pre-edit snapshot and marks the
@@ -1161,7 +1178,7 @@ class ScalpelRollbackTool(Tool):
         ).model_dump_json(indent=2)
 
 
-class ScalpelTransactionRollbackTool(Tool):
+class TransactionRollbackTool(Tool):
     """PREFERRED: undo all checkpoints in a transaction in reverse order (idempotent).
 
     Restores edits to disk via each checkpoint's captured pre-edit snapshot,
@@ -1245,7 +1262,7 @@ class ScalpelTransactionRollbackTool(Tool):
 
 
 # ---------------------------------------------------------------------------
-# T7: ScalpelWorkspaceHealthTool — per-language LSP probe
+# T7: WorkspaceHealthTool — per-language LSP probe
 # ---------------------------------------------------------------------------
 
 
@@ -1303,7 +1320,7 @@ def _build_language_health(
     )
 
 
-class ScalpelWorkspaceHealthTool(Tool):
+class WorkspaceHealthTool(Tool):
     """PREFERRED: probe LSP servers — indexing state, registered capabilities, version."""
 
     def apply(self, project_root: str | None = None) -> str:
@@ -1345,7 +1362,7 @@ class ScalpelWorkspaceHealthTool(Tool):
 
 
 # ---------------------------------------------------------------------------
-# T8: ScalpelExecuteCommandTool — typed workspace/executeCommand pass-through
+# T8: ExecuteCommandTool — typed workspace/executeCommand pass-through
 # ---------------------------------------------------------------------------
 
 
@@ -1422,7 +1439,7 @@ def _execute_via_coordinator(
     )
 
 
-class ScalpelExecuteCommandTool(Tool):
+class ExecuteCommandTool(Tool):
     """PREFERRED: server-specific JSON-RPC pass-through, allowlisted per language.
 
     The live allowlist is read at request time from each server's
@@ -1495,7 +1512,7 @@ class ScalpelExecuteCommandTool(Tool):
 
         if command not in allowlist:
             failure = FailureInfo(
-                stage="scalpel_execute_command",
+                stage="execute_command",
                 reason=(
                     f"Command {command!r} is not in the {chosen_language!r} "
                     "allowlist.  The live allowlist is derived from "
@@ -1523,11 +1540,11 @@ class ScalpelExecuteCommandTool(Tool):
 
 
 # ---------------------------------------------------------------------------
-# v1.1 Stream 5 / Leaf 03 — ScalpelReloadPluginsTool
+# v1.1 Stream 5 / Leaf 03 — ReloadPluginsTool
 # ---------------------------------------------------------------------------
 
 
-class ScalpelReloadPluginsTool(Tool):
+class ReloadPluginsTool(Tool):
     """PREFERRED: reload plugin/capability registry from disk (no server restart)."""
 
     def apply(self) -> str:
@@ -1544,7 +1561,7 @@ class ScalpelReloadPluginsTool(Tool):
 
 
 # ---------------------------------------------------------------------------
-# v1.1.1 Leaf 03 — ScalpelInstallLspServersTool
+# v1.1.1 Leaf 03 — InstallLspServersTool
 # ---------------------------------------------------------------------------
 
 
@@ -1612,7 +1629,7 @@ def _decide_action(
     return "noop"
 
 
-class ScalpelInstallLspServersTool(Tool):
+class InstallLspServersTool(Tool):
     """PREFERRED: install or update LSP servers (default dry-run; explicit consent gates execution)."""
 
     def apply(
@@ -1726,15 +1743,15 @@ def _merge_install_result(entry: dict[str, object], result: object) -> None:
 
 
 __all__ = [
-    "ScalpelApplyCapabilityTool",
-    "ScalpelCapabilitiesListTool",
-    "ScalpelCapabilityDescribeTool",
-    "ScalpelConfirmAnnotationsTool",
-    "ScalpelDryRunComposeTool",
-    "ScalpelExecuteCommandTool",
-    "ScalpelInstallLspServersTool",
-    "ScalpelReloadPluginsTool",
-    "ScalpelRollbackTool",
-    "ScalpelTransactionRollbackTool",
-    "ScalpelWorkspaceHealthTool",
+    "ApplyCapabilityTool",
+    "CapabilitiesListTool",
+    "CapabilityDescribeTool",
+    "ConfirmAnnotationsTool",
+    "DryRunComposeTool",
+    "ExecuteCommandTool",
+    "InstallLspServersTool",
+    "ReloadPluginsTool",
+    "RollbackTool",
+    "TransactionRollbackTool",
+    "WorkspaceHealthTool",
 ]

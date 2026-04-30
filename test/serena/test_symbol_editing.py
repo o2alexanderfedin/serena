@@ -19,7 +19,7 @@ from typing import Literal, NamedTuple
 
 import pytest
 from overrides import overrides
-from syrupy import SnapshotAssertion
+from syrupy.assertion import SnapshotAssertion
 
 from serena.code_editor import CodeEditor, LanguageServerCodeEditor
 from solidlsp.ls_config import Language
@@ -452,6 +452,10 @@ class NixAttrReplacementTest(EditingTest):
 
 @pytest.mark.nix
 @pytest.mark.skipif(sys.platform == "win32", reason="nixd language server doesn't run on Windows")
+@pytest.mark.skipif(
+    shutil.which("nix") is None,
+    reason="Nix is not installed on this host; nixd cannot start (raises RuntimeError in _setup_runtime_dependency)",
+)
 def test_nix_symbol_replacement_no_double_semicolon(snapshot: SnapshotAssertion):
     """
     Test that replacing a Nix attribute does not result in double semicolons.

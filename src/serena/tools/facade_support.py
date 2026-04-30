@@ -74,13 +74,34 @@ def _lsp_position_to_offset(lines: list[str], line: int, character: int) -> int:
 
 
 def _splice_text_edit(source: str, edit: dict[str, Any]) -> str:
-    """Replace ``source`` between LSP positions with ``edit['newText']``."""
+    """Replace ``source`` between LSP positions with ``edit['newText']``.
+
+    Idempotence guard (SQ2 / B4-BUG-01): before splicing, check whether the
+    text at the splice site already equals ``newText`` AND the range beyond
+    ``start_offset + len(newText)`` starts where ``end_offset`` pointed in the
+    original source.  When both hold the edit was already applied — return
+    ``source`` unchanged.
+
+    Concretely: if ``source[start_offset:start_offset + len(newText)]`` equals
+    ``newText`` **and** ``end_offset <= start_offset + len(newText)`` (i.e. the
+    original range is entirely subsumed by the already-written text), the splice
+    would produce no net change — skip it.  This covers both zero-width
+    insertions (``start == end``) and non-zero-width replacements whose result
+    has already been applied.
+    """
     start = edit["range"]["start"]
     end = edit["range"]["end"]
     new_text = edit["newText"]
     lines = source.splitlines(keepends=True)
     start_offset = _lsp_position_to_offset(lines, start["line"], start["character"])
     end_offset = _lsp_position_to_offset(lines, end["line"], end["character"])
+    # Idempotence guard: the edit was already applied when the content starting
+    # at start_offset already matches newText and the original range end is
+    # covered by the already-written span.  In that case re-splicing would
+    # insert a duplicate suffix of newText — skip instead.
+    n = len(new_text)
+    if new_text and source[start_offset:start_offset + n] == new_text and end_offset <= start_offset + n:
+        return source
     return source[:start_offset] + new_text + source[end_offset:]
 
 
@@ -97,7 +118,11 @@ def _apply_text_edits_to_file_uri(uri: str, edits: list[dict[str, Any]]) -> int:
         return 0
     if not target.exists():
         return 0
-    source = target.read_text(encoding="utf-8")
+    # Use newline="" to disable universal-newline translation so that \r,
+    # \r\n, and \n in the file are preserved exactly as stored.  LSP edits
+    # address raw codepoint offsets; silently coercing \r → \n would shift
+    # those offsets and cause idempotence violations on re-apply.
+    pre_text = target.read_text(encoding="utf-8", newline="")
     sorted_edits = sorted(
         edits,
         key=lambda e: (
@@ -105,14 +130,23 @@ def _apply_text_edits_to_file_uri(uri: str, edits: list[dict[str, Any]]) -> int:
         ),
         reverse=True,
     )
+    post_text = pre_text
     for edit in sorted_edits:
-        source = _splice_text_edit(source, edit)
-    target.write_text(source, encoding="utf-8")
+        post_text = _splice_text_edit(post_text, edit)
+    # Idempotence guard (SQ2 / B4-BUG-01): if applying the edits produces
+    # the same content that is already on disk, the edit was already applied
+    # (e.g. a retry or a re-apply of the same WorkspaceEdit).  Skip the
+    # write so the function is idempotent for all edit patterns, including
+    # zero-width insertions where start == end and the range does not
+    # consume any characters.
+    if post_text == pre_text:
+        return 0
+    target.write_text(post_text, encoding="utf-8", newline="")
     return len(sorted_edits)
 
 
 def _apply_workspace_edit_to_disk(workspace_edit: dict[str, Any]) -> int:
-    """Apply an LSP-spec WorkspaceEdit to the filesystem (v0.3.0).
+    """Apply an LSP-spec WorkspaceEdit to the filesystem (v0.3.0 + v1.5 G3b/CR-2).
 
     Walks both the ``changes`` (dict shape) and ``documentChanges`` (array
     shape) forms; routes every TextDocumentEdit's ``edits`` list through
@@ -120,12 +154,15 @@ def _apply_workspace_edit_to_disk(workspace_edit: dict[str, Any]) -> int:
     so earlier edits don't invalidate later positions.
 
     Resource operations (CreateFile / RenameFile / DeleteFile) inside
-    ``documentChanges`` are recognised but skipped — they ship in v1.1
-    alongside resource-management auditing.
+    ``documentChanges`` apply per LSP §3.18 with default options
+    (``ignoreIfExists`` for create, ``overwrite=False`` for rename,
+    ``ignoreIfNotExists`` for delete). Recursive directory delete is
+    deferred per LO-3 (deep-tree checkpoint restore).
 
-    Returns the count of TextEdits actually applied (excluding skipped
-    non-file URIs and missing target files). Caller uses the return value
-    to distinguish ``applied=True`` (count > 0) from ``no_op`` (count == 0).
+    Returns the count of TextEdits *and* resource ops actually applied
+    (excluding skipped non-file URIs and missing target files). Caller
+    uses the return value to distinguish ``applied=True`` (count > 0)
+    from ``no_op`` (count == 0).
     """
     applied = 0
     # changes shape: {uri: [TextEdit, ...]}
@@ -135,8 +172,19 @@ def _apply_workspace_edit_to_disk(workspace_edit: dict[str, Any]) -> int:
     for dc in workspace_edit.get("documentChanges") or []:
         if not isinstance(dc, dict):
             continue
+        kind = dc.get("kind")
+        if kind == "create":
+            applied += _apply_resource_create(dc)
+            continue
+        if kind == "rename":
+            applied += _apply_resource_rename(dc)
+            continue
+        if kind == "delete":
+            applied += _apply_resource_delete(dc)
+            continue
         if "kind" in dc:
-            # Resource op — skip per v1.1 deferral.
+            # Unknown future resource-op kind — preserve forward-compat
+            # by skipping rather than crashing.
             continue
         text_doc = dc.get("textDocument") or {}
         uri = text_doc.get("uri")
@@ -144,6 +192,88 @@ def _apply_workspace_edit_to_disk(workspace_edit: dict[str, Any]) -> int:
             continue
         applied += _apply_text_edits_to_file_uri(uri, dc.get("edits") or [])
     return applied
+
+
+def _resource_uri_to_path(uri: object) -> Path | None:
+    """Decode an LSP ``file://`` URI to a local ``Path``; return ``None``
+    for non-file or malformed URIs.
+    """
+    if not isinstance(uri, str) or not uri.startswith("file://"):
+        return None
+    from urllib.parse import urlparse, unquote
+    return Path(unquote(urlparse(uri).path))
+
+
+def _apply_resource_create(dc: dict[str, Any]) -> int:
+    """LSP §3.18 CreateFile — v1.5 G3b/CR-2.
+
+    Default options: ``overwrite=False``, ``ignoreIfExists=True``. ``mkdir -p``
+    is always honored on the parent.
+    """
+    target = _resource_uri_to_path(dc.get("uri"))
+    if target is None:
+        return 0
+    options = dc.get("options") or {}
+    overwrite = bool(options.get("overwrite", False))
+    ignore_if_exists = bool(options.get("ignoreIfExists", True))
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.exists():
+        if overwrite:
+            target.write_text("", encoding="utf-8")
+            return 1
+        if ignore_if_exists:
+            return 0
+        return 0  # spec would fail; we mirror "skip silently" for safety
+    target.write_text("", encoding="utf-8")
+    return 1
+
+
+def _apply_resource_rename(dc: dict[str, Any]) -> int:
+    """LSP §3.18 RenameFile — v1.5 G3b/CR-2.
+
+    Default options: ``overwrite=False``, ``ignoreIfExists=False``.
+    """
+    src = _resource_uri_to_path(dc.get("oldUri"))
+    dst = _resource_uri_to_path(dc.get("newUri"))
+    if src is None or dst is None:
+        return 0
+    if not src.exists():
+        return 0
+    options = dc.get("options") or {}
+    overwrite = bool(options.get("overwrite", False))
+    ignore_if_exists = bool(options.get("ignoreIfExists", False))
+    if dst.exists():
+        if overwrite:
+            dst.unlink()
+        elif ignore_if_exists:
+            return 0
+        else:
+            return 0  # default LSP semantics — skip silently
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    src.rename(dst)
+    return 1
+
+
+def _apply_resource_delete(dc: dict[str, Any]) -> int:
+    """LSP §3.18 DeleteFile — v1.5 G3b/CR-2.
+
+    Default options: ``ignoreIfNotExists=True``. Recursive directory
+    delete is deferred per LO-3 — a directory target is a no-op.
+    """
+    target = _resource_uri_to_path(dc.get("uri"))
+    if target is None:
+        return 0
+    options = dc.get("options") or {}
+    ignore_if_not_exists = bool(options.get("ignoreIfNotExists", True))
+    if not target.exists():
+        if ignore_if_not_exists:
+            return 0
+        return 0  # spec would fail; we mirror "skip silently" for safety
+    if target.is_dir():
+        # LO-3 — recursive directory delete deferred. No-op.
+        return 0
+    target.unlink()
+    return 1
 
 
 def _resolve_winner_edit(coord: Any, winner: Any) -> dict[str, Any] | None:
@@ -508,8 +638,8 @@ def inverse_apply_checkpoint(
 ) -> tuple[bool, list[str]]:
     """Fetch a checkpoint from the store and run :func:`_inverse_applier_to_disk`.
 
-    Convenience wrapper used by ``ScalpelRollbackTool.apply`` and
-    ``ScalpelTransactionRollbackTool.apply``. Returns ``(False, [])`` for
+    Convenience wrapper used by ``RollbackTool.apply`` and
+    ``TransactionRollbackTool.apply``. Returns ``(False, [])`` for
     unknown checkpoint ids so the rollback tool can short-circuit to its
     pre-existing ``no_op`` branch without distinguishing "missing" from
     "empty edit".
@@ -548,23 +678,26 @@ def apply_workspace_edit_and_checkpoint(
 
 
 FACADE_TO_CAPABILITY_ID: dict[str, dict[str, str]] = {
-    "scalpel_split_file": {
+    # v2.0 wire-name cleanup (spec 2026-05-03 § 5.1): keys use canonical
+    # facade names without the legacy ``scalpel_`` prefix. Callers passing
+    # legacy names should resolve via ``ToolRegistry.get_canonical_name_for``.
+    "split_file": {
         "rust": "rust.refactor.move.module",
         "python": "python.refactor.move.module",
     },
-    "scalpel_extract": {
+    "extract": {
         "rust": "rust.refactor.extract.function",
         "python": "python.refactor.extract.function",
     },
-    "scalpel_inline": {
+    "inline": {
         "rust": "rust.refactor.inline.function",
         "python": "python.refactor.inline.function",
     },
-    "scalpel_rename": {
+    "rename": {
         "rust": "rust.refactor.rename",
         "python": "python.refactor.rename",
     },
-    "scalpel_imports_organize": {
+    "imports_organize": {
         "rust": "rust.source.organizeImports",
         "python": "python.source.organizeImports",
     },
@@ -640,12 +773,20 @@ def resolve_capability_for_facade(
     language: str,
     capability_id_override: str | None = None,
 ) -> CapabilityRecord | None:
-    """Look up the CapabilityRecord this facade dispatches to."""
+    """Look up the CapabilityRecord this facade dispatches to.
+
+    v2.0: accepts either a canonical facade name (``extract``) or a
+    legacy alias (``scalpel_extract``); the alias is normalised before
+    lookup to keep older callers working through the deprecation window.
+    """
     catalog = ScalpelRuntime.instance().catalog()
     if capability_id_override is not None:
         target_id = capability_id_override
     else:
-        target_id = FACADE_TO_CAPABILITY_ID.get(facade_name, {}).get(language)
+        # v2.0: strip the legacy ``scalpel_`` prefix so back-compat callers
+        # still resolve to the same record.
+        normalised = facade_name[len("scalpel_"):] if facade_name.startswith("scalpel_") else facade_name
+        target_id = FACADE_TO_CAPABILITY_ID.get(normalised, {}).get(language)
         if target_id is None:
             return None
     for rec in catalog.records:
@@ -681,8 +822,8 @@ def coordinator_for_facade(
     """Acquire the MultiServerCoordinator for ``language`` rooted at ``project_root``.
 
     Supported languages: any value of ``solidlsp.ls_config.Language``. v1.5
-    Phase 2 added ``"java"`` so ``ScalpelExtractTool`` and the new
-    ``ScalpelGenerateConstructorTool`` / ``ScalpelOverrideMethodsTool`` can
+    Phase 2 added ``"java"`` so ``ExtractTool`` and the new
+    ``GenerateConstructorTool`` / ``OverrideMethodsTool`` can
     route through jdtls.
     """
     from solidlsp.ls_config import Language

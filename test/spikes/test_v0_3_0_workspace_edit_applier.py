@@ -12,8 +12,8 @@ Scope:
 - Sorts edits within a file by descending position so earlier edits don't
   invalidate later positions.
 - ``documentChanges`` (TextDocumentEdit + CreateFile + RenameFile +
-  DeleteFile) shape is recognised but routed to the same per-file edit
-  path; resource-creation/rename/delete operations land in v1.1.
+  DeleteFile) shape is recognised; resource-creation/rename/delete ops
+  land in v1.5 G3b (see ``test_v1_5_g3b_applier_resource_ops.py``).
 """
 
 from __future__ import annotations
@@ -180,21 +180,30 @@ def test_skips_non_file_uris(tmp_path: Path):
     assert _apply_workspace_edit_to_disk(edit) == 0
 
 
-def test_resource_create_rename_delete_ops_routed_to_v1_1(tmp_path: Path):
-    """CreateFile / RenameFile / DeleteFile are recognised but skipped
-    (they ship at v1.1 alongside resource-management auditing)."""
-    del tmp_path
+def test_resource_create_rename_delete_ops_apply_per_lsp_spec(tmp_path: Path):
+    """v1.5 G3b lifted the v1.1 deferral: CreateFile / RenameFile /
+    DeleteFile now apply per LSP §3.18 (with default options).
+
+    Detailed semantics live in ``test_v1_5_g3b_applier_resource_ops.py``;
+    this test guards the high-level "resource ops are no longer dropped
+    silently" contract.
+    """
+    new_uri = (tmp_path / "new.py").as_uri()
+    old = tmp_path / "old.py"
+    old.write_text("# body\n", encoding="utf-8")
+    renamed = tmp_path / "renamed.py"
     edit = {
         "documentChanges": [
-            {"kind": "create", "uri": "file:///tmp/new.py"},
-            {"kind": "rename",
-             "oldUri": "file:///tmp/old.py",
-             "newUri": "file:///tmp/renamed.py"},
-            {"kind": "delete", "uri": "file:///tmp/old.py"},
+            {"kind": "create", "uri": new_uri},
+            {"kind": "rename", "oldUri": old.as_uri(), "newUri": renamed.as_uri()},
         ]
     }
-    # No file edits, no application; resource ops are no-op'd.
-    assert _apply_workspace_edit_to_disk(edit) == 0
+    count = _apply_workspace_edit_to_disk(edit)
+    # CreateFile + RenameFile both applied:
+    assert count == 2
+    assert (tmp_path / "new.py").exists()
+    assert not old.exists()
+    assert renamed.read_text(encoding="utf-8") == "# body\n"
 
 
 def test_missing_file_returns_zero_no_op(tmp_path: Path):

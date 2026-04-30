@@ -584,13 +584,13 @@ class _RopeBridge:
     def move_global(
         self,
         source_rel: str,
-        symbol_name: str,
+        symbol: str,
         target_rel: str,
     ) -> dict[str, Any]:
         """Move a top-level symbol from ``source_rel`` to ``target_rel``.
 
         Drives Rope's :class:`rope.refactor.move.MoveGlobal`: locates
-        ``symbol_name`` in the source module, ensures the target module
+        ``symbol`` in the source module, ensures the target module
         exists (creating an empty file if needed), asks Rope to compute
         the changes that relocate the symbol and rewrite every importer,
         **applies them in-place via** :meth:`rope.base.project.Project.do`
@@ -607,7 +607,7 @@ class _RopeBridge:
         Symbol resolution uses the source module's AST so the bridge does
         not have to maintain its own parser. The first top-level
         ``FunctionDef`` / ``AsyncFunctionDef`` / ``ClassDef`` / target
-        whose ``Name`` matches ``symbol_name`` wins. Nested definitions
+        whose ``Name`` matches ``symbol`` wins. Nested definitions
         are not eligible (Rope's ``MoveGlobal`` only handles globals).
 
         Raises :class:`RopeBridgeError` when the symbol is missing from the
@@ -621,10 +621,10 @@ class _RopeBridge:
                     f"source is not a file: {source_rel}"
                 )
             source_text = source_resource.read()
-            offset = _locate_global_symbol_offset(source_text, symbol_name)
+            offset = _locate_global_symbol_offset(source_text, symbol)
             if offset is None:
                 raise RopeBridgeError(
-                    f"symbol not found: {symbol_name} in {source_rel}"
+                    f"symbol not found: {symbol} in {source_rel}"
                 )
             target_resource = self._ensure_target_module(target_rel)
             from rope.refactor.move import MoveGlobal

@@ -73,7 +73,9 @@ def test_change_provenance_source_is_closed_literal() -> None:
 
     ChangeProvenance(source="rust-analyzer", workspace_boundary_check=True)
     with pytest.raises(ValidationError):
-        ChangeProvenance(source="not-a-server", workspace_boundary_check=True)
+        ChangeProvenance.model_validate(
+            {"source": "not-a-server", "workspace_boundary_check": True}
+        )
 
 
 def test_error_code_enum_membership() -> None:
@@ -90,6 +92,8 @@ def test_error_code_enum_membership() -> None:
         "INVALID_ARGUMENT",
         "INTERNAL_ERROR",
         "ROLLBACK_PARTIAL",
+        # v1.5 G1: shared-dispatcher disambiguation envelope.
+        "MULTIPLE_CANDIDATES",
     }
     assert {e.value for e in ErrorCode} == expected
 
@@ -108,11 +112,13 @@ def test_apply_capability_args_extra_forbid() -> None:
     )
     assert args.capability_id == "rust.refactor.extract.module"
     with pytest.raises(ValidationError):
-        ApplyCapabilityArgs(  # type: ignore[call-arg]
-            capability_id="x",
-            file="y",
-            range_or_name_path="z",
-            unknown_field=42,
+        ApplyCapabilityArgs.model_validate(
+            {
+                "capability_id": "x",
+                "file": "y",
+                "range_or_name_path": "z",
+                "unknown_field": 42,
+            }
         )
 
 

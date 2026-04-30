@@ -39,7 +39,13 @@ def _make_coord_with_edit(action_id: str, kind: str, edit: dict):
     """Fake coord whose merge_code_actions surfaces a winner whose id
     maps to ``edit`` via ``get_action_edit``."""
     coord = MagicMock()
-    winner = MagicMock(id=action_id, title="x", kind=kind, provenance="rust-analyzer")
+    # v1.5 G4-4 — change_visibility now threads target_visibility into
+    # the dispatcher's title_match. The fake's title must contain the
+    # tier substring (e.g. "pub") so the dispatcher accepts it.
+    winner = MagicMock(
+        id=action_id, title="Change visibility to pub",
+        kind=kind, provenance="rust-analyzer",
+    )
 
     async def _merge(**kwargs):
         return [winner] if kind in (kwargs.get("only") or []) else []
@@ -93,8 +99,9 @@ def test_facade_falls_back_to_empty_checkpoint_when_coord_lacks_lookup(
     pre = src.read_text(encoding="utf-8")
     tool = _make_tool(ScalpelChangeVisibilityTool, tmp_path)
     coord = MagicMock()
+    # v1.5 G4-4 — title must substring-match target_visibility="pub".
     winner = MagicMock(
-        id="ra:legacy:1", title="x",
+        id="ra:legacy:1", title="Change visibility to pub",
         kind="refactor.rewrite.change_visibility",
         provenance="rust-analyzer",
     )
@@ -126,8 +133,9 @@ def test_facade_falls_back_when_get_action_edit_returns_none(tmp_path: Path):
     pre = src.read_text(encoding="utf-8")
     tool = _make_tool(ScalpelChangeVisibilityTool, tmp_path)
     coord = MagicMock()
+    # v1.5 G4-4 — title must substring-match target_visibility="pub".
     winner = MagicMock(
-        id="ra:untracked", title="x",
+        id="ra:untracked", title="Change visibility to pub",
         kind="refactor.rewrite.change_visibility",
         provenance="rust-analyzer",
     )
