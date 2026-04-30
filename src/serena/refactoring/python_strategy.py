@@ -33,7 +33,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 from pydantic import BaseModel, Field
 
@@ -614,7 +614,10 @@ class _RopeBridge:
         source module or Rope itself rejects the refactor.
         """
         try:
-            source_resource = self._project.get_resource(source_rel)
+            # source_rel always points at a .py module (caller contract);
+            # cast to File so pyright resolves the .read() attribute.
+            from rope.base.resources import File as _RopeFile
+            source_resource = cast(_RopeFile, self._project.get_resource(source_rel))
             source_text = source_resource.read()
             offset = _locate_global_symbol_offset(source_text, symbol_name)
             if offset is None:
@@ -650,10 +653,13 @@ class _RopeBridge:
             pass
         target_dir_rel, _, target_basename = target_rel.rpartition("/")
         try:
-            parent = (
+            # parent is always a Folder (project root or a subdirectory);
+            # cast so pyright resolves the .create_file attribute.
+            from rope.base.resources import Folder as _RopeFolder
+            parent = cast(_RopeFolder, (
                 self._project.get_resource(target_dir_rel)
                 if target_dir_rel else self._project.root
-            )
+            ))
         except Exception as exc:  # noqa: BLE001
             raise RopeBridgeError(
                 f"target directory missing: {target_dir_rel!r}"
