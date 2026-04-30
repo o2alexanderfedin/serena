@@ -463,6 +463,134 @@ def _payload_to_failure(payload: dict[str, Any]) -> FailureInfo | None:
         return None
 
 
+def _shadow_workspace(live_root: Path):
+    """Context manager that copies ``live_root`` to a temp dir, yields the
+    shadow path, and cleans up on exit.
+
+    v1.9.2 Item C — used by ``ScalpelDryRunComposeTool`` when ``shadow_mode=True``
+    to fence facade dispatch off from the user's live workspace. Any side
+    effect a misbehaving facade ships (writes despite ``dry_run=True``,
+    in-place rope mutations, etc.) lands inside the shadow tempdir and
+    cannot reach the live tree.
+
+    Implementation note — uses ``shutil.copytree`` with ``ignore_dangling_symlinks=True``;
+    rope's ``.ropeproject/`` cache and ``__pycache__`` directories ride
+    along but rope re-builds them in the shadow on demand. Closes the
+    contextmanager via ``shutil.rmtree(..., ignore_errors=True)`` so a
+    facade that left the shadow in an unusual state doesn't block teardown.
+    """
+    import contextlib
+    import shutil
+    import tempfile
+
+    @contextlib.contextmanager
+    def _ctx() -> "Iterator[Path]":  # type: ignore[name-defined]
+        tmpdir = Path(tempfile.mkdtemp(prefix="scalpel-shadow-"))
+        shadow_root = tmpdir / live_root.name
+        try:
+            shutil.copytree(
+                str(live_root),
+                str(shadow_root),
+                ignore_dangling_symlinks=True,
+                symlinks=True,
+            )
+            yield shadow_root.resolve(strict=False)
+        finally:
+            shutil.rmtree(str(tmpdir), ignore_errors=True)
+
+    return _ctx()
+
+
+def _facade_class_by_tool_name(tool_name: str) -> type | None:
+    """Return the ``Scalpel*Tool`` class whose snake_case MCP name equals ``tool_name``.
+
+    Walks ``serena.tools.scalpel_facades`` and ``serena.tools.scalpel_primitives``
+    for ``Scalpel*Tool`` classes and matches the snake_case projection of the
+    class name. Mirrors ``test_routing_benchmark._classname_to_tool_name``.
+    """
+    import re
+
+    from serena.tools import scalpel_facades, scalpel_primitives
+    for module in (scalpel_facades, scalpel_primitives):
+        for attr_name in dir(module):
+            if not attr_name.startswith("Scalpel") or not attr_name.endswith("Tool"):
+                continue
+            cls = getattr(module, attr_name)
+            if not isinstance(cls, type):
+                continue
+            stripped = attr_name[: -len("Tool")]
+            snake = re.sub(r"(?<!^)(?=[A-Z])", "_", stripped).lower()
+            if snake == tool_name:
+                return cls
+    return None
+
+
+def _translate_path_args_to_shadow(
+    args: dict[str, Any],
+    *,
+    live_root: Path,
+    shadow_root: Path,
+) -> dict[str, Any]:
+    """Translate path-bearing kwargs from ``live_root`` to ``shadow_root``.
+
+    Walks ``args`` looking for absolute paths under ``live_root``; rewrites
+    them to the matching path under ``shadow_root``. Path-bearing keys we
+    rewrite: ``file``, ``files`` (list[str]). Other args pass through.
+    """
+    out: dict[str, Any] = {}
+    live = live_root.resolve(strict=False)
+    shadow = shadow_root.resolve(strict=False)
+
+    def _redirect(value: str) -> str:
+        try:
+            p = Path(value).resolve(strict=False)
+        except (OSError, ValueError):
+            return value
+        try:
+            rel = p.relative_to(live)
+        except ValueError:
+            return value
+        return str(shadow / rel)
+
+    for key, value in args.items():
+        if key == "file" and isinstance(value, str):
+            out[key] = _redirect(value)
+        elif key == "files" and isinstance(value, list):
+            out[key] = [_redirect(v) if isinstance(v, str) else v for v in value]
+        else:
+            out[key] = value
+    return out
+
+
+def _dispatch_facade_in_shadow(
+    tool_name: str,
+    *,
+    shadow_root: Path,
+    args: dict[str, Any],
+) -> str:
+    """Construct the facade Tool with ``get_project_root`` rebound to the
+    shadow and call ``apply(**args)``. Returns the facade's JSON envelope.
+
+    v1.9.2 Item C — the existing ``_FACADE_DISPATCH`` table caches lambdas
+    that bind ``get_project_root`` to the live agent; rebuilding via
+    ``cls.__new__`` and overriding ``get_project_root`` per call is the
+    minimal change that lets shadow dispatch use the same facade code.
+    """
+    cls = _facade_class_by_tool_name(tool_name)
+    if cls is None:
+        # Fall through to the legacy dispatch so test fakes (which patch
+        # ``_FACADE_DISPATCH`` directly) keep working — but invoke them
+        # only after translating paths.
+        from serena.tools.scalpel_facades import _FACADE_DISPATCH
+        handler = _FACADE_DISPATCH.get(tool_name)
+        if handler is None:
+            raise KeyError(tool_name)
+        return handler(**args)
+    tool = cls.__new__(cls)
+    tool.get_project_root = lambda: str(shadow_root)  # type: ignore[method-assign]
+    return tool.apply(**args)
+
+
 def _dry_run_one_step(
     step: ComposeStep,
     *,
@@ -542,6 +670,95 @@ def _dry_run_one_step(
             diagnostics_delta=_empty_diagnostics_delta(),
             failure=FailureInfo(
                 stage="_dry_run_one_step",
+                reason=f"Facade {step.tool!r} returned non-object payload {type(payload).__name__}.",
+                code=ErrorCode.INTERNAL_ERROR,
+                recoverable=True,
+            ),
+        )
+    return StepPreview(
+        step_index=step_index,
+        tool=step.tool,
+        changes=_payload_to_step_changes(payload),
+        diagnostics_delta=_payload_to_diagnostics_delta(payload),
+        failure=_payload_to_failure(payload),
+    )
+
+
+def _dry_run_one_step_in_shadow(
+    step: ComposeStep,
+    *,
+    live_root: Path,
+    shadow_root: Path,
+    step_index: int,
+) -> StepPreview:
+    """Run ``step`` against an isolated shadow copy of the project.
+
+    v1.9.2 Item C — the caller has already created ``shadow_root`` via
+    :func:`_shadow_workspace`; this helper translates path-bearing args
+    from live to shadow, dispatches the facade with ``dry_run=False`` so
+    the *real* edit lands inside the shadow, then projects the resulting
+    JSON envelope into a :class:`StepPreview`. The shadow is destroyed by
+    the surrounding context manager.
+
+    Why ``dry_run=False`` here: a true preview asks "what would happen if
+    I committed this?" — running with ``dry_run=False`` against an isolated
+    copy reveals the *applied* state, which is strictly more informative
+    than the facade's own ``dry_run=True`` interpretation (and survives
+    facades whose ``dry_run`` path lies — see Item C's misbehaving-facade
+    regression test).
+    """
+    shadow_args = _translate_path_args_to_shadow(
+        dict(step.args or {}),
+        live_root=live_root,
+        shadow_root=shadow_root,
+    )
+    # Force dry_run=False so the apply runs for real *inside the shadow*.
+    shadow_args["dry_run"] = False
+    try:
+        raw_payload = _dispatch_facade_in_shadow(
+            step.tool, shadow_root=shadow_root, args=shadow_args,
+        )
+    except KeyError:
+        return StepPreview(
+            step_index=step_index, tool=step.tool, changes=(),
+            diagnostics_delta=_empty_diagnostics_delta(),
+            failure=FailureInfo(
+                stage="_dry_run_one_step_in_shadow",
+                reason=f"Unknown tool {step.tool!r}; not registered in facade module.",
+                code=ErrorCode.INVALID_ARGUMENT,
+                recoverable=False,
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001 — surface as failure
+        return StepPreview(
+            step_index=step_index, tool=step.tool, changes=(),
+            diagnostics_delta=_empty_diagnostics_delta(),
+            failure=FailureInfo(
+                stage="_dry_run_one_step_in_shadow",
+                reason=f"Facade {step.tool!r} raised in shadow: {exc}",
+                code=ErrorCode.INTERNAL_ERROR,
+                recoverable=True,
+            ),
+        )
+    try:
+        payload = json.loads(raw_payload)
+    except Exception as exc:  # noqa: BLE001
+        return StepPreview(
+            step_index=step_index, tool=step.tool, changes=(),
+            diagnostics_delta=_empty_diagnostics_delta(),
+            failure=FailureInfo(
+                stage="_dry_run_one_step_in_shadow",
+                reason=f"Facade {step.tool!r} returned invalid JSON: {exc}",
+                code=ErrorCode.INTERNAL_ERROR,
+                recoverable=True,
+            ),
+        )
+    if not isinstance(payload, dict):
+        return StepPreview(
+            step_index=step_index, tool=step.tool, changes=(),
+            diagnostics_delta=_empty_diagnostics_delta(),
+            failure=FailureInfo(
+                stage="_dry_run_one_step_in_shadow",
                 reason=f"Facade {step.tool!r} returned non-object payload {type(payload).__name__}.",
                 code=ErrorCode.INTERNAL_ERROR,
                 recoverable=True,
@@ -684,6 +901,7 @@ class ScalpelDryRunComposeTool(Tool):
         fail_fast: bool = True,
         confirmation_mode: Literal["auto", "manual"] = "auto",
         workspace_edit: dict[str, Any] | None = None,
+        shadow_mode: bool = False,
     ) -> str:
         """Preview a chain of refactor steps without committing any.
         Returns transaction_id; call scalpel_transaction_commit to apply.
@@ -696,6 +914,13 @@ class ScalpelDryRunComposeTool(Tool):
         :param workspace_edit: aggregate LSP WorkspaceEdit whose
             changeAnnotations seed the manual-mode pending tx; ignored when
             confirmation_mode='auto'.
+        :param shadow_mode: v1.9.2 Item C. When True, each step runs against
+            an isolated copy of the project (a "shadow workspace") so any
+            facade side effect — including writes that bypass the facade's
+            own ``dry_run=True`` honoring — stays contained to the shadow
+            tempdir and cannot reach the live workspace. The shadow is torn
+            down after the step completes. Defaults to False to preserve
+            v1.6 wire compatibility.
         :return: JSON ComposeResult.
         """
         if confirmation_mode == "manual":
@@ -730,17 +955,37 @@ class ScalpelDryRunComposeTool(Tool):
             txn_store.add_step(raw_id, {"tool": step.tool, "args": dict(step.args)})
         txn_store.set_expires_at(raw_id, time.time() + self.PREVIEW_TTL_SECONDS)
         previews: list[StepPreview] = []
-        for idx, step in enumerate(validated):
-            preview = _dry_run_one_step(
-                step, project_root=project_root, step_index=idx,
-            )
-            previews.append(preview)
-            if preview.failure is not None and fail_fast:
-                warnings.append(
-                    f"TRANSACTION_ABORTED: step {idx} ({step.tool!r}) failed; "
-                    f"remaining {len(validated) - idx - 1} step(s) skipped.",
+        if shadow_mode:
+            # Item C — one shadow workspace per compose call. All steps
+            # execute inside the same shadow so cross-step state (rope's
+            # project view, intermediate disk writes) is consistent.
+            with _shadow_workspace(project_root) as shadow_root:
+                for idx, step in enumerate(validated):
+                    preview = _dry_run_one_step_in_shadow(
+                        step,
+                        live_root=project_root,
+                        shadow_root=shadow_root,
+                        step_index=idx,
+                    )
+                    previews.append(preview)
+                    if preview.failure is not None and fail_fast:
+                        warnings.append(
+                            f"TRANSACTION_ABORTED: step {idx} ({step.tool!r}) failed; "
+                            f"remaining {len(validated) - idx - 1} step(s) skipped.",
+                        )
+                        break
+        else:
+            for idx, step in enumerate(validated):
+                preview = _dry_run_one_step(
+                    step, project_root=project_root, step_index=idx,
                 )
-                break
+                previews.append(preview)
+                if preview.failure is not None and fail_fast:
+                    warnings.append(
+                        f"TRANSACTION_ABORTED: step {idx} ({step.tool!r}) failed; "
+                        f"remaining {len(validated) - idx - 1} step(s) skipped.",
+                    )
+                    break
         return ComposeResult(
             transaction_id=txn_id,
             per_step=tuple(previews),
