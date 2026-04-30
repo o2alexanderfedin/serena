@@ -29,6 +29,8 @@ from serena.util.logging import MemoryLogHandler
 from serena.util.pywebview import WebViewWithTray
 
 if TYPE_CHECKING:
+    import pystray  # noqa: F401  # type-only import for ``Optional[pystray.Icon]`` annotation
+
     from serena.agent import SerenaAgent
 
 log = logging.getLogger(__name__)
@@ -938,11 +940,11 @@ class SerenaDashboardTrayManager:
             If False, the manager will perform an HTTP request to the instance's heartbeat endpoint to check
             if it's alive.
         """
-        import pystray
+        import pystray as _pystray  # noqa: F401  # eager import surfaces missing dep early
 
         self._instances: dict[int, TrayManagedInstance] = {}
         self._lock = threading.Lock()
-        self._tray_icon: Optional["pystray.Icon"] = None
+        self._tray_icon: Optional["pystray.Icon"] = None  # pyright: ignore[reportInvalidTypeForm]
         self._alive_check_use_pid = alive_check_use_pid
         self._app = Flask(__name__)
         self._setup_routes()
@@ -1155,7 +1157,7 @@ class SerenaDashboardTrayManager:
         # set up tray icon with a dynamic menu (callable returns items on each open)
         kwargs: dict[str, Any] = {}
         if sys.platform == "darwin":
-            from AppKit import NSApplication
+            from AppKit import NSApplication  # pyright: ignore[reportAttributeAccessIssue]
 
             kwargs["darwin_nsapplication"] = NSApplication.sharedApplication()
 
@@ -1168,6 +1170,7 @@ class SerenaDashboardTrayManager:
         )
 
         # blocks until stop() is called
+        assert self._tray_icon is not None
         self._tray_icon.run()
 
     # ------------------------------------------------------------------

@@ -4,6 +4,7 @@ import re
 import shutil
 import subprocess
 import urllib
+import urllib.request
 from pathlib import Path
 
 from serena.util.version import Version
