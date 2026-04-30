@@ -1,15 +1,23 @@
-"""Rust refactoring strategy skeleton (Stage 1E §14.1 file 12).
+"""Rust refactoring strategy (§14.1 file 12).
 
-Stage 1E lands only the *skeleton*: a Protocol-conformant ``RustStrategy``
-that knows its identity constants and can fetch a ``rust-analyzer`` server
-from the Stage 1C ``LspPool``. The full body — assist invocation, clippy
-multi-server, snippet rendering, ChangeAnnotation handling — is deferred
-to Stage 1G when rust-analyzer's full surface is wired through.
+``RustStrategy`` is the Protocol-conformant binding between
+``MultiServerCoordinator`` and the rust-analyzer + clippy LSP servers.
+It owns the rust-side identity constants, fetches servers from the
+Stage 1C ``LspPool``, and exposes the v1.4 surface used by all 25 Rust
+ergonomic facades:
 
-Stage 1E delivers the Rust skeleton (instead of leaving it for 1G entirely)
-because Python and Rust must implement the *same* ``LanguageStrategy``
-Protocol; landing both at once exercises the Protocol against two real
-consumers and catches ergonomic problems before they become locked-in.
+  * assist invocation through ``textDocument/codeAction`` + the
+    rust-analyzer experimental extensions (``rust-analyzer/expandMacro``,
+    ``experimental/runnables``, ``rust-analyzer/runFlycheck``),
+  * clippy multi-server merging via the §11.3 priority table,
+  * snippet rendering and ChangeAnnotation passthrough,
+  * the execute-command whitelist below (mirrored as the single source of
+    truth for ``serena.tools.scalpel_primitives._EXECUTE_COMMAND_WHITELIST``).
+
+Historical note: this module shipped as a Stage-1E skeleton; the body was
+filled out across Stage 1G (assist + clippy wiring), v0.2.0 (multi-server
+merge) and v1.1 (Stream-5 facade fleet). v1.5 LO-2 updates this docstring
+to match the current state.
 """
 
 from __future__ import annotations

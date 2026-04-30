@@ -41,8 +41,15 @@ def reset_runtime():
     ScalpelRuntime.reset_for_testing()
 
 
-def _make_tool(cls, project_root: Path):
-    tool = cls.__new__(cls)
+def _make_tool(cls: type, project_root: Path) -> Any:
+    """Construct a Tool-subclass instance without invoking ``__init__``.
+
+    Returns ``Any`` so test bodies can call each subclass's bespoke
+    ``apply(...)`` signature directly without per-call type assertions —
+    pyright's narrowing through ``__new__`` does not reach subclass
+    ``apply`` parameter shapes (e.g. ``symbol_name``, ``tool_name``).
+    """
+    tool = cls.__new__(cls)  # pyright: ignore[reportCallIssue]
     tool.get_project_root = lambda: str(project_root)  # type: ignore[method-assign]
     return tool
 
@@ -84,6 +91,14 @@ def _fake_coord(actions_by_kind: dict[str, list]):
 
 
 def test_generate_from_undefined_dispatches(tmp_path: Path):
+    # v1.5 G4-5 — facade prefers the granular ``quickfix.generate.<kind>``
+    # when rope advertises it, otherwise falls back to the flat
+    # ``quickfix.generate`` umbrella kind. ``supports_kind`` is pinned so
+    # only the umbrella kind is advertised — the test exercises the
+    # fallback path explicitly.
+    # v1.6 P5 — title-prefix filter on the fallback discards sibling
+    # ``class``/``variable`` actions. ``target_kind="function"`` plus an
+    # action whose title starts with "function" survives the filter.
     src = tmp_path / "module.py"
     src.write_text("x = undefined_thing()\n")
     tool = _make_tool(ScalpelGenerateFromUndefinedTool, tmp_path)
@@ -94,6 +109,7 @@ def test_generate_from_undefined_dispatches(tmp_path: Path):
             "quickfix.generate", title="function: generate undefined_thing",
         )],
     })
+    coord.supports_kind = lambda lang, kind: kind == "quickfix.generate"
     with patch("serena.tools.scalpel_facades.coordinator_for_facade", return_value=coord):
         out = tool.apply(
             file=str(src), position={"line": 0, "character": 4},
@@ -108,6 +124,7 @@ def test_generate_from_undefined_no_action(tmp_path: Path):
     src.write_text("\n")
     tool = _make_tool(ScalpelGenerateFromUndefinedTool, tmp_path)
     coord = _fake_coord({})
+    coord.supports_kind = lambda lang, kind: kind == "quickfix.generate"
     with patch("serena.tools.scalpel_facades.coordinator_for_facade", return_value=coord):
         out = tool.apply(
             file=str(src), position={"line": 0, "character": 0},
@@ -124,12 +141,18 @@ def test_auto_import_specialized_picks_first_candidate(tmp_path: Path):
     src = tmp_path / "module.py"
     src.write_text("Path('/')\n")
     tool = _make_tool(ScalpelAutoImportSpecializedTool, tmp_path)
-    coord = _fake_coord({
-        "quickfix.import": [
-            _fake_action("quickfix.import"),
-            _fake_action("quickfix.import"),
-        ],
-    })
+    # v1.5 G6 ME-2 — symbol_name now flows into title_match. Both fake
+    # actions need a title containing 'Path' for the dispatcher to
+    # accept either. Test still asserts both candidates were surfaced
+    # (count==2) — the dispatcher's MULTIPLE_CANDIDATES envelope kicks
+    # in only when ≥2 hits match the substring; that's tested in
+    # test_v1_5_g6_medium_tier.py. Here we have one match (the second
+    # fake's title 'X' is excluded), so dispatcher selects uniquely.
+    a1 = _fake_action("quickfix.import")
+    a1.title = "from pathlib import Path"
+    a2 = _fake_action("quickfix.import")
+    a2.title = "X"  # does NOT match symbol_name='Path'
+    coord = _fake_coord({"quickfix.import": [a1, a2]})
     with patch("serena.tools.scalpel_facades.coordinator_for_facade", return_value=coord):
         out = tool.apply(
             file=str(src), position={"line": 0, "character": 0},
@@ -210,7 +233,13 @@ def test_ignore_diagnostic_pyright_dispatches(tmp_path: Path):
     src = tmp_path / "module.py"
     src.write_text("undefined_name\n")
     tool = _make_tool(ScalpelIgnoreDiagnosticTool, tmp_path)
-    # v1.6 P5 rule-filter requires action.diagnostics[*].code == rule.
+    # v1.5 G4-10 + v1.6 P5: the facade now uses an OR-shape filter that
+    # matches on EITHER action.title (v1.5 substring) OR action.diagnostics
+    # (v1.6 code-equality). The canonical fixture shape — also adopted by
+    # the v1.9 routing benchmark — supplies a diagnostic, since real
+    # basedpyright/ruff responses always carry the diagnostic on the
+    # quickfix action. v1.6 P5 rule-filter additionally requires
+    # ``action.diagnostics[*].code == rule``.
     diag = MagicMock(code="reportUndefinedVariable")
     coord = _fake_coord({
         "quickfix.pyright_ignore": [_fake_action(
@@ -232,7 +261,10 @@ def test_ignore_diagnostic_ruff_dispatches(tmp_path: Path):
     src = tmp_path / "module.py"
     src.write_text("import sys\n")
     tool = _make_tool(ScalpelIgnoreDiagnosticTool, tmp_path)
-    # v1.6 P5 rule-filter requires action.diagnostics[*].code == rule.
+    # v1.5 G4-10 + v1.6 P5: see ``test_ignore_diagnostic_pyright_dispatches``
+    # for the OR-shape filter rationale; canonical fixture supplies the
+    # diagnostic code that real ruff responses always carry. v1.6 P5
+    # rule-filter requires ``action.diagnostics[*].code == rule``.
     diag = MagicMock(code="F401")
     coord = _fake_coord({
         "quickfix.ruff_noqa": [_fake_action(

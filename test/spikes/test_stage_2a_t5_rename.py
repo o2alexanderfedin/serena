@@ -102,6 +102,75 @@ def test_rename_unknown_symbol_returns_symbol_not_found(tmp_path):
     assert payload["failure"]["code"] == "SYMBOL_NOT_FOUND"
 
 
+# ---------------------------------------------------------------------------
+# v1.5 G7-C — sibling real-disk acid test.
+# ---------------------------------------------------------------------------
+
+
+def test_rename_real_disk_lands_new_name_on_disk(tmp_path):
+    """G7-C acid test — sibling of test_*_real_disk_lands_* in G7-A/B.
+
+    ScalpelRenameTool.apply MUST invoke
+    ``_apply_workspace_edit_to_disk(workspace_edit)`` so that
+    ``Path.read_text()`` post-apply reflects the rename. Pre-v1.5
+    cleanup the call was missing (see deferred-items.md "Wave 4
+    discovery"); this test pins down the fixed behavior matching the
+    other 9 G7-A/B siblings (``after != before``).
+
+    Discipline: the acid is on observable disk state, not on the
+    response envelope alone — decorative ``applied=True`` without disk
+    mutation is exactly the class of bug the v1.5 milestone closes.
+    """
+    target = tmp_path / "lib.rs"
+    target.write_text("pub struct Engine;\n", encoding="utf-8")
+    before = target.read_text(encoding="utf-8")
+    tool = _make_tool(tmp_path)
+    fake_coord = MagicMock()
+
+    edit = {
+        "changes": {
+            target.as_uri(): [{
+                "range": {
+                    "start": {"line": 0, "character": 11},
+                    "end": {"line": 0, "character": 17},
+                },
+                "newText": "Core",
+            }],
+        },
+    }
+
+    async def _merge_rename(relative_file_path, line, column, new_name, language="python"):
+        del relative_file_path, line, column, new_name, language
+        return (edit, [])
+
+    fake_coord.merge_rename = _merge_rename
+
+    async def _find_pos(**_kw):
+        return {"line": 0, "character": 11}
+
+    fake_coord.find_symbol_position = _find_pos
+    with patch(
+        "serena.tools.scalpel_facades.coordinator_for_facade",
+        return_value=fake_coord,
+    ):
+        out = tool.apply(
+            file=str(target),
+            name_path="Engine",
+            new_name="Core",
+            language="rust",
+        )
+    payload = json.loads(out)
+    assert payload["applied"] is True
+    assert payload.get("checkpoint_id") is not None
+    after = target.read_text(encoding="utf-8")
+    # The acid: the file must actually change on disk. Prior to the
+    # G7-C fix, the WorkspaceEdit was only recorded in the checkpoint
+    # without being routed through ``_apply_workspace_edit_to_disk``.
+    assert after != before
+    assert "Core" in after
+    assert "Engine" not in after
+
+
 def test_rename_workspace_boundary_blocked(tmp_path):
     tool = _make_tool(tmp_path)
     out = tool.apply(

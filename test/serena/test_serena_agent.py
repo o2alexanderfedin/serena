@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -27,6 +28,38 @@ from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
 from test.conftest import get_repo_path, is_ci, language_tests_enabled
 from test.solidlsp import clojure as clj
+
+
+# ---------------------------------------------------------------------------
+# Host-binary skip gates (post-v1.5 close-out — see deferred-items.md)
+#
+# Each language-server requires a host-installed binary. When that binary
+# is absent on the dev host, the language server fails to start (gopls,
+# pwsh, lean) OR boots but cannot enrich symbol info (haxe). The honest
+# response per the project's host-binary-gate convention (mirrors the
+# v1.4.1 ``fix(ansible)`` pattern and the existing Lean entry in
+# ``conftest._LANGUAGE_PYTEST_MARKERS``) is to skip rather than fail.
+# ---------------------------------------------------------------------------
+_REQUIRES_GOPLS = pytest.mark.skipif(
+    shutil.which("gopls") is None,
+    reason="gopls not on PATH; gopls language server cannot start",
+)
+_REQUIRES_PWSH = pytest.mark.skipif(
+    shutil.which("pwsh") is None,
+    reason="pwsh (PowerShell Core) not on PATH; PowerShell Editor Services cannot start",
+)
+_REQUIRES_HAXE = pytest.mark.skipif(
+    shutil.which("haxe") is None,
+    reason="haxe compiler not on PATH; haxe-language-server cannot return hover/symbol info",
+)
+_REQUIRES_KOTLIN = pytest.mark.skipif(
+    shutil.which("kotlin-language-server") is None,
+    reason="kotlin-language-server not on PATH; install via brew/scoop or upstream releases",
+)
+_REQUIRES_LEAN = pytest.mark.skipif(
+    shutil.which("lean") is None,
+    reason="lean (via elan) not on PATH; lean4 language server cannot start",
+)
 
 
 @pytest.fixture
@@ -86,6 +119,7 @@ def read_project_file(project: Project, relative_path: str) -> str:
 def project_file_modification_context(serena_agent: SerenaAgent, relative_path: str) -> Iterator[None]:
     """Context manager to modify a project file and revert the changes after use."""
     project = serena_agent.get_active_project()
+    assert project is not None, "active project must be set before file modification"
     file_path = os.path.join(project.project_root, relative_path)
 
     # Read the original content
@@ -186,23 +220,23 @@ class TestSerenaAgent:
         "serena_agent,symbol_name,expected_kind,expected_file",
         [
             pytest.param(Language.PYTHON, "User", "Class", "models.py", marks=pytest.mark.python),
-            pytest.param(Language.GO, "Helper", "Function", "main.go", marks=pytest.mark.go),
+            pytest.param(Language.GO, "Helper", "Function", "main.go", marks=[pytest.mark.go, _REQUIRES_GOPLS]),
             pytest.param(Language.JAVA, "Model", "Class", "Model.java", marks=pytest.mark.java),
             pytest.param(
                 Language.KOTLIN,
                 "Model",
                 "Struct",
                 "Model.kt",
-                marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
+                marks=[pytest.mark.kotlin, _REQUIRES_KOTLIN] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
             ),
             pytest.param(Language.TYPESCRIPT, "DemoClass", "Class", "index.ts", marks=pytest.mark.typescript),
             pytest.param(Language.PHP, "helperFunction", "Function", "helper.php", marks=pytest.mark.php),
             pytest.param(Language.CLOJURE, "greet", "Function", clj.CORE_PATH, marks=pytest.mark.clojure),
             pytest.param(Language.CSHARP, "Calculator", "Class", "Program.cs", marks=pytest.mark.csharp),
-            pytest.param(Language.POWERSHELL, "Greet-User", "Function", "main.ps1", marks=pytest.mark.powershell),
+            pytest.param(Language.POWERSHELL, "Greet-User", "Function", "main.ps1", marks=[pytest.mark.powershell, _REQUIRES_PWSH]),
             pytest.param(Language.CPP_CCLS, "add", "Function", "b.cpp", marks=pytest.mark.cpp),
-            pytest.param(Language.HAXE, "Main", "Class", "Main.hx", marks=pytest.mark.haxe),
-            pytest.param(Language.LEAN4, "add", "Method", "Helper.lean", marks=pytest.mark.lean4),
+            pytest.param(Language.HAXE, "Main", "Class", "Main.hx", marks=[pytest.mark.haxe, _REQUIRES_HAXE]),
+            pytest.param(Language.LEAN4, "add", "Method", "Helper.lean", marks=[pytest.mark.lean4, _REQUIRES_LEAN]),
             pytest.param(Language.MSL, "greet", "Function", "main.mrc", marks=pytest.mark.msl),
         ],
         indirect=["serena_agent"],
@@ -283,7 +317,7 @@ class TestSerenaAgent:
                 os.path.join("test_repo", "services.py"),
                 marks=pytest.mark.python,
             ),
-            pytest.param(Language.GO, "Helper", "main.go", "main.go", marks=pytest.mark.go),
+            pytest.param(Language.GO, "Helper", "main.go", "main.go", marks=[pytest.mark.go, _REQUIRES_GOPLS]),
             pytest.param(
                 Language.JAVA,
                 "Model",
@@ -296,7 +330,7 @@ class TestSerenaAgent:
                 "Model",
                 os.path.join("src", "main", "kotlin", "test_repo", "Model.kt"),
                 os.path.join("src", "main", "kotlin", "test_repo", "Main.kt"),
-                marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
+                marks=[pytest.mark.kotlin, _REQUIRES_KOTLIN] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
             ),
             pytest.param(Language.RUST, "add", os.path.join("src", "lib.rs"), os.path.join("src", "main.rs"), marks=pytest.mark.rust),
             pytest.param(Language.PHP, "helperFunction", "helper.php", "index.php", marks=pytest.mark.php),
@@ -308,16 +342,16 @@ class TestSerenaAgent:
                 marks=pytest.mark.clojure,
             ),
             pytest.param(Language.CSHARP, "Calculator", "Program.cs", "Program.cs", marks=pytest.mark.csharp),
-            pytest.param(Language.POWERSHELL, "Greet-User", "main.ps1", "main.ps1", marks=pytest.mark.powershell),
+            pytest.param(Language.POWERSHELL, "Greet-User", "main.ps1", "main.ps1", marks=[pytest.mark.powershell, _REQUIRES_PWSH]),
             pytest.param(Language.CPP_CCLS, "add", "b.cpp", "a.cpp", marks=pytest.mark.cpp),
             pytest.param(
                 Language.HAXE,
                 "addNumbers",
                 os.path.join("src", "utils", "Helper.hx"),
                 os.path.join("src", "Main.hx"),
-                marks=pytest.mark.haxe,
+                marks=[pytest.mark.haxe, _REQUIRES_HAXE],
             ),
-            pytest.param(Language.LEAN4, "add", "Helper.lean", "Main.lean", marks=pytest.mark.lean4),
+            pytest.param(Language.LEAN4, "add", "Helper.lean", "Main.lean", marks=[pytest.mark.lean4, _REQUIRES_LEAN]),
             pytest.param(Language.MSL, "format.coins", "utils.mrc", "main.mrc", marks=pytest.mark.msl),
         ],
         indirect=["serena_agent"],
@@ -591,7 +625,9 @@ class TestSerenaAgent:
                 mode=mode,
             )
             assert result == SUCCESS_RESULT
-            new_content = read_project_file(serena_agent.get_active_project(), relative_path)
+            active = serena_agent.get_active_project()
+            assert active is not None
+            new_content = read_project_file(active, relative_path)
             assert repl in new_content
 
     @pytest.mark.parametrize(
@@ -637,7 +673,7 @@ class TestSerenaAgent:
                 Language.KOTLIN,
                 "Model",
                 os.path.join("src", "main", "kotlin", "test_repo", "Model.kt"),
-                marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
+                marks=[pytest.mark.kotlin, _REQUIRES_KOTLIN] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
             ),
             pytest.param(
                 Language.TYPESCRIPT,
@@ -680,7 +716,7 @@ class TestSerenaAgent:
                 Language.KOTLIN,
                 "ModelUser",
                 os.path.join("src", "main", "kotlin", "test_repo", "ModelUser.kt"),
-                marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
+                marks=[pytest.mark.kotlin, _REQUIRES_KOTLIN] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
             ),
             pytest.param(
                 Language.TYPESCRIPT,
@@ -702,7 +738,9 @@ class TestSerenaAgent:
             assert result == SUCCESS_RESULT, f"Expected successful deletion, but got: {result}"
 
             # verify the symbol was actually removed from the file
-            file_content = read_project_file(serena_agent.get_active_project(), relative_path)
+            active = serena_agent.get_active_project()
+            assert active is not None
+            file_content = read_project_file(active, relative_path)
             assert name_path not in file_content, (
                 f"Expected symbol {name_path} to be removed from {relative_path}, but it still appears in the file content"
             )
@@ -764,6 +802,7 @@ class TestPromptProvision:
 
         # now activate another project which dynamically enables a new mode (no-onboarding)
         reg_project = serena_agent.serena_config.get_registered_project(project_name2)
+        assert reg_project is not None, f"expected registered project {project_name2!r} to exist"
         reg_project.project_config.default_modes = ["no-onboarding"]
         expected_new_mode_message = "The onboarding process is not applied."
         result2 = self._call_tool(serena_agent, ActivateProjectTool, project=project_name2, session_id=session1)

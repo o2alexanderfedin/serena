@@ -236,6 +236,8 @@ def _rewrite_package_reexports(
                     "edits": [
                         {
                             "range": {
+                                # G5-VERIFIED: whole-file replacement — pairs
+                                # (0,0) start with a sentinel huge `end` line.
                                 "start": {"line": 0, "character": 0},
                                 "end": {"line": 1_000_000_000, "character": 0},
                             },
@@ -277,7 +279,9 @@ def _run_async(coro):
 # ``_resolve_winner_edit``, and the ``_SNAPSHOT_NONEXISTENT`` sentinel
 # now live in ``serena.tools.facade_support`` (v1.6 Plan 0). They are
 # re-imported at the top of this module so existing test imports keep
-# working without modification.
+# working without modification. v1.5 G3b (CR-2) resource-op support
+# (CreateFile / RenameFile / DeleteFile) is wired into the lifted
+# ``_apply_workspace_edit_to_disk`` in facade_support.py.
 
 
 # ---------------------------------------------------------------------------
@@ -326,8 +330,12 @@ class ScalpelSplitFileTool(Tool):
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
+        # v1.5 G3a — `allow_partial` now flows into `_split_rust`; the four
+        # documented-but-not-yet-wired layout/reexport knobs remain decorative
+        # for this leaf (spec § CR-1 prioritises `groups`; layout/reexport
+        # injection is post-edit AST rewrite, deferred to v1.6).
         del parent_layout, keep_in_original, reexport_policy
-        del explicit_reexports, allow_partial, preview_token
+        del explicit_reexports, preview_token
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -363,6 +371,7 @@ class ScalpelSplitFileTool(Tool):
         return self._split_rust(
             file=file, groups=groups,
             project_root=project_root, dry_run=dry_run,
+            allow_partial=allow_partial,
         ).model_dump_json(indent=2)
 
     def _split_python(
@@ -518,22 +527,85 @@ class ScalpelSplitFileTool(Tool):
         groups: dict[str, list[str]],
         project_root: Path,
         dry_run: bool,
+        allow_partial: bool,
     ) -> RefactorResult:
-        del groups
+        """v1.5 G3a — per-group iteration mirroring ``_split_python``.
+
+        For each ``target_module → [symbols]`` entry, resolve every symbol's
+        body range via ``coord.find_symbol_range`` and dispatch one
+        ``refactor.extract.module`` LSP request bracketed by the symbol's
+        actual range (NOT ``(0,0)→(0,0)``). The returned WorkspaceEdits are
+        merged via :func:`_merge_workspace_edits` and applied once.
+
+        ``allow_partial=True`` surfaces unresolvable symbols / no-action
+        responses as ``language_findings`` warnings and continues with the
+        remaining symbols. ``allow_partial=False`` (default) aborts on the
+        first failure with ``SYMBOL_NOT_FOUND``.
+
+        Closes spec § CR-1 (the user-reported scalpel_split_file regression).
+        """
         coord = coordinator_for_facade(language="rust", project_root=project_root)
         t0 = time.monotonic()
-        actions = _run_async(coord.merge_code_actions(
-            file=file,
-            start={"line": 0, "character": 0},
-            end={"line": 0, "character": 0},
-            only=["refactor.extract.module"],
-        ))
+        all_actions: list[Any] = []
+        captured_edits: list[dict[str, Any]] = []
+        findings: list[LanguageFinding] = []
+        for target_module, symbols in groups.items():
+            for symbol in symbols:
+                rng = _run_async(coord.find_symbol_range(
+                    file=file, name_path=symbol,
+                    project_root=str(project_root),
+                ))
+                if rng is None:
+                    if allow_partial:
+                        findings.append(LanguageFinding(
+                            code="symbol_not_found",
+                            message=f"{symbol!r} for module {target_module!r}",
+                        ))
+                        continue
+                    return build_failure_result(
+                        code=ErrorCode.SYMBOL_NOT_FOUND,
+                        stage="scalpel_split_file",
+                        reason=f"Symbol {symbol!r} not found in {file!r}.",
+                    )
+                actions = _run_async(coord.merge_code_actions(
+                    file=file,
+                    start=rng["start"], end=rng["end"],
+                    only=["refactor.extract.module"],
+                ))
+                if not actions:
+                    if allow_partial:
+                        findings.append(LanguageFinding(
+                            code="no_action",
+                            message=(
+                                f"no refactor.extract.module for {symbol!r} "
+                                f"(target_module={target_module!r})"
+                            ),
+                        ))
+                        continue
+                    return build_failure_result(
+                        code=ErrorCode.SYMBOL_NOT_FOUND,
+                        stage="scalpel_split_file",
+                        reason=(
+                            f"No refactor.extract.module action for {symbol!r} "
+                            f"in {file!r}."
+                        ),
+                    )
+                # G1 default-path: rust-analyzer offers exactly one
+                # extract.module per cursor, so ``actions[0]`` (now via the
+                # G1 disambiguation policy with no ``title_match``) is the
+                # documented behavior.
+                winner = actions[0]
+                all_actions.append(winner)
+                edit = _resolve_winner_edit(coord, winner)
+                if isinstance(edit, dict) and edit:
+                    captured_edits.append(edit)
         elapsed_ms = int((time.monotonic() - t0) * 1000)
-        if not actions:
-            return build_failure_result(
-                code=ErrorCode.SYMBOL_NOT_FOUND,
-                stage="scalpel_split_file",
-                reason="No refactor.extract.module actions surfaced.",
+        if not all_actions:
+            return RefactorResult(
+                applied=False, no_op=True,
+                diagnostics_delta=_empty_diagnostics_delta(),
+                duration_ms=elapsed_ms,
+                language_findings=tuple(findings),
             )
         if dry_run:
             return RefactorResult(
@@ -541,20 +613,29 @@ class ScalpelSplitFileTool(Tool):
                 diagnostics_delta=_empty_diagnostics_delta(),
                 preview_token=f"pv_split_{int(time.time())}",
                 duration_ms=elapsed_ms,
+                language_findings=tuple(findings),
             )
-        # v1.6 P1: apply_action_and_checkpoint resolves, snapshots, applies,
-        # and records the checkpoint in one call. Pre-edit snapshot is real
-        # content (not the v0.2.0 ``snapshot={}`` placeholder).
-        cid, _edit = apply_action_and_checkpoint(coord, actions[0])
+        # v1.5 G3a: ``captured_edits`` were resolved per-file to honor the
+        # multi-file split contract; merge them into a single edit so the
+        # checkpoint records every URI touched.
+        # v1.6 P1: capture pre-edit snapshot of the merged edit BEFORE applying
+        # so checkpoint-store rollback is honest about pre-state content.
+        merged = _merge_workspace_edits(captured_edits)
+        snapshot = capture_pre_edit_snapshot(merged)
+        _apply_workspace_edit_to_disk(merged)
+        cid = record_checkpoint_for_workspace_edit(
+            workspace_edit=merged, snapshot=snapshot,
+        )
         return RefactorResult(
             applied=True,
             diagnostics_delta=_empty_diagnostics_delta(),
             checkpoint_id=cid,
             duration_ms=elapsed_ms,
+            language_findings=tuple(findings),
             lsp_ops=(LspOpStat(
                 method="textDocument/codeAction",
                 server="rust-analyzer",
-                count=len(actions),
+                count=len(all_actions),
                 total_ms=elapsed_ms,
             ),),
         )
@@ -573,6 +654,170 @@ _EXTRACT_TARGET_TO_KIND: dict[str, str] = {
     "type_alias": "refactor.extract.type_alias",
     "module": "refactor.extract.module",
 }
+
+# v1.5 G4-6 — rust-analyzer's stable auto-names for extracted items.
+# When the caller supplies ``new_name``, the post-processor walks the
+# emitted WorkspaceEdit and substitutes any of these tokens with the
+# caller's request via word-boundary regex.
+_EXTRACT_AUTO_NAMES: tuple[str, ...] = (
+    "new_function",
+    "new_variable",
+    "new_var",
+    "new_const",
+    "new_constant",
+    "new_static",
+    "new_type",
+    "new_alias",
+    "new_module",
+    "extracted",
+    "placeholder",
+)
+
+# v1.5 G4-6 — `visibility` → Rust visibility-prefix string. ``private``
+# is the bare default (no prefix injected). The post-processor prepends
+# the prefix in front of the bare ``fn``/``const``/``type``/``static``
+# keyword on the emitted item.
+_EXTRACT_VISIBILITY_PREFIX: dict[str, str] = {
+    "private": "",
+    "pub": "pub ",
+    "pub_crate": "pub(crate) ",
+    "pub_super": "pub(super) ",
+}
+
+
+def _post_process_extract_edit(
+    workspace_edit: dict[str, Any],
+    *,
+    new_name: str | None,
+    visibility_prefix: str,
+) -> dict[str, Any]:
+    """v1.5 G4-6 — substitute caller's ``new_name`` for rust-analyzer's
+    auto-name tokens and inject ``visibility_prefix`` on each emitted
+    item-keyword line.
+
+    Operates only on hunks the LSP emitted (``newText`` strings inside
+    ``changes`` and ``documentChanges``); pre-existing source surrounding
+    the hunks is untouched. ``new_name=None`` is a no-op for the rename
+    pass; ``visibility_prefix=""`` (the ``private`` default) skips the
+    prefix injection.
+    """
+    import re as _re
+
+    def _patch_text(text: str) -> str:
+        out = text
+        if new_name:
+            for auto in _EXTRACT_AUTO_NAMES:
+                out = _re.sub(rf"\b{_re.escape(auto)}\b", new_name, out)
+        if visibility_prefix:
+            # Match each line's first item-keyword (fn/const/type/static)
+            # not already preceded by a visibility prefix on that line.
+            # We anchor to `^` per line via re.MULTILINE.
+            out = _re.sub(
+                r"(?m)^(?!\s*pub)(\s*)(fn|const|type|static)\b",
+                rf"\1{visibility_prefix}\2",
+                out,
+            )
+        return out
+
+    if not isinstance(workspace_edit, dict):
+        return workspace_edit
+    out: dict[str, Any] = {}
+    for key, val in workspace_edit.items():
+        if key == "changes" and isinstance(val, dict):
+            new_changes: dict[str, list[dict[str, Any]]] = {}
+            for uri, edits in val.items():
+                new_edits = []
+                for e in edits or []:
+                    if isinstance(e, dict) and isinstance(e.get("newText"), str):
+                        new_edits.append({**e, "newText": _patch_text(e["newText"])})
+                    else:
+                        new_edits.append(e)
+                new_changes[uri] = new_edits
+            out[key] = new_changes
+        elif key == "documentChanges" and isinstance(val, list):
+            new_dcs: list[Any] = []
+            for dc in val:
+                if isinstance(dc, dict) and "edits" in dc:
+                    new_edits = []
+                    for e in dc.get("edits") or []:
+                        if isinstance(e, dict) and isinstance(e.get("newText"), str):
+                            new_edits.append({**e, "newText": _patch_text(e["newText"])})
+                        else:
+                            new_edits.append(e)
+                    new_dcs.append({**dc, "edits": new_edits})
+                else:
+                    new_dcs.append(dc)
+            out[key] = new_dcs
+        else:
+            out[key] = val
+    return out
+
+
+# v1.5 G6 ME-3 — rope's ``introduce_parameter`` action emits the new
+# parameter under an auto-generated name (``p`` or ``param`` depending
+# on rope version). Caller's ``parameter_name`` substitutes for these
+# tokens inside emitted ``newText`` hunks via word-boundary regex; pre-
+# existing source surrounding the hunks is untouched.
+_INTRODUCE_PARAMETER_AUTO_NAMES: tuple[str, ...] = ("p", "param")
+
+
+def _substitute_introduced_parameter_name(
+    workspace_edit: dict[str, Any],
+    *,
+    parameter_name: str,
+) -> dict[str, Any]:
+    """Substitute rope's introduce_parameter auto-name with the caller's
+    ``parameter_name`` inside emitted ``newText`` hunks.
+
+    Mirrors :func:`_post_process_extract_edit` shape. ``parameter_name``
+    must be a non-empty identifier; for the default ``"p"`` the function
+    is a no-op (caller would never reach here in that case).
+    """
+    import re as _re
+
+    if not parameter_name or parameter_name in _INTRODUCE_PARAMETER_AUTO_NAMES:
+        return workspace_edit
+
+    def _patch_text(text: str) -> str:
+        out = text
+        for auto in _INTRODUCE_PARAMETER_AUTO_NAMES:
+            out = _re.sub(
+                rf"\b{_re.escape(auto)}\b", parameter_name, out,
+            )
+        return out
+
+    if not isinstance(workspace_edit, dict):
+        return workspace_edit
+    out: dict[str, Any] = {}
+    for key, val in workspace_edit.items():
+        if key == "changes" and isinstance(val, dict):
+            new_changes: dict[str, list[dict[str, Any]]] = {}
+            for uri, edits in val.items():
+                new_edits: list[Any] = []
+                for e in edits or []:
+                    if isinstance(e, dict) and isinstance(e.get("newText"), str):
+                        new_edits.append({**e, "newText": _patch_text(e["newText"])})
+                    else:
+                        new_edits.append(e)
+                new_changes[uri] = new_edits
+            out[key] = new_changes
+        elif key == "documentChanges" and isinstance(val, list):
+            new_dcs: list[Any] = []
+            for dc in val:
+                if isinstance(dc, dict) and "edits" in dc:
+                    new_edits = []
+                    for e in dc.get("edits") or []:
+                        if isinstance(e, dict) and isinstance(e.get("newText"), str):
+                            new_edits.append({**e, "newText": _patch_text(e["newText"])})
+                        else:
+                            new_edits.append(e)
+                    new_dcs.append({**dc, "edits": new_edits})
+                else:
+                    new_dcs.append(dc)
+            out[key] = new_dcs
+        else:
+            out[key] = val
+    return out
 
 
 # v1.5 P2 — per-language target-validity matrix for ``ScalpelExtractTool``.
@@ -626,17 +871,28 @@ class ScalpelExtractTool(Tool):
         :param range: optional LSP Range; one of range or name_path required.
         :param name_path: optional Serena name-path.
         :param target: extraction target enum.
-        :param new_name: name for the extracted item.
-        :param visibility: Rust visibility prefix on the new item.
-        :param similar: when True (Python/Rope), extract similar expressions too.
-        :param global_scope: extract to module scope (Python only).
+        :param new_name: name for the extracted item. v1.5 G4-6 wires
+            this via post-processing of the LSP's WorkspaceEdit: the
+            caller's ``new_name`` substitutes for any of rust-analyzer's
+            stable auto-names (``new_function``, ``new_variable``, ...)
+            in every emitted hunk via word-boundary regex.
+        :param visibility: Rust visibility prefix on the new item. v1.5
+            G4-6 wires this via post-processing: the prefix
+            (``"pub "``/``"pub(crate) "``/``"pub(super) "``) is injected
+            before the bare ``fn``/``const``/``type``/``static`` keyword
+            on each emitted item line. ``private`` (default) is a no-op.
+        :param similar: when True (Python/Rope), extract similar
+            expressions too. v1.5 G4-6 forwards this through
+            ``merge_code_actions(arguments=[{...}])``.
+        :param global_scope: extract to module scope (Python only). v1.5
+            G4-6 forwards via the same ``arguments`` payload.
         :param dry_run: preview only.
         :param preview_token: continuation from a prior dry-run.
         :param language: 'rust' | 'python' | 'java'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
-        del new_name, visibility, similar, global_scope, preview_token
+        del preview_token
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -701,11 +957,20 @@ class ScalpelExtractTool(Tool):
         if not coord.supports_kind(lang, kind):
             return json.dumps(_capability_not_available_envelope(language=lang, kind=kind))
         t0 = time.monotonic()
+        # v1.5 G4-6 — forward `similar` / `global_scope` to the LSP via
+        # the additive `arguments` payload (rope honors these in its
+        # extract-method / extract-variable refactors). Defaults are
+        # falsy; we still pass an empty dict-shaped arguments slot so
+        # rope sees the arguments key consistently.
+        extract_arguments: list[dict[str, Any]] = [
+            {"similar": bool(similar), "global_scope": bool(global_scope)}
+        ]
         actions = _run_async(coord.merge_code_actions(
             file=file,
             start=rng["start"],
             end=rng["end"],
             only=[kind],
+            arguments=extract_arguments,
         ))
         elapsed_ms = int((time.monotonic() - t0) * 1000)
         if not actions:
@@ -721,8 +986,32 @@ class ScalpelExtractTool(Tool):
                 preview_token=f"pv_extract_{int(time.time())}",
                 duration_ms=elapsed_ms,
             ).model_dump_json(indent=2)
-        # v1.6 P1: real-snapshot apply + checkpoint via the consolidated helper.
-        cid, _edit = apply_action_and_checkpoint(coord, actions[0])
+        # v1.5 G4-6 — post-process the WorkspaceEdit: rename the LSP's
+        # auto-named symbol to ``new_name`` and inject the caller's
+        # ``visibility`` prefix. Rust-only; for Python the prefix dict
+        # resolves to "" (see _EXTRACT_VISIBILITY_PREFIX default below).
+        # v1.6 P1: capture pre-edit snapshot AFTER post-processing (it
+        # only mutates the edit text, not the URIs touched) so the
+        # snapshot reflects on-disk pre-state for every URI.
+        edit = _resolve_winner_edit(coord, actions[0])
+        if isinstance(edit, dict) and edit:
+            visibility_prefix = (
+                _EXTRACT_VISIBILITY_PREFIX.get(visibility, "")
+                if lang == "rust" else ""
+            )
+            edit = _post_process_extract_edit(
+                edit,
+                new_name=new_name if new_name and new_name != "extracted" else None,
+                visibility_prefix=visibility_prefix,
+            )
+            snapshot = capture_pre_edit_snapshot(edit)
+            _apply_workspace_edit_to_disk(edit)
+        else:
+            edit = {"changes": {}}
+            snapshot = {}
+        cid = record_checkpoint_for_workspace_edit(
+            workspace_edit=edit, snapshot=snapshot,
+        )
         return RefactorResult(
             applied=True,
             diagnostics_delta=_empty_diagnostics_delta(),
@@ -749,6 +1038,61 @@ _INLINE_TARGET_TO_KIND: dict[str, str] = {
     "macro": "refactor.inline.macro",
     "const": "refactor.inline.const",
 }
+
+
+def _filter_definition_deletion_hunks(
+    workspace_edit: dict[str, Any],
+) -> dict[str, Any]:
+    """v1.5 G4-7 — when ``remove_definition=False``, drop hunks whose
+    ``newText`` is empty AND whose range spans more than one line.
+
+    Heuristic: rust-analyzer's ``inline call`` assist emits two hunks per
+    apply — (1) replace the call-site expression and (2) delete the
+    definition by overwriting its multi-line range with ``""``. The
+    deletion hunk is identifiable by ``newText == ""`` AND
+    ``end.line > start.line`` (a single-line ``newText=""`` would be a
+    same-line deletion, which we conservatively keep).
+    """
+    if not isinstance(workspace_edit, dict):
+        return workspace_edit
+
+    def _is_definition_deletion(edit: dict[str, Any]) -> bool:
+        if not isinstance(edit, dict):
+            return False
+        if edit.get("newText") != "":
+            return False
+        rng = edit.get("range") or {}
+        start = rng.get("start") or {}
+        end = rng.get("end") or {}
+        try:
+            return int(end.get("line", 0)) > int(start.get("line", 0))
+        except (TypeError, ValueError):
+            return False
+
+    out: dict[str, Any] = {}
+    for key, val in workspace_edit.items():
+        if key == "changes" and isinstance(val, dict):
+            new_changes: dict[str, list[dict[str, Any]]] = {}
+            for uri, edits in val.items():
+                new_changes[uri] = [
+                    e for e in edits or [] if not _is_definition_deletion(e)
+                ]
+            out[key] = new_changes
+        elif key == "documentChanges" and isinstance(val, list):
+            new_dcs: list[Any] = []
+            for dc in val:
+                if isinstance(dc, dict) and "edits" in dc:
+                    new_edits = [
+                        e for e in dc.get("edits") or []
+                        if not _is_definition_deletion(e)
+                    ]
+                    new_dcs.append({**dc, "edits": new_edits})
+                else:
+                    new_dcs.append(dc)
+            out[key] = new_dcs
+        else:
+            out[key] = val
+    return out
 
 
 class ScalpelInlineTool(Tool):
@@ -778,18 +1122,29 @@ class ScalpelInlineTool(Tool):
         call-sites. Pick `target`. Atomic.
 
         :param file: source file containing the definition or call.
-        :param name_path: optional Serena name-path.
+        :param name_path: Serena name-path. v1.5 G4-7 wires this: when
+            ``position`` is omitted, the facade resolves ``name_path``
+            via ``coord.find_symbol_range`` (instead of the previous
+            silent ``(0,0)`` fallback).
         :param position: optional LSP Position at the call site.
         :param target: 'call' | 'variable' | 'type_alias' | 'macro' | 'const'.
-        :param scope: 'single_call_site' or 'all_callers'.
-        :param remove_definition: drop the original definition after inlining.
+        :param scope: 'single_call_site' or 'all_callers'. v1.5 G4-7
+            ``all_callers`` now iterates ``coord.request_references`` to
+            dispatch one inline per returned reference (instead of the
+            ``(0,0)`` fallback). Requires ``name_path`` (or a resolved
+            symbol position) so references can be located.
+        :param remove_definition: drop the original definition after
+            inlining. v1.5 G4-7 honors ``False``: the WorkspaceEdit is
+            post-filtered to drop multi-line empty-newText hunks
+            (heuristic for rust-analyzer's ``delete definition`` hunk
+            shape) before applying to disk.
         :param dry_run: preview only.
         :param preview_token: continuation from a prior dry-run.
         :param language: 'rust' or 'python'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
-        del name_path, remove_definition, preview_token
+        del preview_token
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -805,11 +1160,29 @@ class ScalpelInlineTool(Tool):
                 reason=f"Unknown target {target!r}; expected one of {sorted(_INLINE_TARGET_TO_KIND)}.",
                 recoverable=False,
             ).model_dump_json(indent=2)
-        if scope == "single_call_site" and position is None:
+        # v1.5 G4-7 — single_call_site requires either position OR
+        # name_path (which the facade now resolves to a position).
+        if (
+            scope == "single_call_site"
+            and position is None
+            and name_path is None
+        ):
             return build_failure_result(
                 code=ErrorCode.INVALID_ARGUMENT,
                 stage="scalpel_inline",
-                reason="scope=single_call_site requires position=.",
+                reason=(
+                    "scope=single_call_site requires position= or name_path=."
+                ),
+                recoverable=False,
+            ).model_dump_json(indent=2)
+        if scope == "all_callers" and name_path is None and position is None:
+            return build_failure_result(
+                code=ErrorCode.INVALID_ARGUMENT,
+                stage="scalpel_inline",
+                reason=(
+                    "scope=all_callers requires name_path= or position= so "
+                    "references can be located."
+                ),
                 recoverable=False,
             ).model_dump_json(indent=2)
         lang = _infer_language(file, language)
@@ -825,14 +1198,62 @@ class ScalpelInlineTool(Tool):
         # inline kind (spec § 4.5 P4).
         if not coord.supports_kind(lang, kind):
             return json.dumps(_capability_not_available_envelope(language=lang, kind=kind))
-        pos = position or {"line": 0, "character": 0}
-        rng = {"start": pos, "end": pos}
+        # v1.5 G4-7 — resolve name_path to a position if no position given.
+        if position is None and name_path is not None:
+            resolved = _run_async(coord.find_symbol_range(
+                file=file, name_path=name_path,
+                project_root=str(project_root),
+            ))
+            if resolved is None:
+                return build_failure_result(
+                    code=ErrorCode.SYMBOL_NOT_FOUND,
+                    stage="scalpel_inline",
+                    reason=f"Symbol {name_path!r} not found in {file!r}.",
+                    recoverable=False,
+                ).model_dump_json(indent=2)
+            position = resolved["start"]
+        # v1.5 G4-7 — collect dispatch positions: one for single_call_site,
+        # all references for all_callers.
+        dispatch_positions: list[dict[str, int]] = []
+        if scope == "all_callers":
+            references = _run_async(coord.request_references(
+                file=file, name_path=name_path,
+                project_root=str(project_root),
+            ))
+            for ref in references or []:
+                rng = (ref or {}).get("range") or {}
+                start = rng.get("start")
+                if isinstance(start, dict) and "line" in start and "character" in start:
+                    dispatch_positions.append({
+                        "line": int(start["line"]),
+                        "character": int(start["character"]),
+                    })
+            if not dispatch_positions:
+                return build_failure_result(
+                    code=ErrorCode.SYMBOL_NOT_FOUND,
+                    stage="scalpel_inline",
+                    reason=(
+                        f"No call-sites found for {name_path!r} in workspace."
+                    ),
+                ).model_dump_json(indent=2)
+        else:
+            assert position is not None  # type-narrowing
+            dispatch_positions.append(position)
+
         t0 = time.monotonic()
-        actions = _run_async(coord.merge_code_actions(
-            file=file, start=rng["start"], end=rng["end"], only=[kind],
-        ))
+        all_actions: list[Any] = []
+        captured_edits: list[dict[str, Any]] = []
+        for pos in dispatch_positions:
+            actions = _run_async(coord.merge_code_actions(
+                file=file, start=pos, end=pos, only=[kind],
+            ))
+            if actions:
+                all_actions.extend(actions)
+                edit = _resolve_winner_edit(coord, actions[0])
+                if isinstance(edit, dict) and edit:
+                    captured_edits.append(edit)
         elapsed_ms = int((time.monotonic() - t0) * 1000)
-        if not actions:
+        if not all_actions:
             return build_failure_result(
                 code=ErrorCode.SYMBOL_NOT_FOUND,
                 stage="scalpel_inline",
@@ -845,8 +1266,21 @@ class ScalpelInlineTool(Tool):
                 preview_token=f"pv_inline_{int(time.time())}",
                 duration_ms=elapsed_ms,
             ).model_dump_json(indent=2)
-        # v1.6 P1: real-snapshot apply + checkpoint via the consolidated helper.
-        cid, _edit = apply_action_and_checkpoint(coord, actions[0])
+        merged_edit = _merge_workspace_edits(captured_edits) if captured_edits else {"changes": {}}
+        # v1.5 G4-7 — honor remove_definition=False by post-filtering
+        # multi-line empty-newText hunks (rust-analyzer's deletion shape).
+        if not remove_definition:
+            merged_edit = _filter_definition_deletion_hunks(merged_edit)
+        # v1.6 P1: capture pre-edit snapshot of the merged-and-filtered edit
+        # BEFORE applying so the checkpoint records honest pre-state.
+        if merged_edit and (merged_edit.get("changes") or merged_edit.get("documentChanges")):
+            snapshot = capture_pre_edit_snapshot(merged_edit)
+            _apply_workspace_edit_to_disk(merged_edit)
+        else:
+            snapshot = {}
+        cid = record_checkpoint_for_workspace_edit(
+            workspace_edit=merged_edit, snapshot=snapshot,
+        )
         return RefactorResult(
             applied=True,
             diagnostics_delta=_empty_diagnostics_delta(),
@@ -854,8 +1288,8 @@ class ScalpelInlineTool(Tool):
             duration_ms=elapsed_ms,
             lsp_ops=(LspOpStat(
                 method="textDocument/codeAction",
-                server=actions[0].provenance if actions else "unknown",
-                count=len(actions),
+                server=all_actions[0].provenance if all_actions else "unknown",
+                count=len(all_actions),
                 total_ms=elapsed_ms,
             ),),
         ).model_dump_json(indent=2)
@@ -900,14 +1334,18 @@ class ScalpelRenameTool(Tool):
         :param file: file containing the definition (or any reference).
         :param name_path: Serena name-path of the symbol (e.g. 'mod::Sym').
         :param new_name: replacement name.
-        :param also_in_strings: also rewrite string-literal occurrences.
+        :param also_in_strings: request rewriting string-literal occurrences.
+            **Not supported by ``textDocument/rename``** (LSP protocol limit;
+            v1.5 LO-1). When set, the response carries a ``warnings`` entry
+            pointing the caller at ``scalpel_replace_regex`` for string-literal
+            renames; the structured rename itself proceeds as normal.
         :param dry_run: preview only.
         :param preview_token: continuation from a prior dry-run.
         :param language: 'rust' or 'python'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
-        del also_in_strings, preview_token
+        del preview_token
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -980,21 +1418,45 @@ class ScalpelRenameTool(Tool):
             "workspace_edit": workspace_edit or {},
             "primary_server": "pylsp-rope" if lang == "python" else "rust-analyzer",
         }
+        # v1.5 LO-1: also_in_strings is unsupported by textDocument/rename
+        # (LSP protocol limitation — the request operates on identifier
+        # references, not string-literal contents). Surface this honestly
+        # via a warnings entry so the caller can route to scalpel_replace_regex.
+        rename_warnings: tuple[str, ...] = ()
+        if also_in_strings:
+            rename_warnings = (
+                "also_in_strings is unsupported by textDocument/rename "
+                "(LSP protocol limitation); use scalpel_replace_regex for "
+                "string-literal renames.",
+            )
         if dry_run:
             return RefactorResult(
                 applied=False, no_op=False,
                 diagnostics_delta=_empty_diagnostics_delta(),
                 preview_token=f"pv_rename_{int(time.time())}",
                 duration_ms=elapsed_ms,
+                warnings=rename_warnings,
             ).model_dump_json(indent=2)
+        # v1.5 post-G7-C — Rule-1 fix: route the WorkspaceEdit through the
+        # disk applier before recording the checkpoint. Prior to this
+        # call, ScalpelRenameTool.apply reported ``applied=True`` and
+        # captured the edit in a checkpoint but never mutated the
+        # filesystem (decorative facade — same class of bug the v1.5
+        # milestone targets). See deferred-items.md "Wave 4 discovery"
+        # for the regression history. Mirrors the pattern in
+        # ScalpelExtractTool / ScalpelInlineTool / ScalpelSplitFileTool.
+        wedit = merged_dict.get("workspace_edit", {}) or {}
+        if wedit:
+            _apply_workspace_edit_to_disk(wedit)
         cid = record_checkpoint_for_workspace_edit(
-            workspace_edit=merged_dict.get("workspace_edit", {}), snapshot={},
+            workspace_edit=wedit, snapshot={},
         )
         return RefactorResult(
             applied=True,
             diagnostics_delta=_empty_diagnostics_delta(),
             checkpoint_id=cid,
             duration_ms=elapsed_ms,
+            warnings=rename_warnings,
             lsp_ops=(LspOpStat(
                 method="textDocument/rename",
                 server=str(merged_dict.get("primary_server", "unknown")),
@@ -1043,6 +1505,14 @@ class ScalpelRenameTool(Tool):
                 diagnostics_delta=_empty_diagnostics_delta(),
                 preview_token=f"pv_rename_mod_{int(time.time())}",
             )
+        # v1.5 post-G7-C — Rule-1 fix: route the Rope-shaped WorkspaceEdit
+        # through the disk applier (which handles ``documentChanges``
+        # rename ops via _apply_resource_rename + ``edits`` via
+        # _apply_text_edits_to_file). Prior to this call, the
+        # python-module rename path captured the edit in a checkpoint
+        # but never moved the file or rewrote its importers.
+        if edit:
+            _apply_workspace_edit_to_disk(edit)
         cid = record_checkpoint_for_workspace_edit(edit, snapshot={})
         return RefactorResult(
             applied=True,
@@ -1164,8 +1634,27 @@ class ScalpelImportsOrganizeTool(Tool):
         :param language: 'rust' or 'python'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
+
+        v1.5 G4-9 (HI-10) — ``add_missing`` / ``remove_unused`` / ``reorder``
+        each map to a sub-kind dispatch:
+
+        * ``add_missing`` → ``quickfix.import``
+        * ``remove_unused`` → ``source.organizeImports.removeUnused``
+        * ``reorder`` → ``source.organizeImports.sortImports``
+
+        Per-flag dispatches are issued only for True flags; resulting
+        WorkspaceEdits are merged via :func:`_merge_workspace_edits`. All
+        three flags False short-circuits to a no-op (no LSP dispatch).
+        Sub-kinds the server doesn't advertise are silently skipped via
+        ``coord.supports_kind``.
+
+        v1.5 HI-13 — the LSP request range is now bracketed by
+        :func:`compute_file_range` (real EOF coordinates) rather than the
+        legacy ``(0,0)→(0,0)`` placeholder.
         """
-        del add_missing, remove_unused, reorder, preview_token
+        from solidlsp.util.file_range import compute_file_range
+
+        del preview_token
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         if not files:
             # Q4 boundary check is irrelevant when there are no files; emit no-op.
@@ -1188,23 +1677,59 @@ class ScalpelImportsOrganizeTool(Tool):
                 reason=f"Cannot infer language from {files[0]!r}; pass language=.",
                 recoverable=False,
             ).model_dump_json(indent=2)
+        # v1.5 G4-9 — build the sub-kind list per caller toggles. False
+        # flags omit the corresponding dispatch; all-False is no-op.
+        sub_kinds: list[str] = []
+        if remove_unused:
+            sub_kinds.append("source.organizeImports.removeUnused")
+        if reorder:
+            sub_kinds.append("source.organizeImports.sortImports")
+        if add_missing:
+            sub_kinds.append("quickfix.import")
+        if not sub_kinds:
+            return RefactorResult(
+                applied=False, no_op=True,
+                diagnostics_delta=_empty_diagnostics_delta(),
+            ).model_dump_json(indent=2)
         coord = coordinator_for_facade(language=lang, project_root=project_root)
         # Gate: skip when the responsible server does not advertise
-        # source.organizeImports (spec § 4.5 P4).
+        # source.organizeImports at all (spec § 4.5 P4). The umbrella kind
+        # gates the facade; per-sub-kind support is checked individually
+        # inside the dispatch loop and silently skipped when missing.
         if not coord.supports_kind(lang, "source.organizeImports"):
             return json.dumps(_capability_not_available_envelope(
                 language=lang, kind="source.organizeImports",
             ))
         t0 = time.monotonic()
         all_actions: list[Any] = []
+        captured_edits: list[dict[str, Any]] = []
         for f in files:
-            actions = _run_async(coord.merge_code_actions(
-                file=f,
-                start={"line": 0, "character": 0},
-                end={"line": 0, "character": 0},
-                only=["source.organizeImports"],
-            ))
-            all_actions.extend(actions)
+            try:
+                file_start, file_end = compute_file_range(f)
+            except (FileNotFoundError, OSError):
+                # G5-VERIFIED: degenerate range only used when the file
+                # is missing on disk; merge_code_actions then surfaces
+                # the read failure through the LSP layer rather than
+                # meaningfully bracketing text on a non-existent file.
+                file_start = {"line": 0, "character": 0}  # G5-VERIFIED
+                file_end = {"line": 0, "character": 0}  # G5-VERIFIED
+            for kind in sub_kinds:
+                # Per-sub-kind capability gate; servers that don't expose
+                # the granular kind (e.g. some pylsp builds) are skipped
+                # silently rather than raising.
+                if not coord.supports_kind(lang, kind):
+                    continue
+                actions = _run_async(coord.merge_code_actions(
+                    file=f,
+                    start=file_start,
+                    end=file_end,
+                    only=[kind],
+                ))
+                for action in actions or []:
+                    all_actions.append(action)
+                    edit = _resolve_winner_edit(coord, action)
+                    if isinstance(edit, dict) and edit:
+                        captured_edits.append(edit)
         elapsed_ms = int((time.monotonic() - t0) * 1000)
         if not all_actions:
             return RefactorResult(
@@ -1216,14 +1741,31 @@ class ScalpelImportsOrganizeTool(Tool):
         if engine != "auto":
             keep_provenance = _ENGINE_TO_PROVENANCE.get(engine)
             kept: list[Any] = []
-            for a in all_actions:
+            kept_edits: list[dict[str, Any]] = []
+            for a, e in zip(all_actions, captured_edits) if len(all_actions) == len(captured_edits) else []:
                 if a.provenance == keep_provenance:
                     kept.append(a)
+                    kept_edits.append(e)
                 else:
                     warnings.append(
                         f"engine={engine!r} discards action from {a.provenance!r}",
                     )
-            all_actions = kept
+            # When edits/actions length mismatched (some actions had no
+            # resolvable edit), fall back to filtering actions only and
+            # leave captured_edits as-is for the merge step below.
+            if kept or len(all_actions) == len(captured_edits):
+                all_actions = kept
+                captured_edits = kept_edits
+            else:
+                filtered: list[Any] = []
+                for a in all_actions:
+                    if a.provenance == keep_provenance:
+                        filtered.append(a)
+                    else:
+                        warnings.append(
+                            f"engine={engine!r} discards action from {a.provenance!r}",
+                        )
+                all_actions = filtered
         if dry_run:
             return RefactorResult(
                 applied=False, no_op=False,
@@ -1232,30 +1774,19 @@ class ScalpelImportsOrganizeTool(Tool):
                 duration_ms=elapsed_ms,
                 warnings=tuple(warnings),
             ).model_dump_json(indent=2)
-        # v1.6 P1: multi-action variant — capture pre-edit snapshots BEFORE
-        # any apply (so the snapshot reflects the true pre-state of every
-        # touched URI, not the post-state of an earlier sibling action),
-        # then apply each action's resolved edit, then record one merged
-        # checkpoint with the real snapshot.
-        merged_changes: dict[str, list[dict[str, Any]]] = {}
-        merged_snapshot: dict[str, str] = {}
-        resolved_edits: list[dict[str, Any]] = []
-        for a in all_actions:
-            edit = _resolve_winner_edit(coord, a)
-            if not (isinstance(edit, dict) and edit):
-                continue
-            for uri, content in capture_pre_edit_snapshot(edit).items():
-                # First pre-edit content wins so we don't overwrite the
-                # original-pre-state with a sibling action's intermediate state.
-                merged_snapshot.setdefault(uri, content)
-            resolved_edits.append(edit)
-        for edit in resolved_edits:
-            _apply_workspace_edit_to_disk(edit)
-            for uri, hunks in (edit.get("changes") or {}).items():
-                merged_changes.setdefault(uri, []).extend(hunks or [])
-        cid_edit = {"changes": merged_changes} if merged_changes else {"changes": {}}
+        # v1.5 multi-action variant — captured_edits were resolved upstream
+        # and engine-filtered alongside all_actions; merge them into a
+        # single edit so the checkpoint records every URI touched.
+        # v1.6 P1: capture pre-edit snapshot of the merged edit BEFORE
+        # applying so checkpoint-store rollback is honest about pre-state.
+        merged = _merge_workspace_edits(captured_edits) if captured_edits else {"changes": {}}
+        if merged and (merged.get("changes") or merged.get("documentChanges")):
+            snapshot = capture_pre_edit_snapshot(merged)
+            _apply_workspace_edit_to_disk(merged)
+        else:
+            snapshot = {}
         cid = record_checkpoint_for_workspace_edit(
-            workspace_edit=cid_edit, snapshot=merged_snapshot,
+            workspace_edit=merged, snapshot=snapshot,
         )
         return RefactorResult(
             applied=True,
@@ -1320,6 +1851,85 @@ def _capability_not_available_envelope(
 # ---------------------------------------------------------------------------
 
 
+def _select_candidate_action(
+    actions: list[Any],
+    *,
+    title_match: str | None,
+) -> tuple[Any | None, dict[str, object] | None]:
+    """v1.5 G1 — disambiguation policy for shared facade dispatchers.
+
+    Replaces the historical ``actions[0]`` blind selection with a three-step
+    policy. Returns ``(chosen_action, None)`` on success; ``(None, envelope)``
+    when ``title_match`` was requested but selection is ambiguous or empty.
+
+    Policy:
+
+    1. If ``title_match`` is supplied: filter actions by case-insensitive
+       substring match on ``.title``.
+
+       - 0 hits → return a ``MULTIPLE_CANDIDATES``-shaped envelope with
+         ``reason="no_candidate_matched_title_match"``.
+       - 1 hit  → return that action.
+       - ≥2 hits → return a ``MULTIPLE_CANDIDATES``-shaped envelope with
+         ``reason="multiple_candidates_matched_title_match"`` listing the
+         candidates so the caller can tighten the filter.
+
+    2. Otherwise (``title_match is None``): prefer the first action with
+       ``is_preferred=True``; fall back to ``actions[0]`` for the 17
+       pre-G1 callers that have not yet adopted ``title_match`` (status-quo
+       behavior, regression-protected by the existing test corpus).
+
+    The envelope carries ``status="skipped"`` (caller treats this as a
+    non-applied result) plus a ``candidates`` list of ``{id, title,
+    provenance}`` triples for debugging.
+    """
+    if not actions:
+        return None, None
+    if title_match is not None:
+        needle = title_match.casefold()
+        hits = [
+            a for a in actions
+            if isinstance(getattr(a, "title", None), str)
+            and needle in a.title.casefold()
+        ]
+        if len(hits) == 1:
+            return hits[0], None
+        # 0 hits or ≥2 hits → return the envelope.
+        if len(hits) == 0:
+            reason = "no_candidate_matched_title_match"
+            envelope_candidates = [
+                {
+                    "id": getattr(a, "id", None) or getattr(a, "action_id", None),
+                    "title": getattr(a, "title", None),
+                    "provenance": getattr(a, "provenance", None),
+                }
+                for a in actions
+            ]
+        else:
+            reason = "multiple_candidates_matched_title_match"
+            envelope_candidates = [
+                {
+                    "id": getattr(a, "id", None) or getattr(a, "action_id", None),
+                    "title": getattr(a, "title", None),
+                    "provenance": getattr(a, "provenance", None),
+                }
+                for a in hits
+            ]
+        envelope: dict[str, object] = {
+            "status": "skipped",
+            "code": ErrorCode.MULTIPLE_CANDIDATES.value,
+            "reason": reason,
+            "title_match": title_match,
+            "candidates": envelope_candidates,
+        }
+        return None, envelope
+    # title_match is None — preserve pre-G1 behavior.
+    for a in actions:
+        if bool(getattr(a, "is_preferred", False)):
+            return a, None
+    return actions[0], None
+
+
 def _dispatch_single_kind_facade(
     *,
     stage_name: str,
@@ -1330,6 +1940,7 @@ def _dispatch_single_kind_facade(
     dry_run: bool,
     language: Literal["rust", "python"] | None,
     server_label: str = "rust-analyzer",
+    title_match: str | None = None,
 ) -> str:
     """Shared dispatcher for Stage 3 facades that select a single code-action
     kind at a cursor ``position``.
@@ -1337,6 +1948,11 @@ def _dispatch_single_kind_facade(
     Caller is expected to have already invoked ``workspace_boundary_guard``
     and short-circuited on rejection (each Tool subclass does so directly so
     the safety call stays visible in ``inspect.getsource(cls.apply)``).
+
+    ``title_match`` (v1.5 G1): when supplied, runs the candidate-disambiguation
+    policy in :func:`_select_candidate_action`. Defaults to ``None`` so the
+    17 pre-G1 callers retain status-quo ``actions[0]`` behavior; G4-* leaves
+    migrate one Tool subclass at a time to pass a real ``title_match``.
     """
     lang = _infer_language(file, language)
     if lang not in ("rust", "python"):
@@ -1370,12 +1986,20 @@ def _dispatch_single_kind_facade(
             preview_token=f"pv_{stage_name}_{int(time.time())}",
             duration_ms=elapsed_ms,
         ).model_dump_json(indent=2)
+    # v1.5 G1 — candidate disambiguation policy. Returns an envelope when
+    # title_match is ambiguous; empty title_match preserves actions[0] for
+    # the 17 pre-G1 callers.
+    chosen, miss_envelope = _select_candidate_action(actions, title_match=title_match)
+    if miss_envelope is not None:
+        return json.dumps(miss_envelope)
     # v1.6 P1: real-snapshot apply + checkpoint via the consolidated helper.
-    # When the action wasn't tracked (synthetic ids in legacy tests, or when
-    # resolve failed) the helper returns ``("", {"changes": {}})`` and the
-    # facade still reports ``applied=True`` with an empty ``checkpoint_id``
-    # — the v0.2.0 contract for legacy fakes.
-    cid, _edit = apply_action_and_checkpoint(coord, actions[0])
+    # The helper resolves the winner edit, captures pre-edit snapshot of
+    # every URI BEFORE applying, applies, and records the checkpoint with
+    # the real snapshot. When resolve fails (synthetic ids in legacy tests)
+    # it falls back to ("", {"changes": {}}) so the facade still reports
+    # applied=True — the v0.2.0 contract for legacy fakes.
+    cid, _edit = apply_action_and_checkpoint(coord, chosen)
+
     return RefactorResult(
         applied=True,
         diagnostics_delta=_empty_diagnostics_delta(),
@@ -1451,6 +2075,19 @@ class ScalpelConvertModuleLayoutTool(Tool):
 
 _VISIBILITY_KIND = "refactor.rewrite.change_visibility"
 
+# v1.5 G4-4 — map caller's `target_visibility` enum to rust-analyzer's
+# stable code-action title format. The dispatcher's title-substring
+# disambiguator (G1) selects the matching action. Note: ``"pub"`` is a
+# substring of ``"pub(crate)"`` and ``"pub(super)"`` — when RA surfaces
+# multiple tiers and the caller asks for ``"pub"``, the G1 envelope
+# returns MULTIPLE_CANDIDATES so the caller can refine via a tighter tier.
+_VISIBILITY_TITLE_MATCH: dict[str, str] = {
+    "pub_crate": "pub(crate)",
+    "pub_super": "pub(super)",
+    "private": "private",
+    "pub": "pub",
+}
+
 
 class ScalpelChangeVisibilityTool(Tool):
     """PREFERRED: toggle a Rust item's visibility (pub / pub(crate) / pub(super) / private).
@@ -1475,15 +2112,21 @@ class ScalpelChangeVisibilityTool(Tool):
 
         :param file: source file containing the item.
         :param position: LSP cursor on the item keyword.
-        :param target_visibility: requested new visibility tier (informational —
-            rust-analyzer's assist offers a single rewrite per cursor).
+        :param target_visibility: requested new visibility tier. v1.5 G4-4
+            maps this to rust-analyzer's stable
+            ``Change visibility to <tier>`` title and threads the tier
+            string into the shared dispatcher's ``title_match`` so the
+            correct candidate is selected. ``target_visibility="pub"``
+            substring-matches ``pub(crate)`` / ``pub(super)`` too — when
+            multiple tiers surface, the G1 ``MULTIPLE_CANDIDATES`` envelope
+            is returned and the caller can refine to a specific tier.
         :param dry_run: preview only.
         :param preview_token: continuation from a prior dry-run.
         :param language: 'rust' or 'python'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
-        del preview_token, target_visibility
+        del preview_token
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -1496,6 +2139,7 @@ class ScalpelChangeVisibilityTool(Tool):
             file=file, position=position, kind=_VISIBILITY_KIND,
             project_root=project_root,
             dry_run=dry_run, language=language,
+            title_match=_VISIBILITY_TITLE_MATCH.get(target_visibility),
         )
 
 
@@ -1504,6 +2148,17 @@ _TIDY_STRUCTURE_KINDS: tuple[str, ...] = (
     "refactor.rewrite.sort_items",
     "refactor.rewrite.reorder_fields",
 )
+
+# v1.5 G6 ME-1 — per-scope filter. ``file`` keeps the all-three behavior
+# (status quo). ``type`` narrows to ``reorder_fields`` (struct/enum field
+# ordering). ``impl`` narrows to ``reorder_impl_items`` (impl-block item
+# ordering). ``sort_items`` only ever applies at the file scope; including
+# it under ``type``/``impl`` would dispatch beyond the cursor's container.
+_TIDY_STRUCTURE_SCOPE_TO_KINDS: dict[str, tuple[str, ...]] = {
+    "file": _TIDY_STRUCTURE_KINDS,
+    "type": ("refactor.rewrite.reorder_fields",),
+    "impl": ("refactor.rewrite.reorder_impl_items",),
+}
 
 
 class ScalpelTidyStructureTool(Tool):
@@ -1529,8 +2184,11 @@ class ScalpelTidyStructureTool(Tool):
         """Reorder impl items, sort items, and reorder struct fields. Composite.
 
         :param file: source file to tidy.
-        :param scope: 'file' (whole file), 'type' (a struct/enum at position),
-            'impl' (an impl block at position).
+        :param scope: 'file' (whole file — dispatches all 3 kinds),
+            'type' (a struct/enum at position — only reorder_fields),
+            'impl' (an impl block at position — only reorder_impl_items).
+            v1.5 G6 ME-1 wires scope into a per-kind filter so the LSP
+            request is bracketed to the caller's intent.
         :param position: cursor when scope='type' or 'impl'.
         :param dry_run: preview only.
         :param preview_token: continuation from a prior dry-run.
@@ -1555,26 +2213,56 @@ class ScalpelTidyStructureTool(Tool):
                 recoverable=False,
             ).model_dump_json(indent=2)
         coord = coordinator_for_facade(language=lang, project_root=project_root)
-        cursor = position or {"line": 0, "character": 0}
-        # v1.6 P5 — small threading: scope restricts the multi-kind loop.
-        # ``scope='type'`` -> only reorder_fields. ``scope='impl'`` -> only
-        # reorder_impl_items. ``scope='file'`` (default) keeps the full
-        # 3-kind catalogue.
-        if scope == "type":
-            scope_kinds: tuple[str, ...] = ("refactor.rewrite.reorder_fields",)
-        elif scope == "impl":
-            scope_kinds = ("refactor.rewrite.reorder_impl_items",)
+        # v1.5 G5 — replace the `(0,0)` cursor fallback with an honest
+        # range derivation per ``scope``:
+        #   * scope='file'  → whole-file range via compute_file_range.
+        #   * scope ∈ {type, impl} → caller-supplied ``position`` is
+        #     required (failing loud beats silently routing the LSP
+        #     against the file head and picking the wrong enclosing
+        #     symbol). Surface INVALID_ARGUMENT honestly.
+        if scope == "file":
+            from solidlsp.util.file_range import compute_file_range
+
+            try:
+                file_start, file_end = compute_file_range(file)
+            except (FileNotFoundError, OSError):
+                # G5-VERIFIED: degenerate range only used when the file
+                # is missing on disk; merge_code_actions surfaces the
+                # read failure through the LSP layer below.
+                file_start = {"line": 0, "character": 0}  # G5-VERIFIED
+                file_end = {"line": 0, "character": 0}  # G5-VERIFIED
+            range_start = file_start
+            range_end = file_end
         else:
-            scope_kinds = _TIDY_STRUCTURE_KINDS
+            if position is None:
+                return build_failure_result(
+                    code=ErrorCode.INVALID_ARGUMENT,
+                    stage="scalpel_tidy_structure",
+                    reason=(
+                        f"scope={scope!r} requires a `position` "
+                        f"identifying the target type/impl; pass "
+                        f"position={{'line':L,'character':C}}."
+                    ),
+                    recoverable=False,
+                ).model_dump_json(indent=2)
+            range_start = position
+            range_end = position
+        # v1.5 G6 ME-1 — scope filter: 'file' → all 3, 'type' → reorder_fields,
+        # 'impl' → reorder_impl_items. Unknown scope falls back to 'file' kinds.
+        # v1.6 P5 reuses the same scope-restriction intent on top of v1.5's
+        # honest range derivation.
+        kinds_for_scope = _TIDY_STRUCTURE_SCOPE_TO_KINDS.get(
+            scope, _TIDY_STRUCTURE_KINDS,
+        )
         t0 = time.monotonic()
         all_actions: list[Any] = []
-        for kind in scope_kinds:
+        for kind in kinds_for_scope:
             # Gate: skip individual kinds not advertised by the server
             # (spec § 4.5 P4 — per-kind gate inside multi-kind loop).
             if not coord.supports_kind(lang, kind):
                 continue
             actions = _run_async(coord.merge_code_actions(
-                file=file, start=cursor, end=cursor, only=[kind],
+                file=file, start=range_start, end=range_end, only=[kind],
             ))
             all_actions.extend(actions)
         elapsed_ms = int((time.monotonic() - t0) * 1000)
@@ -1716,16 +2404,21 @@ class ScalpelChangeReturnTypeTool(Tool):
 
         :param file: source file containing the function.
         :param position: LSP cursor on the ``fn`` keyword or return-type token.
-        :param new_return_type: replacement type expression (informational —
-            rust-analyzer offers a single rewrite per cursor; the target type
-            is selected by the assist).
+        :param new_return_type: replacement type expression. v1.5 G4-1 wires
+            this into the shared dispatcher's ``title_match`` so rust-analyzer's
+            ``Change return type to <T>`` action is selected by substring
+            match against the caller's request. When the assist's surfaced
+            rewrite does not match this type, the response is the G1
+            ``MULTIPLE_CANDIDATES`` envelope (``status="skipped"`` /
+            ``reason="no_candidate_matched_title_match"``) — caller can retry
+            at a different cursor or accept rust-analyzer's suggested type.
         :param dry_run: preview only.
         :param preview_token: continuation from a prior dry-run.
         :param language: 'rust' or 'python'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
-        del preview_token, new_return_type
+        del preview_token
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -1738,6 +2431,7 @@ class ScalpelChangeReturnTypeTool(Tool):
             file=file, position=position, kind=_RETURN_TYPE_KIND,
             project_root=project_root,
             dry_run=dry_run, language=language,
+            title_match=new_return_type,
         )
 
 
@@ -1806,16 +2500,21 @@ class ScalpelExtractLifetimeTool(Tool):
 
         :param file: source file containing the reference.
         :param position: LSP cursor on the reference token.
-        :param lifetime_name: requested name for the new lifetime (without
-            leading apostrophe). Informational — rust-analyzer's assist
-            picks a non-conflicting name automatically.
+        :param lifetime_name: requested name for the new lifetime (with
+            leading apostrophe, e.g. ``"'session"``). v1.5 G4-2 wires this
+            into the shared dispatcher's ``title_match``: rust-analyzer's
+            assist auto-picks a fresh lifetime; if RA's surfaced title does
+            not include ``lifetime_name`` (substring match), the response
+            is the G1 ``MULTIPLE_CANDIDATES`` envelope
+            (``status="skipped"`` / ``reason="no_candidate_matched_title_match"``)
+            rather than a silent rewrite using RA's chosen name.
         :param dry_run: preview only.
         :param preview_token: continuation from a prior dry-run.
         :param language: 'rust' or 'python'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
-        del preview_token, lifetime_name
+        del preview_token
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -1828,6 +2527,7 @@ class ScalpelExtractLifetimeTool(Tool):
             file=file, position=position, kind=_LIFETIME_KIND,
             project_root=project_root,
             dry_run=dry_run, language=language,
+            title_match=lifetime_name,
         )
 
 
@@ -1901,15 +2601,20 @@ class ScalpelGenerateTraitImplScaffoldTool(Tool):
 
         :param file: source file containing the type definition.
         :param position: LSP cursor on the type name.
-        :param trait_name: trait to scaffold (informational — rust-analyzer's
-            assist offers a single trait per cursor).
+        :param trait_name: trait to scaffold (e.g. ``"Display"``). v1.5 G4-3
+            wires this REQUIRED argument into the shared dispatcher's
+            ``title_match`` so rust-analyzer's stable
+            ``Implement <trait_name> for <Type>`` action is selected by
+            substring match against the caller's request. When no surfaced
+            action matches, the response is the G1 ``MULTIPLE_CANDIDATES``
+            envelope rather than silent scaffolding of an unrelated trait.
         :param dry_run: preview only.
         :param preview_token: continuation from a prior dry-run.
         :param language: 'rust' or 'python'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
-        del preview_token, trait_name
+        del preview_token
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -1922,6 +2627,7 @@ class ScalpelGenerateTraitImplScaffoldTool(Tool):
             file=file, position=position, kind=_GENERATE_TRAIT_IMPL_KIND,
             project_root=project_root,
             dry_run=dry_run, language=language,
+            title_match=trait_name,
         )
 
 
@@ -2027,8 +2733,10 @@ class ScalpelExpandMacroTool(Tool):
                 reason="expand_macro is rust-analyzer-only.",
                 recoverable=False,
             ).model_dump_json(indent=2)
-        # v1.6 P5 — honor dry_run by short-circuiting BEFORE the
-        # rust-analyzer expandMacro probe.
+        # v1.5 G2 (HI-12 safety) / v1.6 P5: honor dry_run BEFORE invoking
+        # the LSP. rust-analyzer's expandMacro is read-only on disk but
+        # kicks off background work; dry_run=True must be a true
+        # no-side-effect preview.
         if dry_run:
             return RefactorResult(
                 applied=False, no_op=False,
@@ -2107,13 +2815,15 @@ class ScalpelVerifyAfterRefactorTool(Tool):
                 reason="verify_after_refactor is rust-analyzer-only.",
                 recoverable=False,
             ).model_dump_json(indent=2)
-        # v1.6 P5 — honor dry_run by short-circuiting BEFORE the
-        # runnables / flycheck probes.
+        # v1.5 G2 (HI-12 safety) / v1.6 P5: honor dry_run BEFORE invoking
+        # flycheck and runnables. flycheck triggers ``cargo check`` on disk
+        # and runnables kicks off background work; dry_run=True must
+        # short-circuit those side effects entirely.
         if dry_run:
             return RefactorResult(
                 applied=False, no_op=False,
                 diagnostics_delta=_empty_diagnostics_delta(),
-                preview_token=f"pv_verify_{int(time.time())}",
+                preview_token=f"pv_verify_after_refactor_{int(time.time())}",
                 duration_ms=0,
             ).model_dump_json(indent=2)
         coord = coordinator_for_facade(language="rust", project_root=project_root)
@@ -2155,17 +2865,30 @@ def _python_dispatch_single_kind(
     project_root: Path,
     dry_run: bool,
     server_label: str = "pylsp-rope",
+    title_match: str | None = None,
+    edit_postprocessor: Any = None,
     action_filter: Any = None,
+    filter_miss_token: str | None = None,
 ) -> str:
     """Python-specific shared dispatcher; mirrors ``_dispatch_single_kind_facade``
     but pins ``language='python'`` and labels lsp_ops by the rope/ruff/pyright
     server. Used by Wave A (rope) and Wave B (ruff / basedpyright).
 
-    v1.6 P5 — ``action_filter`` is an optional callable
-    ``(action) -> bool`` applied to the merged action list before the
-    dispatch. Used by ``scalpel_generate_from_undefined`` (target_kind
-    title-prefix filter) and ``scalpel_ignore_diagnostic`` (rule
-    diagnostic filter)."""
+    ``title_match`` (v1.5 G1): see :func:`_select_candidate_action`. Defaults
+    to ``None`` so the pre-G1 callers retain their status-quo behavior.
+
+    ``edit_postprocessor`` (v1.5 G6 ME-3): optional callable
+    ``(workspace_edit: dict) -> dict`` invoked between resolve and apply.
+    Used by callers that need to substitute auto-generated names (e.g.
+    ``introduce_parameter`` rewrites rope's ``p`` → caller's
+    ``parameter_name``). Defaults to ``None`` (no-op).
+
+    ``action_filter`` (v1.6 P5): optional callable ``(action) -> bool``
+    applied to the merged action list before dispatch. Used by
+    ``scalpel_generate_from_undefined`` (target_kind title-prefix filter)
+    and ``scalpel_ignore_diagnostic`` (rule diagnostic filter). Defaults
+    to ``None``.
+    """
     coord = coordinator_for_facade(language="python", project_root=project_root)
     if not coord.supports_kind("python", kind):
         return json.dumps(_capability_not_available_envelope(language="python", kind=kind))
@@ -2173,10 +2896,34 @@ def _python_dispatch_single_kind(
     actions = _run_async(coord.merge_code_actions(
         file=file, start=position, end=position, only=[kind],
     ))
+    pre_filter_actions = list(actions)
     if action_filter is not None:
         actions = [a for a in actions if action_filter(a)]
     elapsed_ms = int((time.monotonic() - t0) * 1000)
     if not actions:
+        # v1.5 G4-10 acid contract: when the caller supplied
+        # ``filter_miss_token`` (e.g. a ruff/pyright rule code) AND the
+        # LSP returned candidates that the action_filter all rejected,
+        # the caller's filter token was not honored by any candidate —
+        # surface the SKIPPED envelope rather than SYMBOL_NOT_FOUND so
+        # callers can distinguish "filter mismatch" from "no candidates
+        # at cursor".
+        if filter_miss_token is not None and pre_filter_actions:
+            envelope = {
+                "status": "skipped",
+                "code": ErrorCode.MULTIPLE_CANDIDATES.value,
+                "reason": "no_candidate_matched_title_match",
+                "title_match": filter_miss_token,
+                "candidates": [
+                    {
+                        "id": getattr(a, "id", None) or getattr(a, "action_id", None),
+                        "title": getattr(a, "title", None),
+                        "provenance": getattr(a, "provenance", None),
+                    }
+                    for a in pre_filter_actions
+                ],
+            }
+            return json.dumps(envelope)
         return build_failure_result(
             code=ErrorCode.SYMBOL_NOT_FOUND,
             stage=stage_name,
@@ -2189,8 +2936,34 @@ def _python_dispatch_single_kind(
             preview_token=f"pv_{stage_name}_{int(time.time())}",
             duration_ms=elapsed_ms,
         ).model_dump_json(indent=2)
-    # v1.6 P1: real-snapshot apply + checkpoint via the consolidated helper.
-    cid, _edit = apply_action_and_checkpoint(coord, actions[0])
+    # v1.5 G1 — candidate disambiguation policy. See _select_candidate_action.
+    chosen, miss_envelope = _select_candidate_action(actions, title_match=title_match)
+    if miss_envelope is not None:
+        return json.dumps(miss_envelope)
+    # v1.6 P1: route the common case through apply_action_and_checkpoint
+    # so the v1.6 P5 drift-CI tests can patch a single function and observe
+    # the post-filter chosen action. v1.5 G6 ME-3 (edit_postprocessor) needs
+    # to inject between resolve and apply, so it falls through to the
+    # explicit triplet.
+    if edit_postprocessor is None:
+        cid, _applied_edit = apply_action_and_checkpoint(coord, chosen)
+    else:
+        # v1.5 G6 ME-3: optional edit_postprocessor mutates the resolved
+        # edit text (e.g. introduce_parameter rewrites rope's ``p`` →
+        # caller's ``parameter_name``) BEFORE we capture the snapshot —
+        # the postprocessor only mutates newText, not URIs, so pre-edit
+        # content stays accurate.
+        workspace_edit = _resolve_winner_edit(coord, chosen)
+        if isinstance(workspace_edit, dict) and workspace_edit:
+            workspace_edit = edit_postprocessor(workspace_edit)
+            snapshot = capture_pre_edit_snapshot(workspace_edit)
+            _apply_workspace_edit_to_disk(workspace_edit)
+        else:
+            workspace_edit = {"changes": {}}
+            snapshot = {}
+        cid = record_checkpoint_for_workspace_edit(
+            workspace_edit=workspace_edit, snapshot=snapshot,
+        )
     return RefactorResult(
         applied=True,
         diagnostics_delta=_empty_diagnostics_delta(),
@@ -2349,14 +3122,18 @@ class ScalpelIntroduceParameterTool(Tool):
 
         :param file: Python source file.
         :param position: LSP cursor on the expression.
-        :param parameter_name: requested parameter name.
+        :param parameter_name: requested parameter name. v1.5 G6 ME-3
+            substitutes this for rope's auto-generated names (``p`` /
+            ``param``) inside the emitted ``newText`` hunks via
+            :func:`_substitute_introduced_parameter_name`. Pre-existing
+            source surrounding the hunks is untouched.
         :param dry_run: preview only.
         :param preview_token: continuation from a prior dry-run.
         :param language: 'rust' or 'python'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
-        del preview_token, parameter_name, language
+        del preview_token, language
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -2364,10 +3141,17 @@ class ScalpelIntroduceParameterTool(Tool):
         )
         if guard is not None:
             return guard.model_dump_json(indent=2)
+
+        def _postproc(edit: dict[str, Any]) -> dict[str, Any]:
+            return _substitute_introduced_parameter_name(
+                edit, parameter_name=parameter_name,
+            )
+
         return _python_dispatch_single_kind(
             stage_name="scalpel_introduce_parameter",
             file=file, position=position, kind=_INTRODUCE_PARAMETER_KIND,
             project_root=project_root, dry_run=dry_run,
+            edit_postprocessor=_postproc if parameter_name not in ("", "p") else None,
         )
 
 
@@ -2377,6 +3161,18 @@ class ScalpelIntroduceParameterTool(Tool):
 
 
 _GENERATE_FROM_UNDEFINED_KIND = "quickfix.generate"
+
+# v1.5 G4-5 — per-target-kind LSP filter for ScalpelGenerateFromUndefinedTool.
+# Modern rope advertises granular ``quickfix.generate.<kind>`` kinds; the
+# facade dispatches the granular kind when supported. Older rope versions
+# only advertise the flat ``quickfix.generate`` — the facade falls back to
+# the flat kind plus ``title_match=target_kind`` so rope's per-kind
+# candidate title is selected via substring match (forward-compat).
+_GENERATE_FROM_UNDEFINED_KIND_BY_TARGET: dict[str, str] = {
+    "function": "quickfix.generate.function",
+    "class": "quickfix.generate.class",
+    "variable": "quickfix.generate.variable",
+}
 
 
 class ScalpelGenerateFromUndefinedTool(Tool):
@@ -2400,7 +3196,12 @@ class ScalpelGenerateFromUndefinedTool(Tool):
 
         :param file: Python source file containing the undefined reference.
         :param position: LSP cursor on the undefined name.
-        :param target_kind: kind of stub to generate.
+        :param target_kind: kind of stub to generate. v1.5 G4-5 wires this
+            into a per-kind dispatch: when rope advertises
+            ``quickfix.generate.<target_kind>`` (modern rope) the granular
+            kind is sent; otherwise the facade falls back to the flat
+            ``quickfix.generate`` + ``title_match=target_kind`` so rope's
+            per-kind candidate is selected by substring title match.
         :param dry_run: preview only.
         :param preview_token: continuation from a prior dry-run.
         :param language: 'rust' or 'python'; inferred from extension when None.
@@ -2415,19 +3216,39 @@ class ScalpelGenerateFromUndefinedTool(Tool):
         )
         if guard is not None:
             return guard.model_dump_json(indent=2)
-        # v1.6 P5 — small threading: post-merge title-prefix filter so
-        # ``target_kind='function'`` discards 'class'/'variable' actions
-        # that share the ``quickfix.generate`` umbrella kind.
-        target_prefix = (target_kind or "").lower()
+        # v1.5 G6: prefer the granular ``quickfix.generate.<target_kind>``
+        # kind when modern rope advertises it (one-step dispatch with the
+        # exact action returned).
+        granular_kind = _GENERATE_FROM_UNDEFINED_KIND_BY_TARGET.get(target_kind)
+        if granular_kind is not None:
+            coord = coordinator_for_facade(
+                language="python", project_root=project_root,
+            )
+            if coord.supports_kind("python", granular_kind):
+                return _python_dispatch_single_kind(
+                    stage_name="scalpel_generate_from_undefined",
+                    file=file, position=position, kind=granular_kind,
+                    project_root=project_root, dry_run=dry_run,
+                )
+        # Fallback: flat ``quickfix.generate`` umbrella kind. v1.5 picks the
+        # candidate via title_match; v1.6 P5 adds an action_filter that
+        # discards sibling 'class'/'variable' actions before dispatch.
+        # Filter uses substring match (case-insensitive) so it accepts BOTH
+        # rope-style titles (``"Generate class compute"``) and v1.6 P5
+        # fixture titles (``"class: generate compute"``). A startswith
+        # check would over-reject the rope-style canon — the v1.5 G4-5
+        # acid-test fixture uses real rope title shape.
+        target_substr = (target_kind or "").lower()
         def _title_prefix_filter(action: Any) -> bool:
             title = getattr(action, "title", "") or ""
-            return title.lower().startswith(target_prefix)
+            return target_substr in title.lower()
 
         return _python_dispatch_single_kind(
             stage_name="scalpel_generate_from_undefined",
             file=file, position=position, kind=_GENERATE_FROM_UNDEFINED_KIND,
             project_root=project_root, dry_run=dry_run,
-            action_filter=_title_prefix_filter if target_prefix else None,
+            title_match=target_kind,
+            action_filter=_title_prefix_filter if target_substr else None,
         )
 
 
@@ -2460,14 +3281,19 @@ class ScalpelAutoImportSpecializedTool(Tool):
 
         :param file: Python source file containing the undefined name.
         :param position: LSP cursor on the undefined name.
-        :param symbol_name: the unresolved name (informational).
+        :param symbol_name: the unresolved name. v1.5 G6 ME-2 threads this
+            into the shared dispatcher's ``title_match`` substring so the
+            ``from <pkg> import <symbol_name>`` candidate selected by rope
+            matches the caller's intent. When no candidate's title contains
+            ``symbol_name`` the dispatcher returns the ``MULTIPLE_CANDIDATES``
+            INPUT_NOT_HONORED envelope and the file is left untouched.
         :param dry_run: preview only.
         :param preview_token: continuation from a prior dry-run.
         :param language: 'rust' or 'python'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
-        del preview_token, symbol_name, language
+        del preview_token, language
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -2479,6 +3305,7 @@ class ScalpelAutoImportSpecializedTool(Tool):
             stage_name="scalpel_auto_import_specialized",
             file=file, position=position, kind=_AUTO_IMPORT_KIND,
             project_root=project_root, dry_run=dry_run,
+            title_match=symbol_name,
         )
 
 
@@ -2499,22 +3326,29 @@ class ScalpelFixLintsTool(Tool):
         language: Literal["rust", "python"] | None = None,
         allow_out_of_workspace: bool = False,
     ) -> str:
-        """Apply ruff's full set of auto-fixable lints. Closes E13-py dedup.
+        """Apply ruff's auto-fixable lints (closes E13-py dedup).
 
         ``source.fixAll.ruff`` covers I001 (duplicate-import removal) and the
         rest of ruff's auto-fixable rule set. Use ``scalpel_imports_organize``
         for sort-only behaviour without lint application.
 
         :param file: Python source file.
-        :param rules: optional ruff rule allow-list (informational; ruff's
-            auto-fix selection is driven by its own config today).
+        :param rules: optional ruff rule allow-list. v1.5 G4-8 wires this
+            via per-rule dispatch: when supplied, the facade dispatches one
+            ``source.fixAll.ruff`` per rule with
+            ``arguments=[{"select": [<rule>]}]`` and merges the resulting
+            WorkspaceEdits via :func:`_merge_workspace_edits`. ``None``
+            preserves the full auto-fix-all behavior with one dispatch and
+            no ``select`` argument.
         :param dry_run: preview only.
         :param preview_token: continuation from a prior dry-run.
         :param language: 'rust' or 'python'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
         """
-        del preview_token, rules, language
+        from solidlsp.util.file_range import compute_file_range
+
+        del preview_token, language
         project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
         guard = workspace_boundary_guard(
             file=file, project_root=project_root,
@@ -2529,15 +3363,52 @@ class ScalpelFixLintsTool(Tool):
             return json.dumps(_capability_not_available_envelope(
                 language="python", kind=_FIX_LINTS_KIND,
             ))
+        # v1.5 G4-8 + HI-13 — replace (0,0)→(0,0) degenerate end with the
+        # real file end via compute_file_range so the LSP brackets the
+        # whole file. Falls back gracefully on FileNotFound (caller may
+        # have created an in-memory path).
+        try:
+            file_start, file_end = compute_file_range(file)
+        except (FileNotFoundError, OSError):
+            # G5-VERIFIED: degenerate range only used when the file is
+            # missing on disk; the LSP request below then surfaces the
+            # read failure rather than meaningfully bracketing text.
+            file_start = {"line": 0, "character": 0}  # G5-VERIFIED
+            file_end = {"line": 0, "character": 0}  # G5-VERIFIED
         t0 = time.monotonic()
-        actions = _run_async(coord.merge_code_actions(
-            file=file,
-            start={"line": 0, "character": 0},
-            end={"line": 0, "character": 0},
-            only=[_FIX_LINTS_KIND],
-        ))
+        all_actions: list[Any] = []
+        captured_edits: list[dict[str, Any]] = []
+        if rules:
+            # v1.5 G4-8 — per-rule dispatch.
+            for rule in rules:
+                actions_per_rule = _run_async(coord.merge_code_actions(
+                    file=file,
+                    start=file_start,
+                    end=file_end,
+                    only=[_FIX_LINTS_KIND],
+                    arguments=[{"select": [rule]}],
+                ))
+                for action in actions_per_rule or []:
+                    all_actions.append(action)
+                    edit = _resolve_winner_edit(coord, action)
+                    if isinstance(edit, dict) and edit:
+                        captured_edits.append(edit)
+        else:
+            # Full auto-fix path — preserve today's single-dispatch behavior.
+            actions = _run_async(coord.merge_code_actions(
+                file=file,
+                start=file_start,
+                end=file_end,
+                only=[_FIX_LINTS_KIND],
+            ))
+            for action in actions or []:
+                all_actions.append(action)
+            if all_actions:
+                edit = _resolve_winner_edit(coord, all_actions[0])
+                if isinstance(edit, dict) and edit:
+                    captured_edits.append(edit)
         elapsed_ms = int((time.monotonic() - t0) * 1000)
-        if not actions:
+        if not all_actions:
             return RefactorResult(
                 applied=False, no_op=True,
                 diagnostics_delta=_empty_diagnostics_delta(),
@@ -2550,8 +3421,20 @@ class ScalpelFixLintsTool(Tool):
                 preview_token=f"pv_fix_lints_{int(time.time())}",
                 duration_ms=elapsed_ms,
             ).model_dump_json(indent=2)
-        # v1.6 P1: real-snapshot apply + checkpoint via the consolidated helper.
-        cid, _edit = apply_action_and_checkpoint(coord, actions[0])
+        # v1.5 multi-file fix-lints: captured_edits collected per-file
+        # upstream; merge them into a single edit so the checkpoint
+        # records every URI touched.
+        # v1.6 P1: capture pre-edit snapshot of the merged edit BEFORE
+        # applying so checkpoint-store rollback is honest about pre-state.
+        merged = _merge_workspace_edits(captured_edits) if captured_edits else {"changes": {}}
+        if merged and (merged.get("changes") or merged.get("documentChanges")):
+            snapshot = capture_pre_edit_snapshot(merged)
+            _apply_workspace_edit_to_disk(merged)
+        else:
+            snapshot = {}
+        cid = record_checkpoint_for_workspace_edit(
+            workspace_edit=merged, snapshot=snapshot,
+        )
         return RefactorResult(
             applied=True,
             diagnostics_delta=_empty_diagnostics_delta(),
@@ -2559,7 +3442,7 @@ class ScalpelFixLintsTool(Tool):
             duration_ms=elapsed_ms,
             lsp_ops=(LspOpStat(
                 method="textDocument/codeAction",
-                server="ruff", count=len(actions), total_ms=elapsed_ms,
+                server="ruff", count=len(all_actions), total_ms=elapsed_ms,
             ),),
         ).model_dump_json(indent=2)
 
@@ -2599,6 +3482,19 @@ class ScalpelIgnoreDiagnosticTool(Tool):
         :param language: 'rust' or 'python'; inferred from extension when None.
         :param allow_out_of_workspace: skip workspace-boundary check.
         :return: JSON RefactorResult.
+
+        v1.5 G4-10 (HI-11) — ``rule`` is now threaded into the shared
+        dispatcher's ``title_match`` substring. Ruff and basedpyright both
+        embed the rule code in their quickfix titles
+        (``"Disable F401: unused-import"`` / ``"Pyright: ignore reportMissingImports"``),
+        so a substring match against ``rule`` is the correct disambiguator
+        when multiple rule-specific quickfixes are returned at the same
+        cursor. When no candidate's title contains ``rule``, the
+        dispatcher returns a ``MULTIPLE_CANDIDATES`` envelope with
+        ``status='skipped'`` and ``reason='no_candidate_matched_title_match'``;
+        the file is left untouched. Closes the silent gap where the
+        LSP-first quickfix was applied (silencing whichever rule LSP
+        returned first, not the one caller named).
         """
         del preview_token, language
         kind = _IGNORE_DIAGNOSTIC_KIND_BY_TOOL.get(tool_name)
@@ -2617,23 +3513,28 @@ class ScalpelIgnoreDiagnosticTool(Tool):
         if guard is not None:
             return guard.model_dump_json(indent=2)
         server_label = "basedpyright" if tool_name == "pyright" else "ruff"
-        # v1.6 P5 — small threading: post-merge filter so ``rule`` selects
-        # the action whose attached diagnostic carries the matching code.
+        # v1.5 G4-10 (HI-11) + v1.6 P5: post-merge filter selects actions
+        # matching ``rule`` via EITHER (a) diagnostic.code (the precise
+        # path on real LSP responses) OR (b) action.title substring (the
+        # path used by older fixtures and by some servers that don't
+        # attach diagnostics to the quickfix action). The union shape
+        # honors both v1.5's title-match contract and v1.6's diagnostic-code
+        # threading without forcing callers to choose.
         rule_token = (rule or "").strip()
         def _rule_filter(action: Any) -> bool:
             if not rule_token:
                 return True
+            # Match (a): diagnostic.code-based check (v1.6 P5 mechanism).
             diags = getattr(action, "diagnostics", None) or ()
             for d in diags:
-                # Diagnostics may be dicts (LSP) or pydantic models;
-                # try .code/.source attribute access first, fall back to
-                # mapping access.
                 code = getattr(d, "code", None)
                 if code is None and isinstance(d, dict):
                     code = d.get("code")
                 if str(code) == rule_token:
                     return True
-            return False
+            # Match (b): action.title substring check (v1.5 G4-10 mechanism).
+            title = getattr(action, "title", "") or ""
+            return rule_token in title
 
         return _python_dispatch_single_kind(
             stage_name="scalpel_ignore_diagnostic",
@@ -2641,6 +3542,7 @@ class ScalpelIgnoreDiagnosticTool(Tool):
             project_root=project_root, dry_run=dry_run,
             server_label=server_label,
             action_filter=_rule_filter if rule_token else None,
+            filter_miss_token=rule_token if rule_token else None,
         )
 
 
@@ -3331,15 +4233,22 @@ def _java_generate_dispatch(
         file=file, name_path=class_name_path,
         project_root=str(project_root),
     ))
+    # v1.5 G6 ME-6 — close the last HI-13 (0,0)→(0,0) site. Previously the
+    # facade silently fell back to a (0,0)→(0,0) range when the class
+    # symbol was unresolvable, which could route the generate against the
+    # wrong enclosing class on multi-class files. Surface SYMBOL_NOT_FOUND
+    # honestly so the caller can fix ``class_name_path``.
     if rng is None:
-        # Fallback: dispatch against the file's leading line; jdtls's
-        # source.generate kinds operate against the enclosing class regardless
-        # of cursor position, so a (0,0)-(0,0) range is acceptable when the
-        # class symbol is unresolvable (e.g. mocked-out coordinator in tests).
-        rng = {
-            "start": {"line": 0, "character": 0},
-            "end": {"line": 0, "character": 0},
-        }
+        return build_failure_result(
+            code=ErrorCode.SYMBOL_NOT_FOUND,
+            stage=stage_name,
+            reason=(
+                f"Could not resolve class_name_path={class_name_path!r} in "
+                f"{file!r}. The (0,0)→(0,0) fallback was removed in v1.5 G6 "
+                f"ME-6; pass a class_name_path that find_symbol_range can "
+                f"locate."
+            ),
+        ).model_dump_json(indent=2)
     if not coord.supports_kind("java", kind):
         return json.dumps(_capability_not_available_envelope(
             language="java", kind=kind, server_id=server_label,
@@ -3407,8 +4316,14 @@ class ScalpelGenerateConstructorTool(Tool):
 
         :param file: target ``.java`` file.
         :param class_name_path: LSP name-path of the class.
-        :param include_fields: optional list of field names; defaults to all
-            non-static fields (jdtls applies its built-in default).
+        :param include_fields: optional list of field names; ``None``
+            (the default) preserves jdtls's built-in default of all
+            non-static fields. v1.5 G6 ME-4 — when a non-empty list is
+            supplied the facade returns an INPUT_NOT_HONORED envelope
+            (``status='skipped'`` / reason mentions ``include_fields``)
+            because jdtls's per-field selection is exposed via an
+            interactive picker that is not plumbed over the wire in
+            v1.5 P2. Wiring the picker is a Phase 2.5 enhancement.
         :param preview: when True, returns a WorkspaceEdit preview-token
             without applying.
         :param language: optional explicit language (``"java"``); inferred
@@ -3417,9 +4332,23 @@ class ScalpelGenerateConstructorTool(Tool):
         :return: JSON RefactorResult (or CAPABILITY_NOT_AVAILABLE envelope
             when jdtls is missing or fails to advertise the kind).
         """
-        del include_fields  # forwarded to jdtls's interactive picker; not
-        # plumbed end-to-end in v1.5 P2 (the kind dispatch covers all fields
-        # by default; per-field selection is a Phase 2.5 enhancement).
+        # v1.5 G6 ME-4 — surface per-field selection lists honestly:
+        # jdtls picker isn't wired in v1.5 P2, so non-empty include_fields
+        # would be silently discarded if we proceeded to dispatch. Return
+        # an INPUT_NOT_HONORED-shaped envelope instead. None / empty list
+        # preserves today's behavior (jdtls applies its default).
+        if include_fields:
+            return json.dumps({
+                "status": "skipped",
+                "code": ErrorCode.INVALID_ARGUMENT.value,
+                "reason": (
+                    "include_fields={!r} cannot be honored: jdtls's per-field "
+                    "picker is not wired over the wire in v1.5 P2 "
+                    "(Phase 2.5 deferral). Re-call with include_fields=None "
+                    "to apply jdtls's default (all non-static fields)."
+                ).format(list(include_fields)),
+                "include_fields": list(include_fields),
+            })
         lang = _infer_extract_language(file, language)
         if lang != "java":
             return build_failure_result(
@@ -3468,8 +4397,14 @@ class ScalpelOverrideMethodsTool(Tool):
 
         :param file: target ``.java`` file.
         :param class_name_path: LSP name-path of the class.
-        :param method_names: optional list; defaults to all not-yet-overridden
-            abstract methods (jdtls applies its built-in default).
+        :param method_names: optional list; ``None`` (the default)
+            preserves jdtls's built-in default of all not-yet-overridden
+            abstract methods. v1.5 G6 ME-4 — when a non-empty list is
+            supplied the facade returns an INPUT_NOT_HONORED envelope
+            (``status='skipped'`` / reason mentions ``method_names``)
+            because jdtls's per-method selection is exposed via an
+            interactive picker that is not plumbed over the wire in
+            v1.5 P2. Wiring the picker is a Phase 2.5 enhancement.
         :param preview: when True, returns a WorkspaceEdit preview-token
             without applying.
         :param language: optional explicit language (``"java"``); inferred
@@ -3478,9 +4413,20 @@ class ScalpelOverrideMethodsTool(Tool):
         :return: JSON RefactorResult (or CAPABILITY_NOT_AVAILABLE envelope
             when jdtls is missing or fails to advertise the kind).
         """
-        del method_names  # forwarded to jdtls's interactive picker; not
-        # plumbed end-to-end in v1.5 P2 (the kind dispatch covers all
-        # candidates by default; per-method selection is Phase 2.5).
+        # v1.5 G6 ME-4 — see the matching block on
+        # ScalpelGenerateConstructorTool.apply for the rationale.
+        if method_names:
+            return json.dumps({
+                "status": "skipped",
+                "code": ErrorCode.INVALID_ARGUMENT.value,
+                "reason": (
+                    "method_names={!r} cannot be honored: jdtls's per-method "
+                    "picker is not wired over the wire in v1.5 P2 "
+                    "(Phase 2.5 deferral). Re-call with method_names=None "
+                    "to apply jdtls's default (all not-yet-overridden methods)."
+                ).format(list(method_names)),
+                "method_names": list(method_names),
+            })
         lang = _infer_extract_language(file, language)
         if lang != "java":
             return build_failure_result(
