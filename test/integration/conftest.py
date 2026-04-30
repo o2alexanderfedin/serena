@@ -232,6 +232,27 @@ def pylsp_lsp(calcpy_workspace: Path) -> Iterator[Any]:
 
 
 @pytest.fixture(scope="session")
+def pylsp_dataclasses_lsp(calcpy_dataclasses_workspace: Path) -> Iterator[Any]:
+    """Boot pylsp (with pylsp-rope) against the calcpy_dataclasses fixture.
+
+    Stage 1H Leaf 02 — the inline-flow integration tests
+    (``test_assist_inline_py``) target ``calcpy_dataclasses/models.py``;
+    using the standard ``pylsp_lsp`` (rooted at ``calcpy``) yields a
+    workspace-root mismatch where ``open_file("calcpy_dataclasses/...")``
+    resolves to the wrong absolute path. This fixture pins the LSP
+    workspace root so the relative path resolves cleanly.
+    """
+    _require_binary("pylsp")
+    srv = _build_python_server(
+        "solidlsp.language_servers.pylsp_server",
+        "PylspServer",
+        calcpy_dataclasses_workspace,
+    )
+    with srv.start_server():
+        yield srv
+
+
+@pytest.fixture(scope="session")
 def basedpyright_lsp(calcpy_workspace: Path) -> Iterator[Any]:
     """Boot basedpyright-langserver against the calcpy fixture."""
     _require_binary("basedpyright-langserver")

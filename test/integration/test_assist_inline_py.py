@@ -35,15 +35,15 @@ def _line_index(text: str, needle: str) -> int:
 
 
 def _fetch_actions(
-    pylsp_lsp: "SolidLanguageServer",
+    pylsp_dataclasses_lsp: "SolidLanguageServer",
     file_abs: str,
     start: dict[str, int],
     end: dict[str, int],
 ) -> list[dict[str, Any]]:
     actions: list[dict[str, Any]] = []
-    with pylsp_lsp.open_file(_REL):
+    with pylsp_dataclasses_lsp.open_file(_REL):
         time.sleep(1.0)
-        raw = pylsp_lsp.request_code_actions(
+        raw = pylsp_dataclasses_lsp.request_code_actions(
             file_abs, start=start, end=end, diagnostics=[]
         )
         actions.extend(a for a in raw if isinstance(a, dict))
@@ -51,7 +51,7 @@ def _fetch_actions(
 
 
 def test_inline_default_box_offered(
-    pylsp_lsp: "SolidLanguageServer",
+    pylsp_dataclasses_lsp: "SolidLanguageServer",
     calcpy_dataclasses_workspace: Path,
 ) -> None:
     """``DEFAULT_BOX`` is a module-level constant — pylsp-rope should offer
@@ -63,7 +63,7 @@ def test_inline_default_box_offered(
     start_char = line_text.index("DEFAULT_BOX")
     end_char = start_char + len("DEFAULT_BOX")
     actions = _fetch_actions(
-        pylsp_lsp,
+        pylsp_dataclasses_lsp,
         str(src),
         start={"line": line_idx, "character": start_char},
         end={"line": line_idx, "character": end_char},
@@ -77,7 +77,7 @@ def test_inline_default_box_offered(
 
 
 def test_inline_preserves_dataclass_repr_baseline(
-    pylsp_lsp: "SolidLanguageServer",
+    pylsp_dataclasses_lsp: "SolidLanguageServer",
     calcpy_dataclasses_workspace: Path,
     assert_workspace_edit_round_trip: Any,
 ) -> None:
@@ -91,7 +91,7 @@ def test_inline_preserves_dataclass_repr_baseline(
     start_char = line_text.index("DEFAULT_BOX")
     end_char = start_char + len("DEFAULT_BOX")
     actions = _fetch_actions(
-        pylsp_lsp,
+        pylsp_dataclasses_lsp,
         str(src),
         start={"line": line_idx, "character": start_char},
         end={"line": line_idx, "character": end_char},
@@ -105,9 +105,9 @@ def test_inline_preserves_dataclass_repr_baseline(
         pytest.skip(f"Inline not offered; titles={titles}")
     edit = inline.get("edit")
     if edit is None:
-        with pylsp_lsp.open_file(_REL):
+        with pylsp_dataclasses_lsp.open_file(_REL):
             time.sleep(0.5)
-            resolved = pylsp_lsp.resolve_code_action(inline)
+            resolved = pylsp_dataclasses_lsp.resolve_code_action(inline)
             edit = resolved.get("edit") if isinstance(resolved, dict) else None
     if edit is None:
         pytest.skip("Inline action carried no edit even after resolve")
