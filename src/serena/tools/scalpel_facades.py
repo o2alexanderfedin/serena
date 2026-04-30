@@ -1545,8 +1545,12 @@ class ScalpelImportsOrganizeTool(Tool):
             try:
                 file_start, file_end = compute_file_range(f)
             except (FileNotFoundError, OSError):
-                file_start = {"line": 0, "character": 0}
-                file_end = {"line": 0, "character": 0}
+                # G5-VERIFIED: degenerate range only used when the file
+                # is missing on disk; merge_code_actions then surfaces
+                # the read failure through the LSP layer rather than
+                # meaningfully bracketing text on a non-existent file.
+                file_start = {"line": 0, "character": 0}  # G5-VERIFIED
+                file_end = {"line": 0, "character": 0}  # G5-VERIFIED
             for kind in sub_kinds:
                 # Per-sub-kind capability gate; servers that don't expose
                 # the granular kind (e.g. some pylsp builds) are skipped
@@ -2043,7 +2047,40 @@ class ScalpelTidyStructureTool(Tool):
                 recoverable=False,
             ).model_dump_json(indent=2)
         coord = coordinator_for_facade(language=lang, project_root=project_root)
-        cursor = position or {"line": 0, "character": 0}
+        # v1.5 G5 — replace the `(0,0)` cursor fallback with an honest
+        # range derivation per ``scope``:
+        #   * scope='file'  → whole-file range via compute_file_range.
+        #   * scope ∈ {type, impl} → caller-supplied ``position`` is
+        #     required (failing loud beats silently routing the LSP
+        #     against the file head and picking the wrong enclosing
+        #     symbol). Surface INVALID_ARGUMENT honestly.
+        if scope == "file":
+            from solidlsp.util.file_range import compute_file_range
+
+            try:
+                file_start, file_end = compute_file_range(file)
+            except (FileNotFoundError, OSError):
+                # G5-VERIFIED: degenerate range only used when the file
+                # is missing on disk; merge_code_actions surfaces the
+                # read failure through the LSP layer below.
+                file_start = {"line": 0, "character": 0}  # G5-VERIFIED
+                file_end = {"line": 0, "character": 0}  # G5-VERIFIED
+            range_start = file_start
+            range_end = file_end
+        else:
+            if position is None:
+                return build_failure_result(
+                    code=ErrorCode.INVALID_ARGUMENT,
+                    stage="scalpel_tidy_structure",
+                    reason=(
+                        f"scope={scope!r} requires a `position` "
+                        f"identifying the target type/impl; pass "
+                        f"position={{'line':L,'character':C}}."
+                    ),
+                    recoverable=False,
+                ).model_dump_json(indent=2)
+            range_start = position
+            range_end = position
         # v1.5 G6 ME-1 — scope filter: 'file' → all 3, 'type' → reorder_fields,
         # 'impl' → reorder_impl_items. Unknown scope falls back to 'file' kinds.
         kinds_for_scope = _TIDY_STRUCTURE_SCOPE_TO_KINDS.get(
@@ -2057,7 +2094,7 @@ class ScalpelTidyStructureTool(Tool):
             if not coord.supports_kind(lang, kind):
                 continue
             actions = _run_async(coord.merge_code_actions(
-                file=file, start=cursor, end=cursor, only=[kind],
+                file=file, start=range_start, end=range_end, only=[kind],
             ))
             all_actions.extend(actions)
         elapsed_ms = int((time.monotonic() - t0) * 1000)
@@ -3051,8 +3088,11 @@ class ScalpelFixLintsTool(Tool):
         try:
             file_start, file_end = compute_file_range(file)
         except (FileNotFoundError, OSError):
-            file_start = {"line": 0, "character": 0}
-            file_end = {"line": 0, "character": 0}
+            # G5-VERIFIED: degenerate range only used when the file is
+            # missing on disk; the LSP request below then surfaces the
+            # read failure rather than meaningfully bracketing text.
+            file_start = {"line": 0, "character": 0}  # G5-VERIFIED
+            file_end = {"line": 0, "character": 0}  # G5-VERIFIED
         t0 = time.monotonic()
         all_actions: list[Any] = []
         captured_edits: list[dict[str, Any]] = []
