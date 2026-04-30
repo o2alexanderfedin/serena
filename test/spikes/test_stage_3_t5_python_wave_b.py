@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -46,10 +47,23 @@ def _make_tool(cls, project_root: Path):
     return tool
 
 
-def _fake_action(kind: str, provenance: str = "pylsp-rope"):
+def _fake_action(
+    kind: str,
+    provenance: str = "pylsp-rope",
+    title: str = "x",
+    diagnostics: tuple[Any, ...] = (),
+):
+    """Fake LSP code action.
+
+    v1.6 P5 added post-merge action filters on ``scalpel_generate_from_undefined``
+    (title prefix) and ``scalpel_ignore_diagnostic`` (diagnostic code). Tests
+    now pass ``title=`` / ``diagnostics=`` so the fake action survives those
+    filters when the dispatch is being exercised.
+    """
     return MagicMock(
         action_id=f"{provenance}:{kind}",
-        title="x", kind=kind, provenance=provenance,
+        title=title, kind=kind, provenance=provenance,
+        diagnostics=diagnostics,
     )
 
 
@@ -74,7 +88,11 @@ def test_generate_from_undefined_dispatches(tmp_path: Path):
     src.write_text("x = undefined_thing()\n")
     tool = _make_tool(ScalpelGenerateFromUndefinedTool, tmp_path)
     coord = _fake_coord({
-        "quickfix.generate": [_fake_action("quickfix.generate")],
+        # v1.6 P5 title-prefix filter requires the action title to start
+        # with the requested ``target_kind`` ("function" here).
+        "quickfix.generate": [_fake_action(
+            "quickfix.generate", title="function: generate undefined_thing",
+        )],
     })
     with patch("serena.tools.scalpel_facades.coordinator_for_facade", return_value=coord):
         out = tool.apply(
@@ -192,9 +210,12 @@ def test_ignore_diagnostic_pyright_dispatches(tmp_path: Path):
     src = tmp_path / "module.py"
     src.write_text("undefined_name\n")
     tool = _make_tool(ScalpelIgnoreDiagnosticTool, tmp_path)
+    # v1.6 P5 rule-filter requires action.diagnostics[*].code == rule.
+    diag = MagicMock(code="reportUndefinedVariable")
     coord = _fake_coord({
         "quickfix.pyright_ignore": [_fake_action(
             "quickfix.pyright_ignore", provenance="basedpyright",
+            diagnostics=(diag,),
         )],
     })
     with patch("serena.tools.scalpel_facades.coordinator_for_facade", return_value=coord):
@@ -211,9 +232,12 @@ def test_ignore_diagnostic_ruff_dispatches(tmp_path: Path):
     src = tmp_path / "module.py"
     src.write_text("import sys\n")
     tool = _make_tool(ScalpelIgnoreDiagnosticTool, tmp_path)
+    # v1.6 P5 rule-filter requires action.diagnostics[*].code == rule.
+    diag = MagicMock(code="F401")
     coord = _fake_coord({
         "quickfix.ruff_noqa": [_fake_action(
             "quickfix.ruff_noqa", provenance="ruff",
+            diagnostics=(diag,),
         )],
     })
     with patch("serena.tools.scalpel_facades.coordinator_for_facade", return_value=coord):

@@ -17,7 +17,7 @@ from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependen
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
-from solidlsp.util.file_range import compute_file_range
+from solidlsp.util.file_range import LSPPosition, compute_file_range, compute_text_range
 
 log = logging.getLogger(__name__)
 
@@ -229,8 +229,14 @@ class RustAnalyzer(SolidLanguageServer):
         integration tests. See
         ``vendor/serena/src/solidlsp/util/file_range.py`` and
         Stage v0.2.0 follow-up #02.
+
+        When ``file`` is open in the LSP's didChange buffer (e.g. spike
+        S6's polluted-buffer test), preflight against the buffer's
+        contents rather than the on-disk file so a buffer that has grown
+        past the disk EOF doesn't trip the preflight before the LSP gets
+        to see the polluted state.
         """
-        _, eof = compute_file_range(file)
+        eof = self._buffer_aware_eof(file)
         if (end["line"], end["character"]) > (eof["line"], eof["character"]):
             raise ValueError(
                 f"position {end} out of range for {file} (eof={eof})"
@@ -243,6 +249,29 @@ class RustAnalyzer(SolidLanguageServer):
             trigger_kind=trigger_kind,
             diagnostics=diagnostics,
         )
+
+    def _buffer_aware_eof(self, file: str) -> LSPPosition:
+        """Return the EOF position for ``file``, preferring the open didChange buffer.
+
+        rust-analyzer's wire request will see the buffer's polluted contents
+        when the file is open via :meth:`SolidLanguageServer.open_file`. The
+        on-disk file may still be the smaller pre-pollution version, so the
+        local preflight must use the buffer's eof to match what the LSP sees.
+        Falls back to the on-disk file when no buffer is open.
+        """
+        try:
+            uri = pathlib.Path(file).as_uri()
+        except (ValueError, OSError):
+            uri = None
+        if uri is not None:
+            buf = self.open_file_buffers.get(uri)
+            if buf is not None:
+                contents = getattr(buf, "_contents", None) or getattr(buf, "contents", None)
+                if isinstance(contents, str):
+                    _, eof = compute_text_range(contents)
+                    return eof
+        _, eof = compute_file_range(file)
+        return eof
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
