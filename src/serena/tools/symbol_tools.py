@@ -54,6 +54,7 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
 
         # capture kind names and depth-0 snapshots before grouping, which mutates the dicts
         kind_names = [d.get("kind", "unknown") for d in result]
+        depth_0_result: list[LanguageServerSymbol.OutputDict] = []
         if depth > 0:
             depth_0_result = [d.copy() for d in result]
             for d in depth_0_result:

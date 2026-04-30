@@ -586,7 +586,7 @@ def _dispatch_facade_in_shadow(
         if handler is None:
             raise KeyError(tool_name)
         return handler(**args)
-    tool = cls.__new__(cls)
+    tool = cls.__new__(cls)  # pyright: ignore[reportCallIssue]
     tool.get_project_root = lambda: str(shadow_root)  # type: ignore[method-assign]
     return tool.apply(**args)
 

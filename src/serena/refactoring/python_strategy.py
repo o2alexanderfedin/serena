@@ -614,7 +614,12 @@ class _RopeBridge:
         source module or Rope itself rejects the refactor.
         """
         try:
+            from rope.base.resources import File as _RopeFile
             source_resource = self._project.get_resource(source_rel)
+            if not isinstance(source_resource, _RopeFile):
+                raise RopeBridgeError(
+                    f"source is not a file: {source_rel}"
+                )
             source_text = source_resource.read()
             offset = _locate_global_symbol_offset(source_text, symbol_name)
             if offset is None:
@@ -644,6 +649,7 @@ class _RopeBridge:
         ``MoveModule`` only takes a folder); per-symbol moves require an
         actual file with at least an empty body.
         """
+        from rope.base.resources import Folder as _RopeFolder
         try:
             return self._project.get_resource(target_rel)
         except Exception:  # noqa: BLE001
@@ -658,6 +664,10 @@ class _RopeBridge:
             raise RopeBridgeError(
                 f"target directory missing: {target_dir_rel!r}"
             ) from exc
+        if not isinstance(parent, _RopeFolder):
+            raise RopeBridgeError(
+                f"target parent is not a folder: {target_dir_rel!r}"
+            )
         return parent.create_file(target_basename)
 
     def change_signature(self, spec: ChangeSignatureSpec) -> dict[str, Any]:

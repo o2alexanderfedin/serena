@@ -727,13 +727,13 @@ class SerenaConfig(SharedConfig):
     """
 
     # settings with overridden defaults
-    language_backend: LanguageBackend = LanguageBackend.LSP
+    language_backend: LanguageBackend = LanguageBackend.LSP  # pyright: ignore[reportIncompatibleVariableOverride]
     """
     the language backend to use for code understanding features
     """
     default_modes: Sequence[str] | None = ("interactive", "editing")
-    line_ending: LineEnding = LineEnding.NATIVE
-    symbol_info_budget: float = 10.0
+    line_ending: LineEnding = LineEnding.NATIVE  # pyright: ignore[reportIncompatibleVariableOverride]
+    symbol_info_budget: float = 10.0  # pyright: ignore[reportIncompatibleVariableOverride]
     """
     Time budget (seconds) for requests when tools request include_info (currently
     only supported for LSP-based tools).

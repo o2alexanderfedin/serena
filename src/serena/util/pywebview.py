@@ -135,8 +135,8 @@ class WebViewWithTray:
 
     def _show_window_on_macos(self) -> None:
         from AppKit import (
-            NSApplication,
-            NSApplicationActivationPolicyRegular,
+            NSApplication,  # pyright: ignore[reportAttributeAccessIssue]
+            NSApplicationActivationPolicyRegular,  # pyright: ignore[reportAttributeAccessIssue]
         )
         from PyObjCTools.AppHelper import callLater
 
@@ -154,8 +154,8 @@ class WebViewWithTray:
 
     def _hide_window_on_macos(self) -> None:
         from AppKit import (
-            NSApplication,
-            NSApplicationActivationPolicyAccessory,
+            NSApplication,  # pyright: ignore[reportAttributeAccessIssue]
+            NSApplicationActivationPolicyAccessory,  # pyright: ignore[reportAttributeAccessIssue]
         )
 
         self.window.hide()
@@ -165,7 +165,7 @@ class WebViewWithTray:
         if not self._app_icon_path:
             return
 
-        from AppKit import NSImage
+        from AppKit import NSImage  # pyright: ignore[reportAttributeAccessIssue]
 
         ns_image = NSImage.alloc().initByReferencingFile_(self._app_icon_path)
         if ns_image is not None:
@@ -220,7 +220,7 @@ class WebViewWithTray:
             # Passing darwin_nsapplication integrates pystray with the NSApplication
             # run loop that webview.start() is about to enter.  sharedApplication()
             # is idempotent; pywebview will reuse the same singleton.
-            from AppKit import NSApplication
+            from AppKit import NSApplication  # pyright: ignore[reportAttributeAccessIssue]
 
             kwargs["darwin_nsapplication"] = NSApplication.sharedApplication()
 

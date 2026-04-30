@@ -423,7 +423,7 @@ class DashboardManager:
         """
         try:
             SerenaDashboardViewer(url, start_minimized=minimized, parent_process_id=parent_process_id).run()
-        except webview.errors.WebViewException as e:
+        except webview.errors.WebViewException as e:  # pyright: ignore[reportAttributeAccessIssue]
             log.warning(f"Could not open O2 Scalpel Dashboard viewer. Cause:\n{e}")
             # Fall back to opening the browser window if the window was supposed to be shown directly
             if not minimized:
