@@ -94,6 +94,8 @@ class FortranLanguageServer(SolidLanguageServer):
         # Try type pattern first (has complex syntax with optional comma and ::)
         type_pattern = r"^\s*type\s*(?:,.*?)?\s*(?:::)?\s*([a-zA-Z_]\w*)"
         match = re.match(type_pattern, line, re.IGNORECASE)
+        identifier_name: str = ""
+        identifier_start: int = 0
 
         if match:
             # For type pattern, identifier is in group 1
@@ -125,7 +127,7 @@ class FortranLanguageServer(SolidLanguageServer):
 
             # Create modified symbol with corrected selectionRange
             corrected_symbol = symbol.copy()
-            corrected_symbol["selectionRange"] = new_sel_range  # type: ignore[typeddict-item]
+            corrected_symbol["selectionRange"] = new_sel_range  # pyright: ignore[reportGeneralTypeIssues]
 
             log.debug(f"Fixed fortls selectionRange for {identifier_name}: char {start_char} -> {identifier_start}")
 

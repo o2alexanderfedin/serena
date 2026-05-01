@@ -6,6 +6,7 @@ import logging
 import os
 import pathlib
 import shutil
+import subprocess
 import threading
 from pathlib import Path
 
@@ -106,8 +107,6 @@ class FSharpLanguageServer(SolidLanguageServer):
 
             # Install FsAutoComplete using dotnet tool install
             try:
-                import subprocess
-
                 result = subprocess.run(
                     [dotnet_exe, "tool", "install", "--tool-path", fsharp_ls_dir, "fsautocomplete", "--version", fsautocomplete_version],
                     cwd=fsharp_ls_dir,
@@ -279,8 +278,6 @@ class FSharpLanguageServer(SolidLanguageServer):
         if dotnet_exe:
             # Try to get the installation path
             try:
-                import subprocess
-
                 result = subprocess.run([dotnet_exe, "--info"], capture_output=True, text=True, check=True)
                 lines = result.stdout.split("\n")
                 for line in lines:

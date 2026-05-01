@@ -303,7 +303,7 @@ class VueLanguageServer(SolidLanguageServer):
         """
         assert self._ts_server is not None
         timeout = TypeScriptLanguageServer.INDEXING_PROGRESS_TIMEOUT
-        if self._ts_server.wait_for_indexing(timeout=timeout):
+        if self._ts_server.wait_for_indexing(timeout_s=timeout):
             log.info("TypeScript server finished indexing Vue files (signaled via $/progress)")
         else:
             log.warning(f"Timeout ({timeout}s) waiting for TypeScript server to finish indexing Vue files, proceeding anyway")
@@ -817,7 +817,7 @@ class VueLanguageServer(SolidLanguageServer):
         init_response = self.server.send.initialize(initialize_params)
         log.debug(f"Received initialize response from Vue server: {init_response}")
 
-        assert init_response["capabilities"]["textDocumentSync"] in [1, 2]
+        assert init_response["capabilities"].get("textDocumentSync") in [1, 2]
 
         self.server.notify.initialized({})
 

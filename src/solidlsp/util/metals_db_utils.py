@@ -19,6 +19,8 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import psutil
+
 if TYPE_CHECKING:
     pass
 
@@ -142,8 +144,6 @@ def is_metals_process_alive(pid: int) -> bool:
 
     """
     try:
-        import psutil
-
         proc = psutil.Process(pid)
         if not proc.is_running():
             return False
@@ -179,10 +179,12 @@ def _is_metals_cmdline(cmdline: str) -> bool:
 def _is_port_in_use_by_metals(port: int) -> bool:
     """Check if the given port is in use by a Metals process."""
     try:
-        import psutil
-
         for conn in psutil.net_connections(kind="tcp"):
-            if conn.laddr.port == port and conn.status == "LISTEN":
+            laddr = conn.laddr
+            if not laddr:  # empty tuple when not available
+                continue
+            laddr_port = getattr(laddr, "port", None)
+            if laddr_port == port and conn.status == "LISTEN":
                 try:
                     proc = psutil.Process(conn.pid)
                     cmdline = " ".join(proc.cmdline()).lower()

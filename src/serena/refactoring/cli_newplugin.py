@@ -548,6 +548,384 @@ _LANGUAGE_METADATA: dict[str, _StrategyView] = {
             ),
         ),
     ),
+    "haxe": _StrategyView(
+        # v1.9.8: haxe-language-server (https://github.com/vshaxe/haxe-language-server)
+        # is the canonical Haxe LSP, distributed as a Node.js bundle. The host binary
+        # ``haxe`` provides the compiler; the language server runs as
+        # ``node /path/to/haxe-language-server/bin/server.js`` — the SolidLSP adapter
+        # discovers the entry script via npm/VSCode-extension search, so the surface
+        # cmd here is the user-visible ``haxe-language-server`` shim.
+        # Install: ``npm install -g haxe-language-server`` (requires haxe + nekovm).
+        # Capability surface: rename + extract + fix_lints (rich Haxe LSP).
+        language="haxe",
+        display_name="Haxe",
+        file_extensions=(".hx",),
+        lsp_server_cmd=("haxe-language-server",),
+        facades=(
+            _Facade(
+                name="rename",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="extract",
+                summary="Extract selection into a function or variable",
+                trigger_phrases=("extract this", "extract function", "extract variable"),
+                primitive_chain=(
+                    "textDocument/codeAction[refactor.extract]",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="organize_imports",
+                summary="Remove unused imports and sort import order",
+                trigger_phrases=("organize imports", "sort imports", "clean imports"),
+                primitive_chain=(
+                    "textDocument/codeAction[source.organizeImports]",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply all auto-fixable diagnostics (quickfix)",
+                trigger_phrases=("fix all", "fix lints", "auto fix"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "erlang": _StrategyView(
+        # v1.9.8: erlang_ls (https://github.com/erlang-ls/erlang_ls) is the canonical
+        # Erlang LSP. Installed via ``brew install erlang_ls`` on macOS or built from
+        # source on Linux. Speaks stdio with explicit ``--transport stdio`` flag —
+        # the adapter wraps the binary the same way.
+        # Capability surface: rename + extract + fix_lints (full Erlang LSP).
+        language="erlang",
+        display_name="Erlang",
+        file_extensions=(".erl", ".hrl", ".escript"),
+        lsp_server_cmd=("erlang_ls", "--transport", "stdio"),
+        facades=(
+            _Facade(
+                name="rename",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="extract",
+                summary="Extract selection into a function or variable",
+                trigger_phrases=("extract this", "extract function", "extract variable"),
+                primitive_chain=(
+                    "textDocument/codeAction[refactor.extract]",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply all auto-fixable diagnostics (quickfix)",
+                trigger_phrases=("fix all", "fix lints", "auto fix"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "ocaml": _StrategyView(
+        # v1.9.8: ocaml-lsp-server (https://github.com/ocaml/ocaml-lsp). The
+        # canonical OCaml LSP, installed via opam: ``opam install ocaml-lsp-server``.
+        # The SolidLSP adapter wraps via ``opam exec -- ocamllsp`` so opam env is
+        # respected; the surface ``lsp_server_cmd`` is the binary name.
+        # Capability surface: rename + extract + fix_lints (full OCaml LSP).
+        language="ocaml",
+        display_name="OCaml",
+        file_extensions=(".ml", ".mli", ".re", ".rei"),
+        lsp_server_cmd=("ocamllsp",),
+        facades=(
+            _Facade(
+                name="rename",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="extract",
+                summary="Extract selection into a let-binding or function",
+                trigger_phrases=("extract this", "extract function", "extract let"),
+                primitive_chain=(
+                    "textDocument/codeAction[refactor.extract]",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply all auto-fixable diagnostics (quickfix)",
+                trigger_phrases=("fix all", "fix lints", "auto fix"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "powershell": _StrategyView(
+        # v1.9.8: PowerShell Editor Services (https://github.com/PowerShell/PowerShellEditorServices).
+        # The canonical PowerShell LSP, hosted inside ``pwsh`` and launched with the
+        # ``-Stdio`` flag (the adapter wires the full ``pwsh -Command`` invocation).
+        # Install: ``Install-Module -Name PowerShellEditorServices`` from a pwsh prompt.
+        # Capability surface: rename + fix_lints (PSES rename is solid; extract is
+        # weaker than other LSPs, so kept off the headline surface).
+        language="powershell",
+        display_name="PowerShell",
+        file_extensions=(".ps1", ".psm1", ".psd1"),
+        lsp_server_cmd=("pwsh",),
+        facades=(
+            _Facade(
+                name="rename",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply all auto-fixable diagnostics (quickfix)",
+                trigger_phrases=("fix all", "fix lints", "auto fix"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "systemverilog": _StrategyView(
+        # v1.9.8: verible-verilog-ls (https://github.com/chipsalliance/verible).
+        # Verible's SystemVerilog LSP is diagnostics-focused: rename and extract
+        # are not implemented (HDL semantics make rename across module hierarchies
+        # research-mode). Only quickfix-style diagnostic auto-corrections + format
+        # are exposed.
+        # Install: ``brew install verible`` on macOS, prebuilt binaries on GH Releases.
+        language="systemverilog",
+        display_name="SystemVerilog",
+        file_extensions=(".sv", ".svh", ".v", ".vh"),
+        lsp_server_cmd=("verible-verilog-ls",),
+        facades=(
+            _Facade(
+                name="fix_lints",
+                summary="Apply diagnostic quick-fixes (lint warnings, syntax issues)",
+                trigger_phrases=("fix all", "fix lints", "auto fix"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "clojure": _StrategyView(
+        # v1.9.8: clojure-lsp (https://github.com/clojure-lsp/clojure-lsp).
+        # Mature LSP for Clojure / ClojureScript / EDN; supports rename, extract,
+        # and a rich set of refactor.* code actions (move-to-let, cycle-coll, etc.).
+        # Install: ``brew install clojure-lsp/brew/clojure-lsp-native`` on macOS
+        # or download the standalone binary from GH Releases.
+        # Capability surface: rename + extract + fix_lints.
+        language="clojure",
+        display_name="Clojure",
+        file_extensions=(".clj", ".cljs", ".cljc", ".edn"),
+        lsp_server_cmd=("clojure-lsp",),
+        facades=(
+            _Facade(
+                name="rename",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="extract",
+                summary="Extract selection into a function or let-binding",
+                trigger_phrases=("extract this", "extract function", "extract let"),
+                primitive_chain=(
+                    "textDocument/codeAction[refactor.extract]",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply clj-kondo + clojure-lsp diagnostic quick-fixes",
+                trigger_phrases=("fix all", "fix lints", "auto fix"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "crystal": _StrategyView(
+        # v1.9.8: crystalline (https://github.com/elbywan/crystalline). The active
+        # Crystal LSP. Install: ``brew install crystalline`` on macOS or build from
+        # source via ``shards build``. Crystal is statically typed with a
+        # Ruby-flavored surface; the LSP supports rename + diagnostic quickfix.
+        # Extract remains research-mode upstream so it's omitted from the headline.
+        language="crystal",
+        display_name="Crystal",
+        file_extensions=(".cr",),
+        lsp_server_cmd=("crystalline",),
+        facades=(
+            _Facade(
+                name="rename",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply Crystal compiler + ameba diagnostic quick-fixes",
+                trigger_phrases=("fix all", "fix lints", "auto fix"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "elixir": _StrategyView(
+        # v1.9.8: ElixirLS (https://github.com/elixir-lsp/elixir-ls). The canonical
+        # Elixir LSP, installed via ``brew install elixir-ls`` on macOS. Speaks
+        # stdio via the ``elixir-ls`` shim. ElixirLS supports rename + extract +
+        # quickfix (credo + dialyzer warnings).
+        language="elixir",
+        display_name="Elixir",
+        file_extensions=(".ex", ".exs"),
+        lsp_server_cmd=("elixir-ls",),
+        facades=(
+            _Facade(
+                name="rename",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="extract",
+                summary="Extract selection into a function or variable",
+                trigger_phrases=("extract this", "extract function", "extract variable"),
+                primitive_chain=(
+                    "textDocument/codeAction[refactor.extract]",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply credo + dialyzer diagnostic quick-fixes",
+                trigger_phrases=("fix all", "fix lints", "auto fix"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "haskell": _StrategyView(
+        # v1.9.8: haskell-language-server (https://github.com/haskell/haskell-language-server).
+        # Canonical Haskell LSP; install via ``ghcup install hls --set``. The wrapper
+        # binary ``haskell-language-server-wrapper`` handles GHC version resolution
+        # and forwards stdio to the matching ``haskell-language-server-<ghc>`` worker.
+        # Capability surface: rename + extract + fix_lints (HLS retrie + hlint).
+        language="haskell",
+        display_name="Haskell",
+        file_extensions=(".hs", ".lhs"),
+        lsp_server_cmd=("haskell-language-server-wrapper", "--lsp"),
+        facades=(
+            _Facade(
+                name="rename",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="extract",
+                summary="Extract selection into a let-binding or function",
+                trigger_phrases=("extract this", "extract function", "extract let"),
+                primitive_chain=(
+                    "textDocument/codeAction[refactor.extract]",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply hlint + retrie diagnostic quick-fixes",
+                trigger_phrases=("fix all", "fix lints", "auto fix"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "perl": _StrategyView(
+        # v1.9.8: Perl::LanguageServer (https://github.com/richterger/Perl-LanguageServer).
+        # Installed via cpanm: ``cpanm Perl::LanguageServer``. Speaks stdio. Perl's
+        # dynamic dispatch makes whole-workspace rename research-mode upstream, so
+        # the headline surface is rename (current file) + fix_lints. Extract is
+        # not exposed.
+        language="perl",
+        display_name="Perl",
+        file_extensions=(".pl", ".pm", ".t"),
+        lsp_server_cmd=("perl", "-MPerl::LanguageServer", "-e", "Perl::LanguageServer::run"),
+        facades=(
+            _Facade(
+                name="rename",
+                summary="Rename a symbol within the current file",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply diagnostic quick-fixes (perlcritic, syntax)",
+                trigger_phrases=("fix all", "fix lints", "auto fix"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "ruby": _StrategyView(
+        # v1.9.8: ruby-lsp (https://github.com/Shopify/ruby-lsp). The modern,
+        # actively maintained Ruby LSP from Shopify. Install via per-user gem:
+        # ``gem install --user-install ruby-lsp`` and add the user gem bindir to
+        # PATH. Supports rename + extract + fix_lints (rubocop + standard).
+        language="ruby",
+        display_name="Ruby",
+        file_extensions=(".rb", ".erb"),
+        lsp_server_cmd=("ruby-lsp",),
+        facades=(
+            _Facade(
+                name="rename",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="extract",
+                summary="Extract selection into a method or variable",
+                trigger_phrases=("extract this", "extract method", "extract variable"),
+                primitive_chain=(
+                    "textDocument/codeAction[refactor.extract]",
+                    "workspace/applyEdit",
+                ),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply rubocop + standard diagnostic quick-fixes",
+                trigger_phrases=("fix all", "fix lints", "auto fix"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
     "csharp": _StrategyView(
         # Stream 6 / Leaf I: csharp-ls drives the LSP over stdio.
         # csharp-ls (https://github.com/razzmatazz/csharp-language-server) is a
