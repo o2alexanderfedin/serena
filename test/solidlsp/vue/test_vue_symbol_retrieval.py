@@ -239,7 +239,7 @@ class TestVueSymbolRetrieval:
 
         definition = definitions[0]
         assert definition["relativePath"] is not None, "Definition should have a relative path"
-        assert "CalculatorButton.vue" in definition["relativePath"], (
+        assert "CalculatorButton.vue" in (definition["relativePath"] or ""), (
             f"Should point to CalculatorButton.vue, got {definition['relativePath']}"
         )
 

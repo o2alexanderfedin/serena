@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -48,7 +48,7 @@ def test_first_succeeds_second_fails_restores_first(
         ]
     }
     with pytest.raises(Exception):
-        applier._apply_workspace_edit(edit)
+        applier._apply_workspace_edit(cast(Any, edit))
     # File a must be restored.
     assert a.read_text(encoding="utf-8") == "ORIGINAL_A\n"
 
@@ -63,7 +63,7 @@ def test_create_then_failure_deletes_created(
 
     fake_ls = MagicMock()
     fake_ls.get_open_file_version.return_value = 99
-    applier._get_language_server.return_value = fake_ls
+    cast(Any, applier._get_language_server).return_value = fake_ls
 
     edit: dict[str, Any] = {
         "documentChanges": [
@@ -80,7 +80,7 @@ def test_create_then_failure_deletes_created(
         ]
     }
     with pytest.raises(ValueError, match="version mismatch"):
-        applier._apply_workspace_edit(edit)
+        applier._apply_workspace_edit(cast(Any, edit))
     # The created file must have been removed by restore.
     assert not new_file.exists()
     # The other file must be untouched.
@@ -103,5 +103,5 @@ def test_delete_then_failure_recreates_deleted(
         ]
     }
     with pytest.raises(FileExistsError):
-        applier._apply_workspace_edit(edit)
+        applier._apply_workspace_edit(cast(Any, edit))
     assert deletable.read_text(encoding="utf-8") == "PRESERVED\n"

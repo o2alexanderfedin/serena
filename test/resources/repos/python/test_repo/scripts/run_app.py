@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# pyright: reportCallIssue=false
 """
 Main entry point script for the test_repo application.
 

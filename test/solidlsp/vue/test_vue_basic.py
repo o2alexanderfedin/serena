@@ -40,7 +40,7 @@ class TestVueLanguageServer:
         assert len(refs) >= 4, f"useCalculatorStore should have at least 4 references (definition + 3 usages), got {len(refs)}"
 
         # Verify we have references from .vue files
-        vue_refs = [ref for ref in refs if ".vue" in ref.get("relativePath", "")]
+        vue_refs = [ref for ref in refs if ".vue" in (ref.get("relativePath") or "")]
         assert len(vue_refs) >= 3, f"Should have at least 3 Vue component references, got {len(vue_refs)}"
 
 

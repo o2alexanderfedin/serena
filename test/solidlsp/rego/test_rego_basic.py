@@ -89,7 +89,7 @@ class TestRegoLanguageServer:
         assert definitions is not None and len(definitions) > 0, "Should find definition for admin_roles"
 
         # Verify the definition points to admin_roles in the same file
-        assert any("authz.rego" in defn.get("relativePath", "") for defn in definitions), "Definition should be in authz.rego"
+        assert any("authz.rego" in (defn.get("relativePath") or "") for defn in definitions), "Definition should be in authz.rego"
 
     @pytest.mark.parametrize("language_server", [Language.REGO], indirect=True)
     def test_request_definition_across_files(self, language_server: SolidLanguageServer) -> None:
@@ -116,7 +116,7 @@ class TestRegoLanguageServer:
         assert definitions is not None and len(definitions) > 0, "Should find cross-file definition for is_valid_user"
 
         # Verify the definition points to helpers.rego (cross-file)
-        assert any("helpers.rego" in defn.get("relativePath", "") for defn in definitions), (
+        assert any("helpers.rego" in (defn.get("relativePath") or "") for defn in definitions), (
             "Definition should be in utils/helpers.rego (cross-file reference)"
         )
 

@@ -56,7 +56,7 @@ class TestCSharpLanguageServer:
         symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         add_symbol = None
         # Handle nested symbol structure
-        symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
+        symbol_list = symbols[0]
         for sym in symbol_list:
             # Symbol names are normalized to base form (e.g., "Add" not "Add(int, int) : int")
             if sym.get("name") == "Add":
@@ -65,7 +65,7 @@ class TestCSharpLanguageServer:
         assert add_symbol is not None, "Could not find 'Add' method symbol in Program.cs"
         sel_start = add_symbol["selectionRange"]["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
-        assert any("Program.cs" in ref.get("relativePath", "") for ref in refs), (
+        assert any("Program.cs" in (ref.get("relativePath") or "") for ref in refs), (
             "Program.cs should reference Add method (tried all positions in selectionRange)"
         )
 
@@ -101,7 +101,7 @@ class TestCSharpLanguageServer:
         symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # Flatten the symbols if they're nested
-        symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
+        symbol_list = symbols[0]
 
         subtract_symbol = None
         for sym in symbol_list:

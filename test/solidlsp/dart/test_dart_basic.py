@@ -176,7 +176,7 @@ class TestDartLanguageServer:
         symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # Handle nested symbol structure - symbols can be nested in lists
-        symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
+        symbol_list = symbols[0]
 
         # Find the 'add' method symbol in Calculator class
         add_symbol = None
@@ -198,7 +198,7 @@ class TestDartLanguageServer:
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
 
         # Check that we found references - at least one should be in main.dart
-        assert any("main.dart" in ref.get("relativePath", "") or "main.dart" in ref.get("uri", "") for ref in refs), (
+        assert any("main.dart" in (ref.get("relativePath") or "") or "main.dart" in ref.get("uri", "") for ref in refs), (
             "main.dart should reference add method (tried all positions in selectionRange)"
         )
 
@@ -294,7 +294,7 @@ class TestDartLanguageServer:
         assert len(symbols) > 0
 
         # Flatten the symbols if they're nested
-        symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
+        symbol_list = symbols[0]
 
         # Look for expected classes and methods
         symbol_names = [s.get("name") for s in symbol_list]
@@ -318,7 +318,7 @@ class TestDartLanguageServer:
         symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # Handle nested symbol structure
-        symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
+        symbol_list = symbols[0]
 
         # Find Calculator class and test its references
         calculator_symbol = None
@@ -347,7 +347,7 @@ class TestDartLanguageServer:
 
         # Test finding references to subtract function from helper.dart in main.dart
         helper_symbols = language_server.request_document_symbols(helper_file_path).get_all_symbols_and_roots()
-        symbol_list = helper_symbols[0] if helper_symbols and isinstance(helper_symbols[0], list) else helper_symbols
+        symbol_list = helper_symbols[0]
 
         subtract_symbol = next((s for s in symbol_list if s.get("name") == "subtract"), None)
 
@@ -356,7 +356,7 @@ class TestDartLanguageServer:
             refs = language_server.request_references(helper_file_path, sel_start["line"], sel_start["character"])
 
             # Should find references in main.dart
-            main_dart_refs = [ref for ref in refs if "main.dart" in ref.get("uri", "") or "main.dart" in ref.get("relativePath", "")]
+            main_dart_refs = [ref for ref in refs if "main.dart" in ref.get("uri", "") or "main.dart" in (ref.get("relativePath") or "")]
             # Note: This may not always work depending on language server capabilities
             # So we don't assert - just verify the structure if we get results
             if main_dart_refs:
@@ -387,7 +387,7 @@ class TestDartLanguageServer:
         """
         file_path = os.path.join("lib", "main.dart")
         symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
-        symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
+        symbol_list = symbols[0]
 
         # Find the 'add' method — defined across multiple lines in main.dart:
         #   int add(int a, int b) {

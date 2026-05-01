@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -113,7 +113,7 @@ def applier(tmp_path: Path) -> LanguageServerCodeEditor:
 
 
 def _fake_ls(applier: LanguageServerCodeEditor) -> _FakeLanguageServer:
-    return applier._get_language_server.return_value  # type: ignore[no-any-return,attr-defined]
+    return cast(Any, applier._get_language_server).return_value  # type: ignore[no-any-return,attr-defined]
 
 
 def test_collect_change_annotations_returns_map(applier: LanguageServerCodeEditor) -> None:
@@ -159,7 +159,7 @@ def test_apply_does_not_block_on_needs_confirmation(applier: LanguageServerCodeE
             "any-id": {"label": "scary", "needsConfirmation": True},
         },
     }
-    n = applier._apply_workspace_edit(edit)
+    n = applier._apply_workspace_edit(cast(Any, edit))
     _fake_ls(applier).flush_to_disk()
     assert n == 1
     assert target.read_text(encoding="utf-8") == "B\n"

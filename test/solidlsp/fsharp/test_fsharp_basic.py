@@ -74,7 +74,7 @@ class TestFSharpLanguageServer:
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
 
         # The add function should be referenced in Program.fs
-        assert any("Program.fs" in ref.get("relativePath", "") for ref in refs), "Program.fs should reference add function"
+        assert any("Program.fs" in (ref.get("relativePath") or "") for ref in refs), "Program.fs should reference add function"
 
     @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
     def test_nested_module_symbols(self, language_server: SolidLanguageServer) -> None:
@@ -110,7 +110,7 @@ class TestFSharpLanguageServer:
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
 
         # The subtract function should be referenced in Program.fs
-        assert any("Program.fs" in ref.get("relativePath", "") for ref in refs), "Program.fs should reference subtract function"
+        assert any("Program.fs" in (ref.get("relativePath") or "") for ref in refs), "Program.fs should reference subtract function"
 
     @pytest.mark.xfail(reason="F# LSP referencing is flaky locally and on CI; netstandard/System.Boolean reference resolution intermittently fails — see #1040", strict=False)
     @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)

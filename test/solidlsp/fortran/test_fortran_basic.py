@@ -83,7 +83,7 @@ class TestFortranLanguageServer:
         assert len(refs) > 0, "Should find references to add_numbers function"
 
         # Verify that main.f90 references the function
-        main_refs = [ref for ref in refs if "main.f90" in ref.get("relativePath", "")]
+        main_refs = [ref for ref in refs if "main.f90" in (ref.get("relativePath") or "")]
         assert len(main_refs) > 0, (
             f"Expected to find reference in main.f90, but found references in: {[ref.get('relativePath') for ref in refs]}"
         )

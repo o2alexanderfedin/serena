@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -166,7 +166,7 @@ def test_basic_single_textedit(applier_under_test: LanguageServerCodeEditor, tmp
             }
         ]
     }
-    n = applier_under_test._apply_workspace_edit(edit)
+    n = applier_under_test._apply_workspace_edit(cast(Any, edit))
     assert n == 1
     assert (tmp_path / "a.txt").read_text(encoding="utf-8") == "hello there\n"
 
@@ -190,7 +190,7 @@ def test_multi_edit_same_file(applier_under_test: LanguageServerCodeEditor, tmp_
             }
         ]
     }
-    n = applier_under_test._apply_workspace_edit(edit)
+    n = applier_under_test._apply_workspace_edit(cast(Any, edit))
     assert n == 1  # one TextDocumentEdit operation
     assert (tmp_path / "b.txt").read_text(encoding="utf-8") == "ALPHA beta GAMMA\n"
 
@@ -198,7 +198,7 @@ def test_multi_edit_same_file(applier_under_test: LanguageServerCodeEditor, tmp_
 def test_version_mismatch_rejected(applier_under_test: LanguageServerCodeEditor, tmp_path: Path) -> None:
     uri = _write(tmp_path, "c.txt", "x\n")
     # Server tracks version 7; client requests v3 → mismatch.
-    fake_ls = applier_under_test._get_language_server.return_value
+    fake_ls = cast(Any, applier_under_test._get_language_server).return_value
     fake_ls._versions["c.txt"] = 7
 
     edit: dict[str, Any] = {
@@ -215,7 +215,7 @@ def test_version_mismatch_rejected(applier_under_test: LanguageServerCodeEditor,
         ]
     }
     with pytest.raises(ValueError, match="version mismatch"):
-        applier_under_test._apply_workspace_edit(edit)
+        applier_under_test._apply_workspace_edit(cast(Any, edit))
     # File untouched
     assert (tmp_path / "c.txt").read_text(encoding="utf-8") == "x\n"
 
@@ -236,6 +236,6 @@ def test_version_none_accepted(applier_under_test: LanguageServerCodeEditor, tmp
             }
         ]
     }
-    n = applier_under_test._apply_workspace_edit(edit)
+    n = applier_under_test._apply_workspace_edit(cast(Any, edit))
     assert n == 1
     assert (tmp_path / "d.txt").read_text(encoding="utf-8") == "Z\n"

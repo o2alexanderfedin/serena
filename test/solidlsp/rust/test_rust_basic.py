@@ -23,7 +23,7 @@ class TestRustLanguageServer:
         assert add_symbol is not None, "Could not find 'add' function symbol in lib.rs"
         sel_start = add_symbol["selectionRange"]["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
-        assert any("main.rs" in ref.get("relativePath", "") for ref in refs), (
+        assert any("main.rs" in (ref.get("relativePath") or "") for ref in refs), (
             "main.rs should reference add (raw, tried all positions in selectionRange)"
         )
 
@@ -47,7 +47,7 @@ class TestRustLanguageServer:
         assert add_symbol is not None, "Could not find 'add' function symbol in lib.rs"
         sel_start = add_symbol["selectionRange"]["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
-        assert any("main.rs" in ref.get("relativePath", "") for ref in refs), (
+        assert any("main.rs" in (ref.get("relativePath") or "") for ref in refs), (
             "main.rs should reference add (tried all positions in selectionRange)"
         )
 

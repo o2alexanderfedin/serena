@@ -83,7 +83,7 @@ def _create_ls(
         config,
         repo_path,
         solidlsp_settings=SolidLSPSettings(
-            solidlsp_dir=effective_solidlsp_dir,
+            solidlsp_dir=str(effective_solidlsp_dir),
             project_data_path=project_data_path,
             ls_specific_settings=ls_specific_settings or {},
         ),
@@ -114,8 +114,10 @@ def start_ls_context(
             # try to force cleanup
             if hasattr(ls, "server") and hasattr(ls.server, "process"):
                 try:
-                    ls.server.process.terminate()
-                except:
+                    proc = ls.server.process
+                    if proc is not None:
+                        proc.terminate()
+                except Exception:
                     pass
 
 
@@ -219,7 +221,7 @@ def pytest_fixture_setup(fixturedef: Any, request: Any) -> Generator[None, None,
     test reports an honest skip outcome instead of a setup ERROR. Other
     exceptions propagate untouched, preserving normal failure reporting.
     """
-    outcome = yield
+    outcome: Any = yield
     try:
         outcome.get_result()
     except (RuntimeError, FileNotFoundError, SolidLSPException) as exc:
@@ -240,7 +242,7 @@ def pytest_runtest_setup(item: Any) -> Generator[None, None, None]:
     tests in the module skip uniformly. Real bugs (messages that don't match)
     propagate untouched.
     """
-    outcome = yield
+    outcome: Any = yield
     try:
         outcome.get_result()
     except (RuntimeError, FileNotFoundError, SolidLSPException) as exc:

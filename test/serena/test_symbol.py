@@ -240,6 +240,7 @@ class TestLanguageServerSymbolRetriever:
         symbol_retriever = LanguageServerSymbolRetriever(project_with_ls)
         create_user_method_symbol = symbol_retriever.find("UserService/create_user", within_relative_path="test_repo/services.py")[0]
         create_user_method_symbol_info = symbol_retriever.request_info_for_symbol(create_user_method_symbol)
+        assert create_user_method_symbol_info is not None
         assert "Create a new user and store it" in create_user_method_symbol_info
 
 

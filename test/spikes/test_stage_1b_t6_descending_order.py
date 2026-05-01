@@ -22,7 +22,7 @@ from __future__ import annotations
 import os
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -128,7 +128,7 @@ def applier(tmp_path: Path) -> LanguageServerCodeEditor:
 
 
 def _fake_ls(applier: LanguageServerCodeEditor) -> _FakeLanguageServer:
-    return applier._get_language_server.return_value  # type: ignore[no-any-return,attr-defined]
+    return cast(Any, applier._get_language_server).return_value  # type: ignore[no-any-return,attr-defined]
 
 
 def test_two_same_line_edits_apply_descending(applier: LanguageServerCodeEditor, tmp_path: Path) -> None:
@@ -152,7 +152,7 @@ def test_two_same_line_edits_apply_descending(applier: LanguageServerCodeEditor,
             }
         ]
     }
-    applier._apply_workspace_edit(edit)
+    applier._apply_workspace_edit(cast(Any, edit))
     _fake_ls(applier).flush_to_disk()
     # Correct result if applied descending: "AAAAA BBB\n"
     assert target.read_text(encoding="utf-8") == "AAAAA BBB\n"
@@ -178,7 +178,7 @@ def test_multi_line_descending(applier: LanguageServerCodeEditor, tmp_path: Path
             }
         ]
     }
-    applier._apply_workspace_edit(edit)
+    applier._apply_workspace_edit(cast(Any, edit))
     _fake_ls(applier).flush_to_disk()
     assert target.read_text(encoding="utf-8") == "L0CHANGED\nline1\nL2CHANGED\n"
 
@@ -213,7 +213,7 @@ def test_three_same_line_increasing_columns(applier: LanguageServerCodeEditor, t
             }
         ]
     }
-    applier._apply_workspace_edit(edit)
+    applier._apply_workspace_edit(cast(Any, edit))
     _fake_ls(applier).flush_to_disk()
     assert target.read_text(encoding="utf-8") == "AAAAAAA B CCCCCC\n"
 
@@ -243,7 +243,7 @@ def test_input_already_descending_unchanged(applier: LanguageServerCodeEditor, t
             }
         ]
     }
-    applier._apply_workspace_edit(edit)
+    applier._apply_workspace_edit(cast(Any, edit))
     _fake_ls(applier).flush_to_disk()
     assert target.read_text(encoding="utf-8") == "AAA BBB CCC\n"
 
@@ -285,6 +285,6 @@ def test_random_interleaved_lines(applier: LanguageServerCodeEditor, tmp_path: P
             }
         ]
     }
-    applier._apply_workspace_edit(edit)
+    applier._apply_workspace_edit(cast(Any, edit))
     _fake_ls(applier).flush_to_disk()
     assert target.read_text(encoding="utf-8") == "AAAA BBBB\nCCCC DDDD\nEEEE FFFF\n"
