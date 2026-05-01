@@ -425,8 +425,8 @@ class TestDartLanguageServer:
         # The body range must span multiple lines (not just the identifier line).
         # With hierarchicalDocumentSymbolSupport declared, the Dart LSP returns
         # DocumentSymbol[] where range covers the full method body.
-        body_start = add_symbol["location"]["range"]["start"]["line"]
-        body_end = add_symbol["location"]["range"]["end"]["line"]
+        body_start = (add_symbol.get("location") or {}).get("range", {}).get("start", {}).get("line", 0)
+        body_end = (add_symbol.get("location") or {}).get("range", {}).get("end", {}).get("line", 0)
         assert body_end > body_start, (
             f"Expected multi-line body range for 'add' method, got start={body_start}, end={body_end}. "
             f"This likely means hierarchicalDocumentSymbolSupport is not declared in client capabilities."
@@ -434,5 +434,5 @@ class TestDartLanguageServer:
 
         # The body text must contain the method implementation, not just the name.
         if add_symbol.get("body"):
-            body_text = add_symbol["body"].get_text()
+            body_text = add_symbol.get("body").get_text() if add_symbol.get("body") is not None else ""
             assert "return result" in body_text, f"Expected method body to contain implementation, got: {body_text!r}"
