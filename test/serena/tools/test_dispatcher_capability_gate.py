@@ -21,7 +21,9 @@ Each test confirms:
 from __future__ import annotations
 
 import json
+from collections.abc import Generator
 from pathlib import Path
+from typing import Any, TypeVar, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -47,11 +49,14 @@ from serena.tools.scalpel_runtime import ScalpelRuntime
 # ---------------------------------------------------------------------------
 
 
+_T = TypeVar("_T")
+
+
 @pytest.fixture(autouse=True)
-def _reset_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def _reset_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
     monkeypatch.setenv("O2_SCALPEL_CACHE", str(tmp_path / "cache"))
     ScalpelRuntime.reset_for_testing()
-    yield  # type: ignore[misc]
+    yield
     ScalpelRuntime.reset_for_testing()
 
 
@@ -73,9 +78,12 @@ def _fake_coord(supports: bool) -> MagicMock:
     return coord
 
 
-def _make_tool(cls, project_root: Path):
+def _make_tool(cls: type[_T], project_root: Path) -> Any:
+    """Construct a tool instance bypassing __init__; returns Any so each call site
+    can use the subclass-specific apply() signature without type unification across
+    the imported tool union."""
     tool = cls.__new__(cls)
-    tool.get_project_root = lambda: str(project_root)  # type: ignore[method-assign]
+    cast(Any, tool).get_project_root = lambda: str(project_root)
     return tool
 
 
@@ -108,7 +116,9 @@ class TestCapabilityNotAvailableEnvelope:
 
     def test_reason_embeds_kind(self) -> None:
         env = _capability_not_available_envelope(language="rust", kind="my.custom.kind")
-        assert "my.custom.kind" in env["reason"]
+        reason = env["reason"]
+        assert isinstance(reason, str)
+        assert "my.custom.kind" in reason
 
 
 # ---------------------------------------------------------------------------
