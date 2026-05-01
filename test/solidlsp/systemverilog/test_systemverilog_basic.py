@@ -19,7 +19,8 @@ from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name,
 def _find_symbol_by_name(language_server: SolidLanguageServer, file_path: str, name: str) -> dict[str, Any] | None:
     """Find a top-level symbol by name in a file's document symbols."""
     symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
-    return next((s for s in symbols[0] if s.get("name") == name), None)
+    found = next((s for s in symbols[0] if s.get("name") == name), None)
+    return dict(found) if found is not None else None
 
 
 def _get_symbol_selection_start(language_server: SolidLanguageServer, file_path: str, name: str) -> tuple[int, int]:
@@ -27,11 +28,7 @@ def _get_symbol_selection_start(language_server: SolidLanguageServer, file_path:
     symbol = _find_symbol_by_name(language_server, file_path, name)
     assert symbol is not None, f"Could not find symbol '{name}' in {file_path}"
     assert "selectionRange" in symbol, f"Symbol '{name}' has no selectionRange in {file_path}"
-    _sel_range = symbol.get("selectionRange")
-
-    assert _sel_range is not None
-
-    sel_start = _sel_range["start"]
+    sel_start = symbol["selectionRange"]["start"]
     return sel_start["line"], sel_start["character"]
 
 
@@ -90,7 +87,7 @@ class TestSystemVerilogDefinition:
         # "counter" starts at column 4
         definitions = language_server.request_definition("top.sv", 16, 4)
         assert len(definitions) >= 1, f"Expected at least 1 definition, got {len(definitions)}"
-        def_paths = [d.get("relativePath", "") for d in definitions]
+        def_paths = [d.get("relativePath") or "" for d in definitions]
         assert any("counter.sv" in p for p in def_paths), f"Expected definition in counter.sv, got: {def_paths}"
         counter_defs = [d for d in definitions if "counter.sv" in (d.get("relativePath") or "")]
         assert counter_defs[0]["range"]["start"]["line"] == 1, (
@@ -114,7 +111,7 @@ class TestSystemVerilogReferences:
         # 'count' starts at char 29
         references = language_server.request_references("counter.sv", 7, 29)
         assert len(references) >= 1, f"Expected at least 1 reference, got {len(references)}"
-        ref_paths = [r.get("relativePath", "") for r in references]
+        ref_paths = [r.get("relativePath") or "" for r in references]
         refs_in_counter = [r for r in references if "counter.sv" in (r.get("relativePath") or "")]
         assert len(refs_in_counter) >= 1, f"Expected within-file references in counter.sv, got paths: {ref_paths}"
         ref_lines = sorted(r["range"]["start"]["line"] for r in refs_in_counter)
@@ -131,7 +128,7 @@ class TestSystemVerilogReferences:
         """
         line, char = _get_symbol_selection_start(language_server, "counter.sv", "counter")
         references = language_server.request_references("counter.sv", line, char)
-        ref_paths = [ref.get("relativePath", "") for ref in references]
+        ref_paths = [ref.get("relativePath") or "" for ref in references]
         assert any("top.sv" in p for p in ref_paths), f"Expected reference from top.sv, got: {ref_paths}"
         refs_in_top = [r for r in references if "top.sv" in (r.get("relativePath") or "")]
         # top.sv line 17 (0-indexed: 16): "    counter #(.WIDTH(8)) u_counter ("
@@ -140,13 +137,13 @@ class TestSystemVerilogReferences:
         )
 
 
-def _extract_hover_text(hover_info: dict[str, Any]) -> str:
+def _extract_hover_text(hover_info: Any) -> str:
     """Extract the text content from an LSP hover response."""
     contents = hover_info["contents"]
     if isinstance(contents, dict):
-        return contents.get("value", "")
+        return str(contents.get("value", ""))
     elif isinstance(contents, str):
-        return dict(contents) if contents is not None else None
+        return contents
     return str(contents)
 
 
@@ -161,7 +158,7 @@ class TestSystemVerilogHover:
         hover_info = language_server.request_hover("counter.sv", line, char)
         assert hover_info is not None, "Hover should return information for counter module"
         assert "contents" in hover_info, "Hover should have contents"
-        hover_text = _extract_hover_text(dict(hover_info) if hover_info else hover_info)
+        hover_text = _extract_hover_text(hover_info)
         assert len(hover_text) > 0, "Hover text should not be empty"
         assert "counter" in hover_text.lower(), f"Hover should mention 'counter', got: {hover_text}"
         assert "module" in hover_text.lower(), f"Hover should identify 'counter' as a module, got: {hover_text}"
@@ -178,12 +175,12 @@ class TestSystemVerilogHover:
         hover_info = language_server.request_hover("counter.sv", 7, 29)
         assert hover_info is not None, "Hover should return information for 'count' port"
         assert "contents" in hover_info, "Hover should have contents"
-        hover_text = _extract_hover_text(dict(hover_info) if hover_info else hover_info)
+        hover_text = _extract_hover_text(hover_info)
         assert "count" in hover_text.lower(), f"Hover should mention 'count', got: {hover_text}"
         assert "logic" in hover_text.lower(), f"Hover should include type 'logic', got: {hover_text}"
 
 
-def _extract_changes(dict(workspace_edit: dict[str, Any]) if workspace_edit: dict[str, Any] is not None else {}) -> dict[str, list[dict[str, Any]]]:
+def _extract_changes(workspace_edit: Any) -> dict[str, list[dict[str, Any]]]:
     """Extract file URI → edits mapping from a WorkspaceEdit, handling both formats."""
     changes = workspace_edit.get("changes", {})
     if not changes:
@@ -208,7 +205,7 @@ class TestSystemVerilogRename:
         workspace_edit = language_server.request_rename_symbol_edit("counter.sv", 7, 29, "cnt")
         assert workspace_edit is not None, "Rename should be supported for port signal 'count'"
 
-        changes = _extract_changes(dict(dict(workspace_edit) if dict(workspace_edit is not None else {}) if workspace_edit else workspace_edit)
+        changes = _extract_changes(workspace_edit)
         counter_edits = [edits for uri, edits in changes.items() if "counter.sv" in uri]
         assert len(counter_edits) >= 1, f"Should have edits for counter.sv, got: {list(changes.keys())}"
 
@@ -232,7 +229,7 @@ class TestSystemVerilogRename:
         workspace_edit = language_server.request_rename_symbol_edit("counter.sv", 13, 12, "cnt")
         assert workspace_edit is not None, "Rename should be supported for signal 'count' from usage site"
 
-        changes = _extract_changes(dict(dict(workspace_edit) if dict(workspace_edit is not None else {}) if workspace_edit else workspace_edit)
+        changes = _extract_changes(workspace_edit)
         counter_uris = [uri for uri in changes if "counter.sv" in uri]
         top_uris = [uri for uri in changes if "top.sv" in uri]
         assert len(counter_uris) >= 1, f"Expected edits in counter.sv, got: {list(changes.keys())}"
@@ -253,7 +250,7 @@ class TestSystemVerilogRename:
         workspace_edit = language_server.request_rename_symbol_edit("counter.sv", line, char, "my_counter")
         assert workspace_edit is not None, "Rename should be supported for module 'counter'"
 
-        changes = _extract_changes(dict(dict(workspace_edit) if dict(workspace_edit is not None else {}) if workspace_edit else workspace_edit)
+        changes = _extract_changes(workspace_edit)
         assert len(changes) > 0, "WorkspaceEdit should have changes"
         counter_edits = [edits for uri, edits in changes.items() if "counter.sv" in uri]
         assert len(counter_edits) >= 1, f"Should have edits for counter.sv, got: {list(changes.keys())}"
