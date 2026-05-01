@@ -40,7 +40,7 @@ class TestRust2024EditionLanguageServer:
         sel_start = add_symbol["selectionRange"]["start"]
         refs = rust_language_server.request_references(file_path, sel_start["line"], sel_start["character"])
         # The add function should be referenced within main.rs itself (in the main function)
-        assert any("main.rs" in ref.get("relativePath", "") for ref in refs), "main.rs should reference add function"
+        assert any("main.rs" in (ref.get("relativePath") or "") for ref in refs), "main.rs should reference add function"
 
     def test_find_symbol(self, rust_language_server) -> None:
         symbols = rust_language_server.request_full_symbol_tree()

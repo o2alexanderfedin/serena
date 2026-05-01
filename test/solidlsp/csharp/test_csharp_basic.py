@@ -41,8 +41,7 @@ class TestCSharpLanguageServer:
         assert len(symbols) > 0
 
         # Flatten the symbols if they're nested
-        if isinstance(symbols[0], list):
-            symbols = symbols[0]
+        symbols = symbols[0]
 
         # Look for expected classes
         class_names = [s.get("name") for s in symbols if s.get("kind") == 5]  # 5 is class
@@ -56,16 +55,20 @@ class TestCSharpLanguageServer:
         symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         add_symbol = None
         # Handle nested symbol structure
-        symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
+        symbol_list = symbols[0]
         for sym in symbol_list:
             # Symbol names are normalized to base form (e.g., "Add" not "Add(int, int) : int")
             if sym.get("name") == "Add":
                 add_symbol = sym
                 break
         assert add_symbol is not None, "Could not find 'Add' method symbol in Program.cs"
-        sel_start = add_symbol["selectionRange"]["start"]
+        _sel_range = add_symbol.get("selectionRange")
+
+        assert _sel_range is not None
+
+        sel_start = _sel_range["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
-        assert any("Program.cs" in ref.get("relativePath", "") for ref in refs), (
+        assert any("Program.cs" in (ref.get("relativePath") or "") for ref in refs), (
             "Program.cs should reference Add method (tried all positions in selectionRange)"
         )
 
@@ -79,8 +82,7 @@ class TestCSharpLanguageServer:
         assert len(symbols) > 0
 
         # Flatten the symbols if they're nested
-        if isinstance(symbols[0], list):
-            symbols = symbols[0]
+        symbols = symbols[0]
 
         # Check that we have the Person class
         assert any(s.get("name") == "Person" and s.get("kind") == 5 for s in symbols)
@@ -101,7 +103,7 @@ class TestCSharpLanguageServer:
         symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # Flatten the symbols if they're nested
-        symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
+        symbol_list = symbols[0]
 
         subtract_symbol = None
         for sym in symbol_list:
@@ -113,7 +115,11 @@ class TestCSharpLanguageServer:
         assert subtract_symbol is not None, "Could not find 'Subtract' method symbol in Program.cs"
 
         # Get references to the Subtract method
-        sel_start = subtract_symbol["selectionRange"]["start"]
+        _sel_range = subtract_symbol.get("selectionRange")
+
+        assert _sel_range is not None
+
+        sel_start = _sel_range["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
 
         # Should find references where the method is called
@@ -313,6 +319,8 @@ class TestCSharpSolutionProjectOpening:
 
                     # Verify that logger was called with solution file discovery
                     expected_log_msg = f"Found solution/project file: {solution_file}"
+                    assert mem_log is not None
+
                     assert expected_log_msg in mem_log.get_log()
 
     @patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer.DependencyProvider._ensure_server_installed")
@@ -342,6 +350,8 @@ class TestCSharpSolutionProjectOpening:
 
                     # Verify that logger was called with warning about no solution/project files
                     expected_log_msg = "No .sln/.slnx or .csproj file found, language server will attempt auto-discovery"
+                    assert mem_log is not None
+
                     assert expected_log_msg in mem_log.get_log()
 
     def test_solution_and_project_opening_with_real_test_repo(self):

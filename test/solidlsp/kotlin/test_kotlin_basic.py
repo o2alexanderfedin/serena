@@ -28,7 +28,7 @@ class TestKotlinLanguageServer:
         # Use correct Kotlin file paths
         file_path = os.path.join("src", "main", "kotlin", "test_repo", "Utils.kt")
         refs = language_server.request_references(file_path, 3, 12)
-        assert any("Main.kt" in ref.get("relativePath", "") for ref in refs), "Main should reference Utils.printHello"
+        assert any("Main.kt" in (ref.get("relativePath") or "") for ref in refs), "Main should reference Utils.printHello"
 
         # Dynamically determine the correct line/column for the 'Model' class name
         file_path = os.path.join("src", "main", "kotlin", "test_repo", "Model.kt")
@@ -43,11 +43,17 @@ class TestKotlinLanguageServer:
         assert model_symbol is not None, "Could not find 'Model' class symbol in Model.kt"
         # Use selectionRange if present, otherwise fall back to range
         if "selectionRange" in model_symbol:
-            sel_start = model_symbol["selectionRange"]["start"]
+            _sel = model_symbol.get("selectionRange")
+
+            assert _sel is not None
+
+            sel_start = _sel["start"]
         else:
-            sel_start = model_symbol["range"]["start"]
+            _r = model_symbol.get("range")
+            assert _r is not None
+            sel_start = _r["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
-        assert any("Main.kt" in ref.get("relativePath", "") for ref in refs), (
+        assert any("Main.kt" in (ref.get("relativePath") or "") for ref in refs), (
             "Main should reference Model (tried all positions in selectionRange)"
         )
 

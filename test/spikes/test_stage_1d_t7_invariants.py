@@ -107,7 +107,8 @@ def test_workspace_boundary_fails_outside(tmp_path: Path) -> None:
     edit = _edit("file:///etc/passwd", 0, 0, 0, 0, "evil")
     ok, reason = _check_workspace_boundary(edit, workspace_folders=[str(tmp_path)], extra_paths=())
     assert ok is False
-    assert "OUT_OF_WORKSPACE_EDIT_BLOCKED" in reason  # type: ignore[arg-type]
+    assert reason is not None
+    assert "OUT_OF_WORKSPACE_EDIT_BLOCKED" in reason
     assert "/etc/passwd" in reason
 
 

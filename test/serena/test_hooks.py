@@ -539,12 +539,14 @@ class TestHookCli:
     def test_remind_command(self, tmp_path: Path):
         """Invoke the remind command enough times to trigger a deny."""
         runner = CliRunner()
+        result = None
         for _ in range(ToolUseCounter._GREP_USES_THRESHOLD):
             stdin_json = json.dumps({"session_id": "cli-remind", "tool_name": "grep", "tool_input": {}})
             with patch("serena.hooks.serena_home_dir", str(tmp_path)):
                 result = runner.invoke(hook_commands, ["remind", "--client", "claude-code"], input=stdin_json)
             assert result.exit_code == 0
 
+        assert result is not None
         output = json.loads(result.output)
         assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
 

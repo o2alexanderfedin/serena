@@ -69,7 +69,7 @@ from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
-PASLS_VERSION = "v0.2.0"
+_DEFAULT_PASLS_VERSION = "v0.2.0"
 
 
 class PascalLanguageServer(SolidLanguageServer):
@@ -80,9 +80,9 @@ class PascalLanguageServer(SolidLanguageServer):
     """
 
     # URL configuration
-    PASLS_VERSION = PASLS_VERSION
-    PASLS_RELEASES_URL = f"https://github.com/zen010101/pascal-language-server/releases/download/{PASLS_VERSION}"
-    PASLS_API_URL = f"https://api.github.com/repos/zen010101/pascal-language-server/releases/tags/{PASLS_VERSION}"
+    PASLS_VERSION: str = _DEFAULT_PASLS_VERSION
+    PASLS_RELEASES_URL = f"https://github.com/zen010101/pascal-language-server/releases/download/{_DEFAULT_PASLS_VERSION}"
+    PASLS_API_URL = f"https://api.github.com/repos/zen010101/pascal-language-server/releases/tags/{_DEFAULT_PASLS_VERSION}"
 
     # Update check interval (seconds)
     UPDATE_CHECK_INTERVAL = 86400  # 24 hours
@@ -618,7 +618,7 @@ class PascalLanguageServer(SolidLanguageServer):
 
         """
         pascal_settings = solidlsp_settings.get_ls_specific_settings(Language.PASCAL)
-        pasls_version = pascal_settings.get("pasls_version", PASLS_VERSION)
+        pasls_version = pascal_settings.get("pasls_version", _DEFAULT_PASLS_VERSION)
         cls.PASLS_VERSION = pasls_version
         cls.PASLS_RELEASES_URL = f"https://github.com/zen010101/pascal-language-server/releases/download/{pasls_version}"
         cls.PASLS_API_URL = f"https://api.github.com/repos/zen010101/pascal-language-server/releases/tags/{pasls_version}"

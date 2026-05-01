@@ -43,7 +43,11 @@ class TestGoLanguageServer:
                 helper_symbol = sym
                 break
         assert helper_symbol is not None, "Could not find 'Helper' function symbol in main.go"
-        sel_start = helper_symbol["selectionRange"]["start"]
+        _sel = helper_symbol.get("selectionRange")
+
+        assert _sel is not None
+
+        sel_start = _sel["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
         assert any("main.go" in ref.get("uri", "") for ref in refs), "Expected at least one reference result to point at main.go"
 

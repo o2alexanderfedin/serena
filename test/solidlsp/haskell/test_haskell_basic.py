@@ -123,8 +123,8 @@ class TestHaskellLanguageServer:
         assert len(references) >= 2, f"Expected at least 2 references to validateNumber (used in add and subtract), got {len(references)}"
 
         # Verify we have references in Calculator.hs
-        reference_paths = [ref["relativePath"] for ref in references]
-        calculator_refs = [path for path in reference_paths if "Calculator.hs" in path]
+        reference_paths = [ref["relativePath"] or "" for ref in references]
+        calculator_refs = [path for path in reference_paths if path is not None and "Calculator.hs" in path]
 
         assert len(calculator_refs) >= 2, (
             f"Expected at least 2 references in Calculator.hs (add and subtract functions), "
@@ -146,7 +146,7 @@ class TestHaskellLanguageServer:
         assert len(references) >= 1, f"Expected at least 1 reference to isNegative (used in absolute), got {len(references)}"
 
         # All references should be in Helper.hs
-        reference_paths = [ref["relativePath"] for ref in references]
+        reference_paths = [ref["relativePath"] or "" for ref in references]
         assert all("Helper.hs" in path for path in reference_paths), (
             f"All isNegative references should be in Helper.hs, got: {reference_paths}"
         )
@@ -168,7 +168,7 @@ class TestHaskellLanguageServer:
         # Should find references in Main.hs and possibly Calculator.hs (calculate function uses it)
         assert len(add_refs) >= 1, f"Expected at least 1 reference to 'add', got {len(add_refs)}"
 
-        add_ref_paths = [ref["relativePath"] for ref in add_refs]
+        add_ref_paths = [ref["relativePath"] or "" for ref in add_refs]
         # Should have at least one reference in Main.hs or Calculator.hs
         assert any("Main.hs" in path or "Calculator.hs" in path for path in add_ref_paths), (
             f"Expected 'add' to be referenced in Main.hs or Calculator.hs, got: {add_ref_paths}"
@@ -192,7 +192,7 @@ class TestHaskellLanguageServer:
         assert len(multiply_refs) >= 1, f"Expected at least 1 reference to 'multiply', got {len(multiply_refs)}"
 
         # Should have reference in Calculator.hs (calculate function)
-        multiply_ref_paths = [ref["relativePath"] for ref in multiply_refs]
+        multiply_ref_paths = [ref["relativePath"] or "" for ref in multiply_refs]
         assert any("Calculator.hs" in path for path in multiply_ref_paths), (
             f"Expected 'multiply' to be referenced in Calculator.hs, got: {multiply_ref_paths}"
         )
@@ -215,7 +215,7 @@ class TestHaskellLanguageServer:
         assert len(calculator_refs) >= 1, f"Expected at least 1 reference to Calculator constructor, got {len(calculator_refs)}"
 
         # Should have at least one reference in Main.hs or Calculator.hs
-        calc_ref_paths = [ref["relativePath"] for ref in calculator_refs]
+        calc_ref_paths = [ref["relativePath"] or "" for ref in calculator_refs]
         assert any("Main.hs" in path or "Calculator.hs" in path for path in calc_ref_paths), (
             f"Expected Calculator to be referenced in Main.hs or Calculator.hs, got: {calc_ref_paths}"
         )

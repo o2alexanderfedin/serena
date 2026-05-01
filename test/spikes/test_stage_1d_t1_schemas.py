@@ -53,7 +53,7 @@ def test_provenance_literal_rejects_unknown() -> None:
             kind="quickfix",
             disabled_reason=None,
             is_preferred=False,
-            provenance="jedi",  # not in the closed Literal set
+            provenance="jedi",  # pyright: ignore[reportArgumentType]
         )
 
 
@@ -74,7 +74,7 @@ def test_provenance_literal_includes_pylsp_mypy_for_v1_1_compat() -> None:
 
 def test_suppressed_alternative_reason_literal() -> None:
     with pytest.raises(ValidationError):
-        SuppressedAlternative(title="x", provenance="ruff", reason="some_other_reason")
+        SuppressedAlternative(title="x", provenance="ruff", reason="some_other_reason")  # pyright: ignore[reportArgumentType]
     for r in ("lower_priority", "duplicate_title", "duplicate_edit"):
         SuppressedAlternative(title="x", provenance="ruff", reason=r)
 

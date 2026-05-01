@@ -1,3 +1,4 @@
+# pyright: reportIncompatibleMethodOverride=false, reportOperatorIssue=false
 """
 Module to test parsing of classes with nested module paths in base classes.
 """

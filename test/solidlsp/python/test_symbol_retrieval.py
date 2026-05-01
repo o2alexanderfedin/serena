@@ -111,7 +111,11 @@ class TestLanguageServerSymbols:
         create_user_symbol = next((s for s in symbols[0] if s.get("name") == "create_user"), None)
         if not create_user_symbol or "selectionRange" not in create_user_symbol:
             raise AssertionError("create_user symbol or its selectionRange not found")
-        sel_start = create_user_symbol["selectionRange"]["start"]
+        _sel_range = create_user_symbol.get("selectionRange")
+
+        assert _sel_range is not None
+
+        sel_start = _sel_range["start"]
         ref_symbols = [
             ref.symbol for ref in language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
         ]
@@ -135,14 +139,18 @@ class TestLanguageServerSymbols:
         user_symbol = next((s for s in symbols[0] if s.get("name") == "User"), None)
         if not user_symbol or "selectionRange" not in user_symbol:
             raise AssertionError("User symbol or its selectionRange not found")
-        sel_start = user_symbol["selectionRange"]["start"]
+        _sel_range = user_symbol.get("selectionRange")
+
+        assert _sel_range is not None
+
+        sel_start = _sel_range["start"]
         ref_symbols = [
             ref.symbol for ref in language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
         ]
         services_references = [
             symbol
             for symbol in ref_symbols
-            if "location" in symbol and "uri" in symbol["location"] and "services.py" in symbol["location"]["uri"]
+            if "location" in symbol and "uri" in symbol["location"] and "services.py" in ((symbol.get("location") or {}).get("uri") or "")
         ]
         assert len(services_references) > 0, "No referencing symbols from services.py for User (selectionRange)"
 
@@ -156,7 +164,11 @@ class TestLanguageServerSymbols:
         get_user_symbol = next((s for s in symbols[0] if s.get("name") == "get_user"), None)
         if not get_user_symbol or "selectionRange" not in get_user_symbol:
             raise AssertionError("get_user symbol or its selectionRange not found")
-        sel_start = get_user_symbol["selectionRange"]["start"]
+        _sel_range = get_user_symbol.get("selectionRange")
+
+        assert _sel_range is not None
+
+        sel_start = _sel_range["start"]
         ref_symbols = [
             ref.symbol for ref in language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
         ]
@@ -202,7 +214,7 @@ class TestLanguageServerSymbols:
         # SymbolKind.Method = 6 for a method
         assert defining_symbol.get("kind") == SymbolKind.Method.value
         if "location" in defining_symbol and "uri" in defining_symbol["location"]:
-            assert "services.py" in defining_symbol["location"]["uri"]
+            assert "services.py" in ((defining_symbol.get("location") or {}).get("uri") or "")
 
     @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_request_defining_symbol_imported_class(self, language_server: SolidLanguageServer) -> None:
@@ -228,7 +240,7 @@ class TestLanguageServerSymbols:
         assert defining_symbol is not None
         assert defining_symbol.get("name") == "create_user"
         # The defining symbol should be in the services.py file
-        assert "services.py" in defining_symbol["location"]["uri"]
+        assert "services.py" in ((defining_symbol.get("location") or {}).get("uri") or "")
 
     @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_request_defining_symbol_none(self, language_server: SolidLanguageServer) -> None:
@@ -320,7 +332,7 @@ class TestLanguageServerSymbols:
 
         # Step 3: Verify that they refer to the same symbol
         assert defining_symbol["kind"] == containing_symbol["kind"]
-        assert defining_symbol["location"]["uri"] == containing_symbol["location"]["uri"]
+        assert ((defining_symbol.get("location") or {}).get("uri") or "") == ((containing_symbol.get("location") or {}).get("uri") or "")
 
     @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_symbol_tree_structure(self, language_server: SolidLanguageServer) -> None:
@@ -339,18 +351,18 @@ class TestLanguageServerSymbols:
         assert child_kinds == {SymbolKind.Package}
         examples_package = next(child for child in repo_structure[0]["children"] if child["name"] == "examples")
         # assert that children are __init__ and user_management
-        assert {child["name"] for child in examples_package["children"]} == {"__init__", "user_management"}
-        assert {child["kind"] for child in examples_package["children"]} == {SymbolKind.File}
+        assert {child["name"] for child in (examples_package.get("children") or [])} == {"__init__", "user_management"}
+        assert {child["kind"] for child in (examples_package.get("children") or [])} == {SymbolKind.File}
 
         # assert that tree of user_management node is same as retrieved directly
-        user_management_node = next(child for child in examples_package["children"] if child["name"] == "user_management")
+        user_management_node = next(child for child in (examples_package.get("children") or []) if child["name"] == "user_management")
         if "location" in user_management_node and "relativePath" in user_management_node["location"]:
             user_management_rel_path = user_management_node["location"]["relativePath"]
             assert user_management_rel_path == os.path.join("examples", "user_management.py")
             _, user_management_roots = language_server.request_document_symbols(
                 os.path.join("examples", "user_management.py")
             ).get_all_symbols_and_roots()
-            assert user_management_roots == user_management_node["children"]
+            assert user_management_roots == (user_management_node.get("children") or [])
 
     @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_symbol_tree_structure_subdir(self, language_server: SolidLanguageServer) -> None:
@@ -362,18 +374,18 @@ class TestLanguageServerSymbols:
         assert examples_package["name"] == "examples"
         assert examples_package["kind"] == SymbolKind.Package
         # assert that children are __init__ and user_management
-        assert {child["name"] for child in examples_package["children"]} == {"__init__", "user_management"}
-        assert {child["kind"] for child in examples_package["children"]} == {SymbolKind.File}
+        assert {child["name"] for child in (examples_package.get("children") or [])} == {"__init__", "user_management"}
+        assert {child["kind"] for child in (examples_package.get("children") or [])} == {SymbolKind.File}
 
         # assert that tree of user_management node is same as retrieved directly
-        user_management_node = next(child for child in examples_package["children"] if child["name"] == "user_management")
+        user_management_node = next(child for child in (examples_package.get("children") or []) if child["name"] == "user_management")
         if "location" in user_management_node and "relativePath" in user_management_node["location"]:
             user_management_rel_path = user_management_node["location"]["relativePath"]
             assert user_management_rel_path == os.path.join("examples", "user_management.py")
             _, user_management_roots = language_server.request_document_symbols(
                 os.path.join("examples", "user_management.py")
             ).get_all_symbols_and_roots()
-            assert user_management_roots == user_management_node["children"]
+            assert user_management_roots == (user_management_node.get("children") or [])
 
     @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_request_dir_overview(self, language_server: SolidLanguageServer) -> None:

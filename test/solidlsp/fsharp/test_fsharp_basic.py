@@ -70,11 +70,15 @@ class TestFSharpLanguageServer:
         assert add_symbol is not None, "Could not find 'add' function symbol in Calculator.fs"
 
         # Try to find references to the add function
-        sel_start = add_symbol["selectionRange"]["start"]
+        _sel = add_symbol.get("selectionRange")
+
+        assert _sel is not None
+
+        sel_start = _sel["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
 
         # The add function should be referenced in Program.fs
-        assert any("Program.fs" in ref.get("relativePath", "") for ref in refs), "Program.fs should reference add function"
+        assert any("Program.fs" in (ref.get("relativePath") or "") for ref in refs), "Program.fs should reference add function"
 
     @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
     def test_nested_module_symbols(self, language_server: SolidLanguageServer) -> None:
@@ -106,11 +110,15 @@ class TestFSharpLanguageServer:
         assert subtract_symbol is not None, "Could not find 'subtract' function symbol"
 
         # Find references to subtract function
-        sel_start = subtract_symbol["selectionRange"]["start"]
+        _sel = subtract_symbol.get("selectionRange")
+
+        assert _sel is not None
+
+        sel_start = _sel["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
 
         # The subtract function should be referenced in Program.fs
-        assert any("Program.fs" in ref.get("relativePath", "") for ref in refs), "Program.fs should reference subtract function"
+        assert any("Program.fs" in (ref.get("relativePath") or "") for ref in refs), "Program.fs should reference subtract function"
 
     @pytest.mark.xfail(reason="F# LSP referencing is flaky locally and on CI; netstandard/System.Boolean reference resolution intermittently fails — see #1040", strict=False)
     @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)

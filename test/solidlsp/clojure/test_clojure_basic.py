@@ -110,7 +110,8 @@ class TestLanguageServerBasics:
         """Test references to multiply function with content"""
         references = language_server.request_references(CORE_PATH, 12, 6)
         result = [
-            language_server.retrieve_content_around_line(ref1["relativePath"], ref1["range"]["start"]["line"], 3, 0) for ref1 in references
+            language_server.retrieve_content_around_line(ref1["relativePath"] or "", ref1["range"]["start"]["line"], 3, 0)
+            for ref1 in references
         ]
 
         assert result is not None, "Should find references with content"

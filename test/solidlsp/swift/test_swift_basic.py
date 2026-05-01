@@ -93,7 +93,13 @@ class TestSwiftLanguageServerBasics:
         symbols = language_server.request_document_symbols(utils_file).get_all_symbols_and_roots()
         utils_symbol = next(s for s in symbols[0] if s.get("name") == "Utils")
 
-        sel_start = utils_symbol["selectionRange"]["start"]
+        _sel_range = utils_symbol.get("selectionRange")
+
+
+        assert _sel_range is not None
+
+
+        sel_start = _sel_range["start"]
         definitions = language_server.request_definition(utils_file, sel_start["line"], sel_start["character"])
         assert isinstance(definitions, list), "Definitions should be a list"
 
@@ -111,7 +117,13 @@ class TestSwiftLanguageServerBasics:
 
         calculator_symbol = next(s for s in symbols[0] if s.get("name") == "Calculator")
 
-        sel_start = calculator_symbol["selectionRange"]["start"]
+        _sel_range = calculator_symbol.get("selectionRange")
+
+
+        assert _sel_range is not None
+
+
+        sel_start = _sel_range["start"]
         references = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
         assert isinstance(references, list), "References should be a list"
         assert len(references) > 0, "Calculator class should be referenced"
@@ -134,7 +146,13 @@ class TestSwiftLanguageServerBasics:
 
         user_symbol = next(s for s in symbols[0] if s.get("name") == "User")
 
-        sel_start = user_symbol["selectionRange"]["start"]
+        _sel_range = user_symbol.get("selectionRange")
+
+
+        assert _sel_range is not None
+
+
+        sel_start = _sel_range["start"]
         references = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
         assert isinstance(references, list), "References should be a list"
 
@@ -156,7 +174,11 @@ class TestSwiftLanguageServerBasics:
         utils_symbol = next((s for s in symbols[0] if s.get("name") == "Utils"), None)
         if not utils_symbol or "selectionRange" not in utils_symbol:
             raise AssertionError("Utils symbol or its selectionRange not found")
-        sel_start = utils_symbol["selectionRange"]["start"]
+        _sel_range = utils_symbol.get("selectionRange")
+
+        assert _sel_range is not None
+
+        sel_start = _sel_range["start"]
         references = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
         assert isinstance(references, list), "References should be a list"
         assert len(references) > 0, "Utils struct should be referenced"

@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from typing import Any, cast
 from pathlib import Path
 
 import pytest
@@ -60,12 +61,18 @@ def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     if not user_symbol or "selectionRange" not in user_symbol:
         pytest.skip("User record symbol not found for reference testing")
 
-    sel_start = user_symbol["selectionRange"]["start"]
+    _sel_range = user_symbol.get("selectionRange")
+
+
+    assert _sel_range is not None
+
+
+    sel_start = _sel_range["start"]
     references = ls_with_ignored_dirs.request_references(definition_file, sel_start["line"], sel_start["character"])
 
     # Assert that _build and ignored_dir do not appear in the references
-    assert not any("_build" in ref["relativePath"] for ref in references), "_build should be ignored"
-    assert not any("ignored_dir" in ref["relativePath"] for ref in references), "ignored_dir should be ignored"
+    assert not any("_build" in (ref["relativePath"] or "") for ref in references), "_build should be ignored"
+    assert not any("ignored_dir" in (ref["relativePath"] or "") for ref in references), "ignored_dir should be ignored"
 
 
 @pytest.mark.timeout(60)  # Add 60 second timeout
@@ -99,12 +106,16 @@ def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
                 break
 
         if user_symbol and "selectionRange" in user_symbol:
-            sel_start = user_symbol["selectionRange"]["start"]
+            _sel_range = user_symbol.get("selectionRange")
+
+            assert _sel_range is not None
+
+            sel_start = _sel_range["start"]
             references = ls.request_references(definition_file, sel_start["line"], sel_start["character"])
 
             # Assert that _build and ignored_dir do not appear in references
-            assert not any("_build" in ref["relativePath"] for ref in references), "_build should be ignored (glob)"
-            assert not any("ignored_dir" in ref["relativePath"] for ref in references), "ignored_dir should be ignored (glob)"
+            assert not any("_build" in (ref["relativePath"] or "") for ref in references), "_build should be ignored (glob)"
+            assert not any("ignored_dir" in (ref["relativePath"] or "") for ref in references), "ignored_dir should be ignored (glob)"
 
 
 @pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
@@ -149,12 +160,12 @@ def test_symbol_tree_excludes_build_dirs(language_server: SolidLanguageServer):
 def test_ignore_compiled_files(language_server: SolidLanguageServer):
     """Test that compiled Erlang files are ignored."""
     # Test that beam files are ignored
-    assert language_server.is_ignored_filename("module.beam"), "BEAM files should be ignored"
-    assert language_server.is_ignored_filename("app.beam"), "BEAM files should be ignored"
+    assert cast(Any, language_server).is_ignored_filename("module.beam"), "BEAM files should be ignored"
+    assert cast(Any, language_server).is_ignored_filename("app.beam"), "BEAM files should be ignored"
 
     # Test that source files are not ignored
-    assert not language_server.is_ignored_filename("module.erl"), "Erlang source files should not be ignored"
-    assert not language_server.is_ignored_filename("records.hrl"), "Header files should not be ignored"
+    assert not cast(Any, language_server).is_ignored_filename("module.erl"), "Erlang source files should not be ignored"
+    assert not cast(Any, language_server).is_ignored_filename("records.hrl"), "Header files should not be ignored"
 
 
 @pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
@@ -166,8 +177,8 @@ def test_rebar_directories_ignored(language_server: SolidLanguageServer):
     assert language_server.is_ignored_dirname(".rebar3"), "rebar3 cache should be ignored"
 
     # Test that rebar.lock and rebar.config are not ignored (they are configuration files)
-    assert not language_server.is_ignored_filename("rebar.config"), "rebar.config should not be ignored"
-    assert not language_server.is_ignored_filename("rebar.lock"), "rebar.lock should not be ignored"
+    assert not cast(Any, language_server).is_ignored_filename("rebar.config"), "rebar.config should not be ignored"
+    assert not cast(Any, language_server).is_ignored_filename("rebar.lock"), "rebar.lock should not be ignored"
 
 
 @pytest.mark.parametrize("ls_with_ignored_dirs", [Language.ERLANG], indirect=True)

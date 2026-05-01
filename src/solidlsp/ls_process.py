@@ -9,7 +9,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from queue import Empty, Queue
-from typing import Any
+from typing import Any, cast
 
 import psutil
 from sensai.util.string import ToStringMixin
@@ -195,24 +195,28 @@ class LanguageServerProcess:
         log.info("Starting language server process via command: %s", self.process_launch_info.cmd)
         kwargs = subprocess_kwargs()
         kwargs["start_new_session"] = self.start_independent_lsp_process
-        self.process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stdin=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=child_proc_env,
-            cwd=self.process_launch_info.cwd,
-            shell=True,
-            **kwargs,
+        process: subprocess.Popen[bytes] = cast(
+            "subprocess.Popen[bytes]",
+            subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stdin=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=child_proc_env,
+                cwd=self.process_launch_info.cwd,
+                shell=True,
+                **kwargs,
+            ),
         )
+        self.process = process
 
         # Check if process terminated immediately
-        if self.process.returncode is not None:
+        if process.returncode is not None:
             log.error("Language server has already terminated/could not be started")
             # Process has already terminated
-            stderr_data = self.process.stderr.read() if self.process.stderr else b""
+            stderr_data = process.stderr.read() if process.stderr else b""
             error_message = stderr_data.decode("utf-8", errors="replace")
-            raise RuntimeError(f"Process terminated immediately with code {self.process.returncode}. Error: {error_message}")
+            raise RuntimeError(f"Process terminated immediately with code {process.returncode}. Error: {error_message}")
 
         # start threads to read stdout and stderr of the process
         threading.Thread(

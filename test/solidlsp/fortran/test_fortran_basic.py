@@ -74,7 +74,11 @@ class TestFortranLanguageServer:
 
         # Use selectionRange to query for references
         # Note: FortranLanguageServer automatically fixes fortls's incorrect selectionRange
-        sel_start = add_numbers_symbol["selectionRange"]["start"]
+        _sel_range = add_numbers_symbol.get("selectionRange")
+
+        assert _sel_range is not None
+
+        sel_start = _sel_range["start"]
 
         # Query from the function name position using corrected selectionRange
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
@@ -83,7 +87,7 @@ class TestFortranLanguageServer:
         assert len(refs) > 0, "Should find references to add_numbers function"
 
         # Verify that main.f90 references the function
-        main_refs = [ref for ref in refs if "main.f90" in ref.get("relativePath", "")]
+        main_refs = [ref for ref in refs if "main.f90" in (ref.get("relativePath") or "")]
         assert len(main_refs) > 0, (
             f"Expected to find reference in main.f90, but found references in: {[ref.get('relativePath') for ref in refs]}"
         )
@@ -139,7 +143,11 @@ class TestFortranLanguageServer:
 
         # Use selectionRange to query for referencing symbols
         # FortranLanguageServer automatically corrects fortls's incorrect selectionRange
-        sel_start = add_numbers_symbol["selectionRange"]["start"]
+        _sel_range = add_numbers_symbol.get("selectionRange")
+
+        assert _sel_range is not None
+
+        sel_start = _sel_range["start"]
         referencing_symbols = language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
 
         # Should find referencing symbols (not just locations, but symbols containing the references)
@@ -187,7 +195,7 @@ class TestFortranLanguageServer:
             pytest.skip("fortls found the symbol but doesn't provide complete location information")
 
         # The definition should be in modules/math_utils.f90
-        defining_path = defining_symbol["location"]["relativePath"]
+        defining_path = defining_symbol["location"]["relativePath"] or ""
         assert "math_utils.f90" in defining_path, f"Expected definition to be in math_utils.f90, but found in: {defining_path}"
 
     @pytest.mark.parametrize("language_server", [Language.FORTRAN], indirect=True)
@@ -261,7 +269,11 @@ class TestFortranLanguageServer:
 
         # Use corrected selectionRange to find references
         # This tests that the fix works for types (not just functions)
-        sel_start = point3d_symbol["selectionRange"]["start"]
+        _sel_range = point3d_symbol.get("selectionRange")
+
+        assert _sel_range is not None
+
+        sel_start = _sel_range["start"]
 
         # Verify selectionRange points to identifier name, not line start
         # Line for "type, extends(Point2D) :: Point3D" has Point3D at position > 0

@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -106,7 +106,7 @@ def test_in_workspace_text_edit_passes(applier: LanguageServerCodeEditor, tmp_pa
             }
         ]
     }
-    applier._apply_workspace_edit(edit)
+    applier._apply_workspace_edit(cast(Any, edit))
     assert target.read_text(encoding="utf-8") == "B\n"
 
 
@@ -116,7 +116,7 @@ def test_out_of_workspace_create_blocked(applier: LanguageServerCodeEditor, tmp_
     foreign = other / "evil.txt"
     edit: dict[str, Any] = {"documentChanges": [{"kind": "create", "uri": foreign.as_uri()}]}
     with pytest.raises(WorkspaceBoundaryError):
-        applier._apply_workspace_edit(edit)
+        applier._apply_workspace_edit(cast(Any, edit))
     assert not foreign.exists()
 
 
@@ -126,7 +126,7 @@ def test_out_of_workspace_delete_blocked(applier: LanguageServerCodeEditor, tmp_
     foreign.write_text("preserved\n", encoding="utf-8")
     edit: dict[str, Any] = {"documentChanges": [{"kind": "delete", "uri": foreign.as_uri()}]}
     with pytest.raises(WorkspaceBoundaryError):
-        applier._apply_workspace_edit(edit)
+        applier._apply_workspace_edit(cast(Any, edit))
     assert foreign.read_text(encoding="utf-8") == "preserved\n"
 
 
@@ -143,7 +143,7 @@ def test_out_of_workspace_rename_blocked_on_either_uri(
         ]
     }
     with pytest.raises(WorkspaceBoundaryError):
-        applier._apply_workspace_edit(edit)
+        applier._apply_workspace_edit(cast(Any, edit))
     assert inside.exists()
     assert not outside_dst.exists()
 
@@ -158,7 +158,7 @@ def test_extra_paths_env_admits_outsider(
     monkeypatch.setenv("O2_SCALPEL_WORKSPACE_EXTRA_PATHS", str(extra))
     target = extra / "ok.txt"
     edit: dict[str, Any] = {"documentChanges": [{"kind": "create", "uri": target.as_uri()}]}
-    applier._apply_workspace_edit(edit)
+    applier._apply_workspace_edit(cast(Any, edit))
     assert target.exists()
 
 
@@ -173,5 +173,5 @@ def test_extra_paths_env_pathsep_split(
     monkeypatch.setenv("O2_SCALPEL_WORKSPACE_EXTRA_PATHS", f"{a}{os.pathsep}{b}")
     target_b = b / "ok.txt"
     edit: dict[str, Any] = {"documentChanges": [{"kind": "create", "uri": target_b.as_uri()}]}
-    applier._apply_workspace_edit(edit)
+    applier._apply_workspace_edit(cast(Any, edit))
     assert target_b.exists()

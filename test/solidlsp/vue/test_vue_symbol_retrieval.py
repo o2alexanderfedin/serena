@@ -182,7 +182,7 @@ class TestVueSymbolRetrieval:
         definitions = language_server.request_definition(input_file, 4, 10)
 
         assert len(definitions) == 1, f"Should find exactly 1 definition for CalculatorButton import, got {len(definitions)}"
-        assert "CalculatorButton.vue" in definitions[0]["relativePath"], (
+        assert "CalculatorButton.vue" in (definitions[0]["relativePath"] or ""), (
             f"Definition should point to CalculatorButton.vue, got {definitions[0]['relativePath']}"
         )
 
@@ -239,7 +239,7 @@ class TestVueSymbolRetrieval:
 
         definition = definitions[0]
         assert definition["relativePath"] is not None, "Definition should have a relative path"
-        assert "CalculatorButton.vue" in definition["relativePath"], (
+        assert "CalculatorButton.vue" in (definition["relativePath"] or ""), (
             f"Should point to CalculatorButton.vue, got {definition['relativePath']}"
         )
 
