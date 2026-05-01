@@ -1,4 +1,4 @@
-# pyright: reportCallIssue=false, reportGeneralTypeIssues=false, reportRedeclaration=false, reportAssignmentType=false, reportReturnType=false
+# pyright: reportCallIssue=false, reportGeneralTypeIssues=false, reportRedeclaration=false, reportAssignmentType=false, reportReturnType=false, reportInvalidTypeForm=false
 """Trips Rope on PEP 695 / 701 / 654 if Rope's parser is stale.
 
 This file is NOT imported from `calcpy_seed/__init__.py` because it requires
@@ -19,4 +19,4 @@ def parse_groups(items: list[int]) -> int:
     try:
         return sum(items)
     except* (TypeError, ValueError) as eg:
-        return -1
+        return -1  # pyright: ignore  # noqa
