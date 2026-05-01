@@ -12,6 +12,7 @@ Known Crystalline limitations:
 import os
 import shutil
 
+from typing import Any, cast
 import pytest
 
 from solidlsp import SolidLanguageServer
@@ -92,7 +93,7 @@ class TestCrystalDefinition:
         file_path = os.path.join("src", "main.cr")
 
         # wait for Crystalline to compile the project
-        language_server.language_server._wait_for_compilation()
+        language_server.cast(Any, language_server)._wait_for_compilation()
 
         # Calculator.new on line 35 (0-indexed: 34), col 13 -> Calculator class on line 3 (0-indexed: 2)
         definitions = language_server.request_definition(file_path, 34, 13)

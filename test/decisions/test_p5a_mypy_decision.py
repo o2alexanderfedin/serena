@@ -28,7 +28,8 @@ def test_pylsp_server_initialize_params_enable_mypy(tmp_path) -> None:
     from solidlsp.language_servers.pylsp_server import PylspServer
 
     params = PylspServer._get_initialize_params(str(tmp_path))
-    init_opts = cast(dict[str, Any], params["initializationOptions"])
+    init_opts = cast(dict[str, Any], params.get("initializationOptions"))
+    assert init_opts is not None
     plugins = init_opts["pylsp"]["plugins"]
     assert plugins["pylsp_mypy"]["enabled"] is True
     assert plugins["pylsp_mypy"]["live_mode"] is False

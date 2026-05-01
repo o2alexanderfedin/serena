@@ -216,6 +216,8 @@ class TestRubyLanguageServerSymbols:
 
         # This test might fail if the language server doesn't support it well
         if defining_symbol is not None:
+            assert defining_symbol is not None
+
             assert "name" in defining_symbol
             assert "kind" in defining_symbol
 
@@ -229,6 +231,8 @@ class TestRubyLanguageServerSymbols:
 
         # This might not work perfectly in all Ruby language servers
         if defining_symbol is not None:
+            assert defining_symbol is not None
+
             assert "name" in defining_symbol
             # The name might be "User" or the method that contains it
             assert defining_symbol.get("name") is not None
@@ -254,6 +258,8 @@ class TestRubyLanguageServerSymbols:
 
         # This is challenging for many language servers
         if defining_symbol is not None:
+            assert defining_symbol is not None
+
             assert "name" in defining_symbol
             assert defining_symbol.get("name") in ["NestedClass", "OuterClass"]
 
@@ -584,6 +590,8 @@ class TestRubyLanguageServerSymbols:
 
         # This might not work perfectly in all Ruby language servers due to require complexity
         if defining_symbol is not None:
+            assert defining_symbol is not None
+
             assert "name" in defining_symbol
             # The defining symbol should relate to UserService or Services
             # The defining symbol should relate to UserService, Services, or the containing class
@@ -604,8 +612,13 @@ class TestRubyLanguageServerSymbols:
         # Verify that we can find the method definition
         assert pos is not None
 
+        assert pos is not None
+
+
         defining_symbol = language_server.request_defining_symbol(file_path, pos.line, pos.col)
         assert defining_symbol is not None
+        assert defining_symbol is not None
+
         assert "name" in defining_symbol
         assert "kind" in defining_symbol
         assert defining_symbol.get("name") == "create_user"
@@ -621,6 +634,8 @@ class TestRubyLanguageServerSymbols:
 
         # This is challenging for many language servers
         if defining_symbol is not None:
+            assert defining_symbol is not None
+
             assert "name" in defining_symbol
             assert "kind" in defining_symbol
             # Could be method, function, or variable depending on implementation

@@ -12,6 +12,7 @@ Reference: JSON-RPC 2.0 spec - params field is optional but must be object/array
 
 from typing import Any
 
+from typing import Any, cast
 import pytest
 
 from solidlsp.lsp_protocol_handler.server import make_notification, make_request

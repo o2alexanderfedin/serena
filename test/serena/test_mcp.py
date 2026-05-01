@@ -92,7 +92,7 @@ def test_make_tool_no_params() -> None:
             """
             return "Simple result"
 
-        def apply_ex(self, *args, **kwargs) -> str:
+        def apply_ex(self, *args, **kwargs) -> str:  # pyright: ignore[reportIncompatibleMethodOverride]
             return self.apply()
 
     tool = NoParamsTool()
@@ -114,7 +114,7 @@ def test_make_tool_no_return_description() -> None:
             """
             return f"Processed: {param}"
 
-        def apply_ex(self, *args, **kwargs) -> str:
+        def apply_ex(self, *args, **kwargs) -> str:  # pyright: ignore[reportIncompatibleMethodOverride]
             return self.apply(**kwargs)
 
     tool = NoReturnTool()
@@ -136,7 +136,7 @@ def test_make_tool_parameter_not_in_docstring() -> None:
             """
             return f"Hello {name}! Missing param: {missing_param}"
 
-        def apply_ex(self, *args, **kwargs) -> str:
+        def apply_ex(self, *args, **kwargs) -> str:  # pyright: ignore[reportIncompatibleMethodOverride]
             return self.apply(**kwargs)
 
     tool = MissingParamTool()
@@ -165,7 +165,7 @@ def test_make_tool_multiline_docstring() -> None:
             """
             return f"Server config: {project_file_path}, {host}:{port}"
 
-        def apply_ex(self, *args, **kwargs) -> str:
+        def apply_ex(self, *args, **kwargs) -> str:  # pyright: ignore[reportIncompatibleMethodOverride]
             return self.apply(**kwargs)
 
     tool = ComplexDocTool()
@@ -191,7 +191,7 @@ def test_make_tool_capitalization_and_periods() -> None:
             """
             return f"Formatted: {param1}, {param2}, {param3}"
 
-        def apply_ex(self, *args, **kwargs) -> str:
+        def apply_ex(self, *args, **kwargs) -> str:  # pyright: ignore[reportIncompatibleMethodOverride]
             return self.apply(**kwargs)
 
     tool = FormatTool()
@@ -248,7 +248,7 @@ def test_make_tool_descriptions(docstring, expected_description) -> None:
         def apply(self, param: str) -> str:
             return f"Result: {param}"
 
-        def apply_ex(self, *args, **kwargs) -> str:
+        def apply_ex(self, *args, **kwargs) -> str:  # pyright: ignore[reportIncompatibleMethodOverride]
             return self.apply(**kwargs)
 
     # Dynamically set the docstring

@@ -1,3 +1,4 @@
+from typing import cast
 import pytest
 
 from serena.project import Project
@@ -110,7 +111,7 @@ class TestLanguageServerBasics:
         """Test references to multiply function with content"""
         references = language_server.request_references(CORE_PATH, 12, 6)
         result = [
-            language_server.retrieve_content_around_line(ref1["relativePath"], ref1["range"]["start"]["line"], 3, 0) for ref1 in references
+            language_server.retrieve_content_around_line(cast(str, ref1["relativePath"]), ref1["range"]["start"]["line"], 3, 0) for ref1 in references
         ]
 
         assert result is not None, "Should find references with content"
@@ -192,10 +193,10 @@ class TestLanguageServerBasics:
 @pytest.mark.clojure
 class TestProjectBasics:
     @pytest.mark.parametrize("project", [Language.CLOJURE], indirect=True)
-    def test_retrieve_content_around_line(self, project: Project):
+    def test_retrieve_content_around_line(cast(str, self), project: Project):
         """Test retrieving content around specific lines"""
         # Test retrieving content around the greet function definition (line 2)
-        result = project.retrieve_content_around_line(CORE_PATH, 2, 2)
+        result = project.retrieve_content_around_line(cast(str, CORE_PATH), 2, 2)
 
         assert result is not None, "Should retrieve content around line 2"
         content_str = result.to_display_string()
@@ -203,7 +204,7 @@ class TestProjectBasics:
         assert "defn" in content_str, "Should contain defn keyword"
 
         # Test retrieving content around multiply function (around line 13)
-        result = project.retrieve_content_around_line(CORE_PATH, 13, 1)
+        result = project.retrieve_content_around_line(cast(str, CORE_PATH), 13, 1)
 
         assert result is not None, "Should retrieve content around line 13"
         content_str = result.to_display_string()
