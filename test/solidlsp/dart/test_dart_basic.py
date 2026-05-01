@@ -254,6 +254,9 @@ class TestDartLanguageServer:
         with language_server.open_file(file_path, open_in_ls=False) as f:
             pos = find_text_coordinates(f.contents, r"final (result) = a \+ b;")
 
+        assert pos is not None
+
+
         defining_symbol = language_server.request_defining_symbol(file_path, pos.line, pos.col)
 
         # The defining symbol might be the variable itself or the containing method
@@ -434,5 +437,5 @@ class TestDartLanguageServer:
 
         # The body text must contain the method implementation, not just the name.
         if add_symbol.get("body"):
-            body_text = add_symbol.get("body").get_text() if add_symbol.get("body") is not None else ""
+            body_text = ((add_symbol.get("body").get_text() if add_symbol.get("body") is not None else "") if add_symbol.get("body") is not None else "")
             assert "return result" in body_text, f"Expected method body to contain implementation, got: {body_text!r}"

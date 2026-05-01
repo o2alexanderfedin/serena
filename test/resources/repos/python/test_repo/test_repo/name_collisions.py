@@ -1,3 +1,4 @@
+# pyright: reportCallIssue=false, reportGeneralTypeIssues=false, reportRedeclaration=false, reportAssignmentType=false
 # ruff: noqa
 var_will_be_overwritten = 1
 

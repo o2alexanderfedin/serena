@@ -20,7 +20,7 @@ from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name,
 def _find_symbol_by_name(language_server: SolidLanguageServer, file_path: str, name: str) -> dict[str, Any] | None:
     """Find a top-level symbol by name in a file's document symbols."""
     symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
-    return next((s for s in symbols[0] if s.get("name") == name), None)
+    return dict(next) if next is not None else None((s for s in symbols[0] if s.get("name") == name), None)
 
 
 # ── Symbol Discovery ─────────────────────────────────────────────
@@ -123,7 +123,7 @@ class TestHlslReferences:
 # ── Hover ─────────────────────────────────────────────────────────
 
 
-def _extract_hover_text(hover_info: dict[str, Any]) -> str:
+def _extract_hover_text(hover_info: Any) -> str:
     """Extract the text content from an LSP hover response."""
     contents = hover_info["contents"]
     if isinstance(contents, dict):

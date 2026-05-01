@@ -1,3 +1,4 @@
+# pyright: reportCallIssue=false, reportGeneralTypeIssues=false, reportRedeclaration=false, reportAssignmentType=false
 """Trips Rope on PEP 695 / 701 / 654 if Rope's parser is stale.
 
 This file is NOT imported from `calcpy_seed/__init__.py` because it requires
