@@ -83,7 +83,7 @@ class TestHlslDefinition:
         """
         definitions = language_server.request_definition("lighting.hlsl", 22, 21)
         assert len(definitions) >= 1, f"Expected at least 1 definition, got {len(definitions)}"
-        def_paths = [d.get("relativePath", d.get("uri", "")) for d in definitions]
+        def_paths = [d.get("relativePath") or d.get("uri") or "" for d in definitions]
         assert any("common.hlsl" in p for p in def_paths), f"Expected definition in common.hlsl, got: {def_paths}"
 
     @pytest.mark.parametrize("language_server", [Language.HLSL], indirect=True)
@@ -95,7 +95,7 @@ class TestHlslDefinition:
         """
         definitions = language_server.request_definition("compute_test.hlsl", 20, 8)
         assert len(definitions) >= 1, f"Expected at least 1 definition, got {len(definitions)}"
-        def_paths = [d.get("relativePath", d.get("uri", "")) for d in definitions]
+        def_paths = [d.get("relativePath") or d.get("uri") or "" for d in definitions]
         assert any("common.hlsl" in p for p in def_paths), f"Expected definition in common.hlsl, got: {def_paths}"
 
 

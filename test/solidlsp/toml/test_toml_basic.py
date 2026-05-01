@@ -196,7 +196,8 @@ class TestTomlLanguageServerBasics:
         # Check the dependencies range - starts at line 9 (1-indexed), line 8 (0-indexed)
         deps_symbol = next((s for s in all_symbols if s.get("name") == "dependencies"), None)
         assert deps_symbol is not None, "Should find 'dependencies' symbol"
-        deps_range = deps_symbol["range"]
+        deps_range = deps_symbol.get("range")
+        assert deps_range is not None
         assert deps_range["start"]["line"] == 8, "'dependencies' should start at line 8 (0-indexed, actual line 9)"
 
         # Check that range includes line and character positions
