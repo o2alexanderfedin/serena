@@ -1,4 +1,5 @@
 import os
+from typing import Any
 
 import pytest
 
@@ -12,6 +13,24 @@ from test.conftest import language_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 pytestmark = [pytest.mark.al, pytest.mark.skipif(not language_tests_enabled(Language.AL), reason="AL tests are disabled")]
+
+
+def _hover_value(hover_contents: Any) -> str:
+    """Extract the 'value' string from a hover.contents which may be MarkupContent
+    (dict), MarkedString (str), or list[MarkedString]. Returns "" when not found."""
+    if isinstance(hover_contents, dict):
+        return str(hover_contents.get("value", ""))
+    if isinstance(hover_contents, str):
+        return hover_contents
+    if isinstance(hover_contents, list):
+        parts: list[str] = []
+        for item in hover_contents:
+            if isinstance(item, dict):
+                parts.append(str(item.get("value", "")))
+            elif isinstance(item, str):
+                parts.append(item)
+        return "\n".join(parts)
+    return ""
 
 
 class TestExtractALDisplayName:
@@ -250,7 +269,7 @@ class TestALLanguageServer:
 class TestALHoverInjection:
     """Tests for hover injection of original AL object names with type and ID."""
 
-    def _get_symbol_hover(self, language_server: SolidLanguageServer, file_path: str, symbol_name: str) -> tuple[dict | None, str | None]:
+    def _get_symbol_hover(self, language_server: SolidLanguageServer, file_path: str, symbol_name: str) -> tuple[dict[str, Any] | None, str | None]:
         """Helper to get hover info for a symbol by name.
 
         Returns (hover_info, hover_value) tuple.
@@ -264,13 +283,13 @@ class TestALHoverInjection:
                 char = start.get("character", 0)
                 hover = language_server.request_hover(file_path, line, char)
                 if hover and "contents" in hover:
-                    return hover, hover["contents"].get("value", "")
-                return hover, None
+                    return dict(hover), _hover_value(hover["contents"])
+                return dict(hover) if hover else None, None
         return None, None
 
     def _get_child_symbol_hover(
         self, language_server: SolidLanguageServer, file_path: str, parent_name: str, child_name_contains: str
-    ) -> tuple[dict | None, str | None]:
+    ) -> tuple[dict[str, Any] | None, str | None]:
         """Helper to get hover info for a child symbol.
 
         Returns (hover_info, hover_value) tuple.
@@ -286,8 +305,8 @@ class TestALHoverInjection:
                         char = start.get("character", 0)
                         hover = language_server.request_hover(file_path, line, char)
                         if hover and "contents" in hover:
-                            return hover, hover["contents"].get("value", "")
-                        return hover, None
+                            return dict(hover), _hover_value(hover["contents"])
+                        return dict(hover) if hover else None, None
         return None, None
 
     @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
@@ -373,7 +392,7 @@ class TestALHoverInjection:
                                 hover = language_server.request_hover(file_path, line, char)
 
                                 assert hover is not None, "Hover should return a result for field"
-                                value = hover.get("contents", {}).get("value", "")
+                                value = _hover_value(hover.get("contents", {}))
                                 # Field hover should NOT start with ** (no injection)
                                 assert not value.startswith("**"), f"Field hover should not have injected name. Got: {value[:200]}"
                                 return
@@ -445,7 +464,7 @@ class TestALPathNormalization:
 
                 hover = language_server.request_hover(file_path, line, char)
                 assert hover is not None, "Hover should return a result"
-                value = hover.get("contents", {}).get("value", "")
+                value = _hover_value(hover.get("contents", {}))
                 assert '**Table 50000 "TEST Customer"**' in value, f"Hover should have injection. Got: {value[:200]}"
                 return
 
@@ -466,7 +485,7 @@ class TestALPathNormalization:
 
                 hover = language_server.request_hover(file_path, line, char)
                 assert hover is not None, "Hover should return a result"
-                value = hover.get("contents", {}).get("value", "")
+                value = _hover_value(hover.get("contents", {}))
                 assert '**Table 50000 "TEST Customer"**' in value, f"Hover should have injection. Got: {value[:200]}"
                 return
 
@@ -491,7 +510,7 @@ class TestALPathNormalization:
                 # Request hover with forward slash path (different format)
                 hover = language_server.request_hover(file_path_forward, line, char)
                 assert hover is not None, "Hover should return a result"
-                value = hover.get("contents", {}).get("value", "")
+                value = _hover_value(hover.get("contents", {}))
                 assert '**Table 50000 "TEST Customer"**' in value, (
                     f"Hover injection should work with mixed path formats. Got: {value[:200]}"
                 )
@@ -518,7 +537,7 @@ class TestALPathNormalization:
                 # Request hover with backslash path (different format)
                 hover = language_server.request_hover(file_path_backslash, line, char)
                 assert hover is not None, "Hover should return a result"
-                value = hover.get("contents", {}).get("value", "")
+                value = _hover_value(hover.get("contents", {}))
                 assert '**Table 50000 "TEST Customer"**' in value, (
                     f"Hover injection should work with mixed path formats. Got: {value[:200]}"
                 )
@@ -553,7 +572,7 @@ class TestALPathNormalization:
                     # Request hover with different path format
                     hover = language_server.request_hover(hover_path, line, char)
                     assert hover is not None, f"Hover should return a result for {symbol_name}"
-                    value = hover.get("contents", {}).get("value", "")
+                    value = _hover_value(hover.get("contents", {}))
                     assert f"**{expected_injection}**" in value, (
                         f"Hover for {symbol_name} should have injection with mixed paths. Got: {value[:200]}"
                     )
