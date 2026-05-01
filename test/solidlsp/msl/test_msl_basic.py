@@ -109,7 +109,13 @@ class TestMslDocumentSymbols:
         greet_symbol = next((s for s in all_symbols if s.get("name") == "greet"), None)
         assert greet_symbol is not None, "Could not find 'greet' symbol in main.mrc"
 
-        sel_start = greet_symbol["selectionRange"]["start"]
+        _sel_range = greet_symbol.get("selectionRange")
+
+
+        assert _sel_range is not None
+
+
+        sel_start = _sel_range["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
 
         assert refs, f"Expected non-empty references for greet but got {refs=}"
@@ -135,7 +141,13 @@ class TestMslDocumentSymbols:
         fc_symbol = next((s for s in all_symbols if s.get("name") == "format.coins"), None)
         assert fc_symbol is not None, "Could not find 'format.coins' symbol in utils.mrc"
 
-        sel_start = fc_symbol["selectionRange"]["start"]
+        _sel_range = fc_symbol.get("selectionRange")
+
+
+        assert _sel_range is not None
+
+
+        sel_start = _sel_range["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
 
         assert refs, f"Expected non-empty references for format.coins but got {refs=}"

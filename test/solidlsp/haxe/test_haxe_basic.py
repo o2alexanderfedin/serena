@@ -59,7 +59,11 @@ class TestHaxeLanguageServer:
         all_symbols, _ = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         greet_symbol = next((s for s in all_symbols if s.get("name") == "greet"), None)
         assert greet_symbol is not None, "Could not find 'greet' symbol in Main.hx"
-        sel_start = greet_symbol["selectionRange"]["start"]
+        _sel_range = greet_symbol.get("selectionRange")
+
+        assert _sel_range is not None
+
+        sel_start = _sel_range["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
 
         assert refs, f"Expected non-empty references for greet but got {refs=}"
@@ -91,7 +95,13 @@ class TestHaxeLanguageServer:
         add_numbers_symbol = next((s for s in all_symbols if s.get("name") == "addNumbers"), None)
         assert add_numbers_symbol is not None, "Could not find 'addNumbers' symbol in Helper.hx"
 
-        sel_start = add_numbers_symbol["selectionRange"]["start"]
+        _sel_range = add_numbers_symbol.get("selectionRange")
+
+
+        assert _sel_range is not None
+
+
+        sel_start = _sel_range["start"]
         refs = language_server.request_references(helper_path, sel_start["line"], sel_start["character"])
 
         assert refs, f"Expected non-empty references for addNumbers but got {refs=}"
@@ -202,7 +212,13 @@ class TestHaxeLanguageServer:
         greet_symbol = next((s for s in all_symbols if s.get("name") == "greet"), None)
         assert greet_symbol is not None, "Could not find 'greet' symbol"
 
-        sel_start = greet_symbol["selectionRange"]["start"]
+        _sel_range = greet_symbol.get("selectionRange")
+
+
+        assert _sel_range is not None
+
+
+        sel_start = _sel_range["start"]
         hover = language_server.request_hover(file_path, sel_start["line"], sel_start["character"])
         assert hover is not None, "Hover returned None for greet method"
         hover_str = str(hover)
@@ -219,7 +235,13 @@ class TestHaxeLanguageServer:
         main_symbol = next((s for s in all_symbols if s.get("name") == "Main"), None)
         assert main_symbol is not None
 
-        sel_start = main_symbol["selectionRange"]["start"]
+        _sel_range = main_symbol.get("selectionRange")
+
+
+        assert _sel_range is not None
+
+
+        sel_start = _sel_range["start"]
         hover = language_server.request_hover(file_path, sel_start["line"], sel_start["character"])
         assert hover is not None, "Hover on class declaration returned None"
         hover_str = str(hover)
@@ -234,7 +256,13 @@ class TestHaxeLanguageServer:
         greet_symbol = next((s for s in all_symbols if s.get("name") == "greet"), None)
         assert greet_symbol is not None, "Could not find 'greet' symbol"
 
-        sel_start = greet_symbol["selectionRange"]["start"]
+        _sel_range = greet_symbol.get("selectionRange")
+
+
+        assert _sel_range is not None
+
+
+        sel_start = _sel_range["start"]
         edits = language_server.request_rename_symbol_edit(file_path, sel_start["line"], sel_start["character"], "sayHello")
         assert edits is not None, "Rename returned None"
         # Verify edits contain changes (WorkspaceEdit has 'changes' or 'documentChanges')
@@ -287,7 +315,11 @@ class TestHaxeLanguageServer:
         all_symbols, _ = language_server.request_document_symbols(helper_path).get_all_symbols_and_roots()
         add_numbers = next((s for s in all_symbols if s.get("name") == "addNumbers"), None)
         assert add_numbers is not None
-        sel_start = add_numbers["selectionRange"]["start"]
+        _sel_range = add_numbers.get("selectionRange")
+
+        assert _sel_range is not None
+
+        sel_start = _sel_range["start"]
         refs = language_server.request_references(helper_path, sel_start["line"], sel_start["character"])
 
         # Third request: back to Main.hx hover (would be affected by recompilation)

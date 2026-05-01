@@ -111,7 +111,11 @@ class TestLanguageServerSymbols:
         create_user_symbol = next((s for s in symbols[0] if s.get("name") == "create_user"), None)
         if not create_user_symbol or "selectionRange" not in create_user_symbol:
             raise AssertionError("create_user symbol or its selectionRange not found")
-        sel_start = create_user_symbol["selectionRange"]["start"]
+        _sel_range = create_user_symbol.get("selectionRange")
+
+        assert _sel_range is not None
+
+        sel_start = _sel_range["start"]
         ref_symbols = [
             ref.symbol for ref in language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
         ]
@@ -135,7 +139,11 @@ class TestLanguageServerSymbols:
         user_symbol = next((s for s in symbols[0] if s.get("name") == "User"), None)
         if not user_symbol or "selectionRange" not in user_symbol:
             raise AssertionError("User symbol or its selectionRange not found")
-        sel_start = user_symbol["selectionRange"]["start"]
+        _sel_range = user_symbol.get("selectionRange")
+
+        assert _sel_range is not None
+
+        sel_start = _sel_range["start"]
         ref_symbols = [
             ref.symbol for ref in language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
         ]
@@ -156,7 +164,11 @@ class TestLanguageServerSymbols:
         get_user_symbol = next((s for s in symbols[0] if s.get("name") == "get_user"), None)
         if not get_user_symbol or "selectionRange" not in get_user_symbol:
             raise AssertionError("get_user symbol or its selectionRange not found")
-        sel_start = get_user_symbol["selectionRange"]["start"]
+        _sel_range = get_user_symbol.get("selectionRange")
+
+        assert _sel_range is not None
+
+        sel_start = _sel_range["start"]
         ref_symbols = [
             ref.symbol for ref in language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
         ]

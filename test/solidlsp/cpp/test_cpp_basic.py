@@ -60,7 +60,13 @@ class TestCppLanguageServer:
                 break
         assert add_symbol is not None, "Could not find 'add' function symbol in b.cpp"
 
-        sel_start = add_symbol["selectionRange"]["start"]
+        _sel_range = add_symbol.get("selectionRange")
+
+
+        assert _sel_range is not None
+
+
+        sel_start = _sel_range["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
         ref_files = [ref.get("relativePath", "") for ref in refs]
         assert any("a.cpp" in ref_file for ref_file in ref_files), f"Should find reference in a.cpp, {refs=}"
@@ -128,7 +134,11 @@ int use_add() {
             assert add_symbol is not None, "Could not find 'add' function symbol in b.cpp"
 
             # Request references for 'add'
-            sel_start = add_symbol["selectionRange"]["start"]
+            _sel_range = add_symbol.get("selectionRange")
+
+            assert _sel_range is not None
+
+            sel_start = _sel_range["start"]
             refs = language_server.request_references(b_file_path, sel_start["line"], sel_start["character"])
             ref_files = [ref.get("relativePath", "") for ref in refs]
 

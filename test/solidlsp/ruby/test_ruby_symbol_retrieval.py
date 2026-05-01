@@ -154,7 +154,13 @@ class TestRubyLanguageServerSymbols:
         if not create_user_symbol or "selectionRange" not in create_user_symbol:
             pytest.skip("create_user symbol or its selectionRange not found")
 
-        sel_start = create_user_symbol["selectionRange"]["start"]
+        _sel_range = create_user_symbol.get("selectionRange")
+
+
+        assert _sel_range is not None
+
+
+        sel_start = _sel_range["start"]
         ref_symbols = [
             ref.symbol for ref in language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
         ]
@@ -181,7 +187,13 @@ class TestRubyLanguageServerSymbols:
         if not user_symbol or "selectionRange" not in user_symbol:
             pytest.skip("User symbol or its selectionRange not found")
 
-        sel_start = user_symbol["selectionRange"]["start"]
+        _sel_range = user_symbol.get("selectionRange")
+
+
+        assert _sel_range is not None
+
+
+        sel_start = _sel_range["start"]
         ref_symbols = [
             ref.symbol for ref in language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
         ]

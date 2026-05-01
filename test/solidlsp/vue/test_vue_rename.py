@@ -19,7 +19,13 @@ class TestVueRename:
         if not handle_digit_symbol or "selectionRange" not in handle_digit_symbol:
             pytest.skip("handleDigit symbol not found - test fixture may need updating")
 
-        sel_start = handle_digit_symbol["selectionRange"]["start"]
+        _sel_range = handle_digit_symbol.get("selectionRange")
+
+
+        assert _sel_range is not None
+
+
+        sel_start = _sel_range["start"]
 
         workspace_edit = language_server.request_rename_symbol_edit(file_path, sel_start["line"], sel_start["character"], "processDigit")
 
@@ -85,7 +91,13 @@ class TestVueRename:
         if not use_formatter_symbol or "selectionRange" not in use_formatter_symbol:
             pytest.skip("useFormatter symbol not found - test fixture may need updating")
 
-        sel_start = use_formatter_symbol["selectionRange"]["start"]
+        _sel_range = use_formatter_symbol.get("selectionRange")
+
+
+        assert _sel_range is not None
+
+
+        sel_start = _sel_range["start"]
 
         workspace_edit = language_server.request_rename_symbol_edit(
             composable_file, sel_start["line"], sel_start["character"], "useNumberFormatter"
@@ -150,7 +162,13 @@ class TestVueRename:
         if not app_title_symbol or "selectionRange" not in app_title_symbol:
             pytest.skip("appTitle symbol not found - test fixture may need updating")
 
-        sel_start = app_title_symbol["selectionRange"]["start"]
+        _sel_range = app_title_symbol.get("selectionRange")
+
+
+        assert _sel_range is not None
+
+
+        sel_start = _sel_range["start"]
 
         workspace_edit = language_server.request_rename_symbol_edit(
             file_path, sel_start["line"], sel_start["character"], "applicationTitle"

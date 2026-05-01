@@ -194,7 +194,11 @@ class TestDartLanguageServer:
                     break
 
         assert add_symbol is not None, "Could not find 'add' method symbol in main.dart"
-        sel_start = add_symbol["selectionRange"]["start"]
+        _sel_range = add_symbol.get("selectionRange")
+
+        assert _sel_range is not None
+
+        sel_start = _sel_range["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
 
         # Check that we found references - at least one should be in main.dart
@@ -328,7 +332,11 @@ class TestDartLanguageServer:
                 break
 
         if calculator_symbol and "selectionRange" in calculator_symbol:
-            sel_start = calculator_symbol["selectionRange"]["start"]
+            _sel_range = calculator_symbol.get("selectionRange")
+
+            assert _sel_range is not None
+
+            sel_start = _sel_range["start"]
             refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
 
             # Should find references to Calculator (constructor calls, etc.)
@@ -352,7 +360,11 @@ class TestDartLanguageServer:
         subtract_symbol = next((s for s in symbol_list if s.get("name") == "subtract"), None)
 
         if subtract_symbol and "selectionRange" in subtract_symbol:
-            sel_start = subtract_symbol["selectionRange"]["start"]
+            _sel_range = subtract_symbol.get("selectionRange")
+
+            assert _sel_range is not None
+
+            sel_start = _sel_range["start"]
             refs = language_server.request_references(helper_file_path, sel_start["line"], sel_start["character"])
 
             # Should find references in main.dart

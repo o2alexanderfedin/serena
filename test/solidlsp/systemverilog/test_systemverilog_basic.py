@@ -27,7 +27,11 @@ def _get_symbol_selection_start(language_server: SolidLanguageServer, file_path:
     symbol = _find_symbol_by_name(language_server, file_path, name)
     assert symbol is not None, f"Could not find symbol '{name}' in {file_path}"
     assert "selectionRange" in symbol, f"Symbol '{name}' has no selectionRange in {file_path}"
-    sel_start = symbol["selectionRange"]["start"]
+    _sel_range = symbol.get("selectionRange")
+
+    assert _sel_range is not None
+
+    sel_start = _sel_range["start"]
     return sel_start["line"], sel_start["character"]
 
 
