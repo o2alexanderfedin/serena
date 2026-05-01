@@ -40,7 +40,7 @@ def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     references = ls_with_ignored_dirs.request_references(definition_file, definition_line, definition_col)
 
     # assert that scripts does not appear in the references
-    assert not any("scripts" in ref["relativePath"] for ref in references)
+    assert not any("scripts" in (ref["relativePath"] or "") for ref in references)
 
 
 @pytest.mark.parametrize("repo_path", PYTHON_BACKEND_LANGUAGES, indirect=True)
@@ -60,4 +60,4 @@ def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
         definition_col = 6
 
         references = ls.request_references(definition_file, definition_line, definition_col)
-        assert not any("scripts" in ref["relativePath"] for ref in references)
+        assert not any("scripts" in (ref["relativePath"] or "") for ref in references)

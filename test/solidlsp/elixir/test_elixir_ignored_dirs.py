@@ -83,8 +83,8 @@ def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     references = ls_with_ignored_dirs.request_references(definition_file, sel_start["line"], sel_start["character"])
 
     # Assert that scripts and ignored_dir do not appear in the references
-    assert not any("scripts" in ref["relativePath"] for ref in references), "scripts should be ignored"
-    assert not any("ignored_dir" in ref["relativePath"] for ref in references), "ignored_dir should be ignored"
+    assert not any("scripts" in (ref["relativePath"] or "") for ref in references), "scripts should be ignored"
+    assert not any("ignored_dir" in (ref["relativePath"] or "") for ref in references), "ignored_dir should be ignored"
 
 
 @pytest.mark.slow
@@ -129,8 +129,8 @@ def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
             references = ls.request_references(definition_file, sel_start["line"], sel_start["character"])
 
             # Assert that scripts and ignored_dir do not appear in references
-            assert not any("scripts" in ref["relativePath"] for ref in references), "scripts should be ignored (glob)"
-            assert not any("ignored_dir" in ref["relativePath"] for ref in references), "ignored_dir should be ignored (glob)"
+            assert not any("scripts" in (ref["relativePath"] or "") for ref in references), "scripts should be ignored (glob)"
+            assert not any("ignored_dir" in (ref["relativePath"] or "") for ref in references), "ignored_dir should be ignored (glob)"
 
 
 @pytest.mark.parametrize("language_server", [Language.ELIXIR], indirect=True)

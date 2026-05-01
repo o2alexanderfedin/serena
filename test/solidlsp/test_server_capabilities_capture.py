@@ -20,7 +20,7 @@ real subprocess — keeping the test suite fast and deterministic.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Any, cast
 from unittest.mock import MagicMock, patch
 
 
@@ -82,7 +82,7 @@ class TestServerCapabilitiesCapture:
         caps = {"definitionProvider": True}
         ls = self._stub_with_caps(caps)
         returned = ls.server_capabilities()
-        returned["injected"] = "malicious"
+        cast(dict[str, Any], returned)["injected"] = "malicious"
         # The stored caps are unchanged.
         assert ls.server_capabilities() == caps
         assert "injected" not in ls.server_capabilities()

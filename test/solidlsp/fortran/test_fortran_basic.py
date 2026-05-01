@@ -223,7 +223,7 @@ class TestFortranLanguageServer:
             pytest.skip("fortls found the symbol but doesn't provide complete location information")
 
         # The definition should be in modules/math_utils.f90
-        defining_path = defining_symbol["location"]["relativePath"]
+        defining_path = defining_symbol["location"]["relativePath"] or ""
         assert "math_utils.f90" in defining_path, f"Expected definition to be in math_utils.f90, but found in: {defining_path}"
 
     @pytest.mark.parametrize("language_server", [Language.FORTRAN], indirect=True)

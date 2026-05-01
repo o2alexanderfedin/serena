@@ -150,7 +150,7 @@ class TestLanguageServerSymbols:
         services_references = [
             symbol
             for symbol in ref_symbols
-            if "location" in symbol and "uri" in symbol["location"] and "services.py" in symbol["location"]["uri"]
+            if "location" in symbol and "uri" in symbol["location"] and "services.py" in ((symbol.get("location") or {}).get("uri") or "")
         ]
         assert len(services_references) > 0, "No referencing symbols from services.py for User (selectionRange)"
 
@@ -214,7 +214,7 @@ class TestLanguageServerSymbols:
         # SymbolKind.Method = 6 for a method
         assert defining_symbol.get("kind") == SymbolKind.Method.value
         if "location" in defining_symbol and "uri" in defining_symbol["location"]:
-            assert "services.py" in defining_symbol["location"]["uri"]
+            assert "services.py" in ((defining_symbol.get("location") or {}).get("uri") or "")
 
     @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_request_defining_symbol_imported_class(self, language_server: SolidLanguageServer) -> None:
@@ -240,7 +240,7 @@ class TestLanguageServerSymbols:
         assert defining_symbol is not None
         assert defining_symbol.get("name") == "create_user"
         # The defining symbol should be in the services.py file
-        assert "services.py" in defining_symbol["location"]["uri"]
+        assert "services.py" in ((defining_symbol.get("location") or {}).get("uri") or "")
 
     @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_request_defining_symbol_none(self, language_server: SolidLanguageServer) -> None:
@@ -332,7 +332,7 @@ class TestLanguageServerSymbols:
 
         # Step 3: Verify that they refer to the same symbol
         assert defining_symbol["kind"] == containing_symbol["kind"]
-        assert defining_symbol["location"]["uri"] == containing_symbol["location"]["uri"]
+        assert ((defining_symbol.get("location") or {}).get("uri") or "") == ((containing_symbol.get("location") or {}).get("uri") or "")
 
     @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_symbol_tree_structure(self, language_server: SolidLanguageServer) -> None:

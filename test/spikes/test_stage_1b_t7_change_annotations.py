@@ -186,7 +186,7 @@ def test_apply_workspace_edit_with_report_returns_annotations(
             "id1": {"label": "L1"},
         },
     }
-    report = applier._apply_workspace_edit_with_report(edit)
+    report = applier._apply_workspace_edit_with_report(cast(Any, edit))
     assert report["count"] == 1
     assert report["annotations"] == {"id1": {"label": "L1"}}
     assert isinstance(report["snapshot"], dict)

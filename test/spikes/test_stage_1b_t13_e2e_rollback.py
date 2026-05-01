@@ -75,7 +75,7 @@ def test_complex_multi_shape_edit_then_checkpoint_restore(
         ]
     }
 
-    report = applier._apply_workspace_edit_with_report(edit)
+    report = applier._apply_workspace_edit_with_report(cast(Any, edit))
     assert report["count"] == 4
 
     # --- post-apply assertions ---
@@ -134,7 +134,7 @@ def test_three_sequential_edits_transaction_rollback(
                 }
             ]
         }
-        report = applier._apply_workspace_edit_with_report(edit)
+        report = applier._apply_workspace_edit_with_report(cast(Any, edit))
         cid = cstore.record(edit, report["snapshot"])
         tstore.add_checkpoint(tid, cid)
 
