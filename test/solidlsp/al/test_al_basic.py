@@ -211,12 +211,12 @@ class TestALLanguageServer:
             refs = language_server.request_references(table_file, sel_start["line"], sel_start["character"])
 
             # The Customer table should be referenced in CustomerMgt.Codeunit.al
-            assert any("CustomerMgt.Codeunit.al" in ref.get("relativePath", "") for ref in refs), (
+            assert any("CustomerMgt.Codeunit.al" in (ref.get("relativePath") or "") for ref in refs), (
                 "Customer table should be referenced in CustomerMgt.Codeunit.al"
             )
 
             # It should also be referenced in CustomerCard.Page.al
-            assert any("CustomerCard.Page.al" in ref.get("relativePath", "") for ref in refs), (
+            assert any("CustomerCard.Page.al" in (ref.get("relativePath") or "") for ref in refs), (
                 "Customer table should be referenced in CustomerCard.Page.al"
             )
 

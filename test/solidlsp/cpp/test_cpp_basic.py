@@ -42,7 +42,7 @@ class TestCppLanguageServer:
         file_path = os.path.join("a.cpp")
         symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         # Flatten nested structure if needed
-        symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
+        symbol_list = symbols[0]
         names = [s.get("name") for s in symbol_list]
         assert "main" in names, f"Expected 'main' in document symbols, got: {names}"
 
@@ -52,7 +52,7 @@ class TestCppLanguageServer:
         # Locate 'add' in b.cpp
         file_path = os.path.join("b.cpp")
         symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
-        symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
+        symbol_list = symbols[0]
         add_symbol = None
         for sym in symbol_list:
             if sym.get("name") == "add":
@@ -119,7 +119,7 @@ int use_add() {
             # Find the 'add' symbol in b.cpp
             b_file_path = os.path.join("b.cpp")
             symbols = language_server.request_document_symbols(b_file_path).get_all_symbols_and_roots()
-            symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
+            symbol_list = symbols[0]
             add_symbol = None
             for sym in symbol_list:
                 if sym.get("name") == "add":

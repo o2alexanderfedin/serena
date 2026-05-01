@@ -29,7 +29,7 @@ class TestJavaLanguageServer:
         # Use correct Maven/Java file paths
         file_path = os.path.join("src", "main", "java", "test_repo", "Utils.java")
         refs = language_server.request_references(file_path, 4, 20)
-        assert any("Main.java" in ref.get("relativePath", "") for ref in refs), "Main should reference Utils.printHello"
+        assert any("Main.java" in (ref.get("relativePath") or "") for ref in refs), "Main should reference Utils.printHello"
 
         # Dynamically determine the correct line/column for the 'Model' class name
         file_path = os.path.join("src", "main", "java", "test_repo", "Model.java")
@@ -46,7 +46,7 @@ class TestJavaLanguageServer:
         else:
             sel_start = model_symbol["range"]["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
-        assert any("Main.java" in ref.get("relativePath", "") for ref in refs), (
+        assert any("Main.java" in (ref.get("relativePath") or "") for ref in refs), (
             "Main should reference Model (tried all positions in selectionRange)"
         )
 

@@ -67,7 +67,7 @@ class TestHaxeLanguageServer:
         # Convert references to a comparable format
         actual_locations = [
             {
-                "uri_suffix": os.path.basename(ref.get("relativePath", ref.get("uri", ""))),
+                "uri_suffix": os.path.basename(ref.get("relativePath") or ref.get("uri") or ""),
                 "line": ref["range"]["start"]["line"],
             }
             for ref in refs
@@ -99,7 +99,7 @@ class TestHaxeLanguageServer:
         # Convert references to a comparable format
         actual_locations = [
             {
-                "uri_suffix": os.path.basename(ref.get("relativePath", ref.get("uri", ""))),
+                "uri_suffix": os.path.basename(ref.get("relativePath") or ref.get("uri") or ""),
                 "line": ref["range"]["start"]["line"],
             }
             for ref in refs

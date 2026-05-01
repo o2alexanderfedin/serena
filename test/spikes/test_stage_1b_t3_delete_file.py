@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -32,7 +32,7 @@ def test_delete_existing_file(applier: LanguageServerCodeEditor, tmp_path: Path)
     target = tmp_path / "victim.txt"
     target.write_text("bye\n", encoding="utf-8")
     edit = {"documentChanges": [_delete(target.as_uri())]}
-    n = applier._apply_workspace_edit(edit)
+    n = applier._apply_workspace_edit(cast(Any, edit))
     assert n == 1
     assert not target.exists()
 
@@ -41,13 +41,13 @@ def test_delete_absent_no_flag_errors(applier: LanguageServerCodeEditor, tmp_pat
     target = tmp_path / "nope.txt"
     edit = {"documentChanges": [_delete(target.as_uri())]}
     with pytest.raises(FileNotFoundError):
-        applier._apply_workspace_edit(edit)
+        applier._apply_workspace_edit(cast(Any, edit))
 
 
 def test_delete_absent_with_ignore_flag_silent(applier: LanguageServerCodeEditor, tmp_path: Path) -> None:
     target = tmp_path / "nope.txt"
     edit = {"documentChanges": [_delete(target.as_uri(), {"ignoreIfNotExists": True})]}
-    n = applier._apply_workspace_edit(edit)
+    n = applier._apply_workspace_edit(cast(Any, edit))
     assert n == 1
 
 
@@ -57,7 +57,7 @@ def test_delete_directory_without_recursive_errors(applier: LanguageServerCodeEd
     (target / "child.txt").write_text("x", encoding="utf-8")
     edit = {"documentChanges": [_delete(target.as_uri())]}
     with pytest.raises(IsADirectoryError):
-        applier._apply_workspace_edit(edit)
+        applier._apply_workspace_edit(cast(Any, edit))
     assert target.exists()
 
 
@@ -66,6 +66,6 @@ def test_delete_directory_with_recursive(applier: LanguageServerCodeEditor, tmp_
     target.mkdir()
     (target / "child.txt").write_text("x", encoding="utf-8")
     edit = {"documentChanges": [_delete(target.as_uri(), {"recursive": True})]}
-    n = applier._apply_workspace_edit(edit)
+    n = applier._apply_workspace_edit(cast(Any, edit))
     assert n == 1
     assert not target.exists()

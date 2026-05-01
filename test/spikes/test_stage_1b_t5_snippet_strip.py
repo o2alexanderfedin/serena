@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -155,5 +155,5 @@ def test_end_to_end_strip_in_workspace_edit(applier: LanguageServerCodeEditor, t
             }
         ]
     }
-    applier._apply_workspace_edit(edit)
+    applier._apply_workspace_edit(cast(Any, edit))
     assert target.read_text(encoding="utf-8") == "abc\n"

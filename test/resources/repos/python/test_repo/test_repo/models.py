@@ -1,3 +1,4 @@
+# pyright: reportCallIssue=false, reportAttributeAccessIssue=false, reportReturnType=false
 """
 Models module that demonstrates various Python class patterns.
 """

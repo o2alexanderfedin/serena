@@ -33,7 +33,7 @@ class TestElmLanguageServer:
         assert greet_symbol is not None, "Could not find 'greet' symbol in Main.elm"
         sel_start = greet_symbol["selectionRange"]["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
-        assert any("Main.elm" in ref.get("relativePath", "") for ref in refs), "Main.elm should reference greet function"
+        assert any("Main.elm" in (ref.get("relativePath") or "") for ref in refs), "Main.elm should reference greet function"
 
     @pytest.mark.parametrize("language_server", [Language.ELM], indirect=True)
     def test_find_references_across_files(self, language_server: SolidLanguageServer) -> None:
@@ -55,7 +55,7 @@ class TestElmLanguageServer:
         assert refs, "Expected to find references for formatMessage"
 
         # Verify that at least one reference is in Main.elm (where formatMessage is used)
-        assert any("Main.elm" in ref.get("relativePath", "") for ref in refs), "Expected to find usage of formatMessage in Main.elm"
+        assert any("Main.elm" in (ref.get("relativePath") or "") for ref in refs), "Expected to find usage of formatMessage in Main.elm"
 
     @pytest.mark.parametrize("language_server", [Language.ELM], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
