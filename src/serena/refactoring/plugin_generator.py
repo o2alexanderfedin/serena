@@ -59,6 +59,18 @@ _INSTALL_HINTS: dict[str, str] = {
     "markdown": "brew install marksman  # macOS; snap install marksman on Linux",
     "typescript": "npm i -g typescript-language-server typescript",
     "go": "go install golang.org/x/tools/gopls@latest",
+    # v1.9.8 newcomers
+    "haxe": "npm install -g haxe-language-server  # plus Haxe + nekovm on PATH",
+    "erlang": "brew install erlang_ls  # macOS; build from github.com/erlang-ls/erlang_ls otherwise",
+    "ocaml": "opam install ocaml-lsp-server  # requires opam + an active switch",
+    "powershell": "Install-Module -Name PowerShellEditorServices  # from a pwsh prompt",
+    "systemverilog": "brew install verible  # macOS; prebuilt at github.com/chipsalliance/verible/releases",
+    "clojure": "brew install clojure-lsp/brew/clojure-lsp-native  # macOS; binary at github.com/clojure-lsp/clojure-lsp/releases",
+    "crystal": "brew install crystalline  # macOS; or shards build from github.com/elbywan/crystalline",
+    "elixir": "brew install elixir-ls  # macOS; build from github.com/elixir-lsp/elixir-ls otherwise",
+    "haskell": "ghcup install hls --set  # installs haskell-language-server via the Haskell toolchain manager",
+    "perl": "cpanm Perl::LanguageServer  # requires cpanm + a system Perl",
+    "ruby": "gem install --user-install ruby-lsp  # add user gem bindir to PATH",
 }
 
 # Identity constants for every emitted plugin. Kept module-private so they

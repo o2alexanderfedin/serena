@@ -91,13 +91,13 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         self._indexing_complete = threading.Event()
         self._indexing_complete.set()  # Initially set (no active work)
 
-    def wait_for_indexing(self, timeout: float) -> bool:
+    def wait_for_indexing(self, timeout_s: float = 30.0) -> bool:
         """Block until all $/progress tokens complete.
 
-        :param timeout: Maximum seconds to wait.
+        :param timeout_s: Maximum seconds to wait.
         :return: True if indexing completed, False on timeout.
         """
-        return self._indexing_complete.wait(timeout=timeout)
+        return self._indexing_complete.wait(timeout=timeout_s)
 
     def expect_indexing(self) -> None:
         """Signal that new files are about to be opened and async indexing should be awaited.
@@ -365,7 +365,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         init_response = self.server.send.initialize(initialize_params)
 
         # TypeScript-specific capability checks
-        assert init_response["capabilities"]["textDocumentSync"] == 2
+        assert init_response["capabilities"].get("textDocumentSync") == 2
         assert "completionProvider" in init_response["capabilities"]
         assert init_response["capabilities"]["completionProvider"] == {
             "triggerCharacters": [".", '"', "'", "/", "@", "<"],
@@ -385,7 +385,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         # language features…" after initialized. If no progress is sent,
         # _indexing_complete stays SET and wait() returns immediately.
         log.info("Waiting for TypeScript project indexing to complete (if async)...")
-        if self.wait_for_indexing(timeout=self.INDEXING_PROGRESS_TIMEOUT):
+        if self.wait_for_indexing(timeout_s=self.INDEXING_PROGRESS_TIMEOUT):
             log.info("TypeScript project indexing complete")
         else:
             log.warning(

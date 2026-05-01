@@ -347,7 +347,7 @@ class Solargraph(SolidLanguageServer):
         log.info(f"Sending init params: {json.dumps(initialize_params, indent=4)}")
         init_response = self.server.send.initialize(initialize_params)
         log.info(f"Received init response: {init_response}")
-        assert init_response["capabilities"]["textDocumentSync"] == 2
+        assert init_response["capabilities"].get("textDocumentSync") == 2
         assert "completionProvider" in init_response["capabilities"]
         assert init_response["capabilities"]["completionProvider"] == {
             "resolveProvider": True,

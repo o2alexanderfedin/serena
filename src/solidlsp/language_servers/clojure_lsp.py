@@ -240,11 +240,13 @@ class ClojureLSP(SolidLanguageServer):
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
-        assert init_response["capabilities"]["textDocumentSync"]["change"] == 2  # type: ignore
+        text_document_sync = init_response["capabilities"].get("textDocumentSync")
+        assert text_document_sync is not None and not isinstance(text_document_sync, int)
+        assert text_document_sync.get("change") == 2
         assert "completionProvider" in init_response["capabilities"]
         # Clojure-lsp completion provider capabilities are more flexible than other servers'
         completion_provider = init_response["capabilities"]["completionProvider"]
-        assert completion_provider["resolveProvider"] is True
+        assert completion_provider.get("resolveProvider") is True
         assert "triggerCharacters" in completion_provider
         self.server.notify.initialized({})
         # after initialize, Clojure-lsp is ready to serve

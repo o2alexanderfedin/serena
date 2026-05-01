@@ -58,14 +58,13 @@ class JuliaLanguageServer(SolidLanguageServer):
         julia_path = shutil.which("julia")
 
         # If not found in PATH, check common installation locations
+        common_locations: list[str] = [
+            os.path.expanduser("~/.juliaup/bin/julia"),
+            os.path.expanduser("~/.julia/bin/julia"),
+            "/usr/local/bin/julia",
+            "/usr/bin/julia",
+        ]
         if julia_path is None:
-            common_locations = [
-                os.path.expanduser("~/.juliaup/bin/julia"),
-                os.path.expanduser("~/.julia/bin/julia"),
-                "/usr/local/bin/julia",
-                "/usr/bin/julia",
-            ]
-
             for location in common_locations:
                 if os.path.isfile(location) and os.access(location, os.X_OK):
                     julia_path = location

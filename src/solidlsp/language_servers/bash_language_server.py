@@ -177,7 +177,7 @@ class BashLanguageServer(SolidLanguageServer):
         log.debug(f"Received initialize response from bash server: {init_response}")
 
         # Enhanced capability checks for bash-language-server 5.6.0
-        assert init_response["capabilities"]["textDocumentSync"] in [1, 2]  # Full or Incremental
+        assert init_response["capabilities"].get("textDocumentSync") in [1, 2]  # Full or Incremental
         assert "completionProvider" in init_response["capabilities"]
 
         # Verify document symbol support is available

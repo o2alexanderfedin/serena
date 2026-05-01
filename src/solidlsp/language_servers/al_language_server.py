@@ -818,7 +818,9 @@ class ALLanguageServer(SolidLanguageServer):
             directory_structure: dict[str, list] = {}
 
             for file_symbol in all_file_symbols:
-                rel_path = file_symbol["location"]["relativePath"]
+                location = file_symbol.get("location")
+                assert location is not None
+                rel_path = location["relativePath"]
                 assert rel_path is not None
                 path_parts = rel_path.split("/")
 
