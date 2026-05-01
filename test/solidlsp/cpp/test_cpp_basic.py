@@ -68,12 +68,12 @@ class TestCppLanguageServer:
 
         sel_start = _sel_range["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
-        ref_files = [ref.get("relativePath", "") for ref in refs]
+        ref_files = [ref.get("relativePath") or "" for ref in refs]
         assert any("a.cpp" in ref_file for ref_file in ref_files), f"Should find reference in a.cpp, {refs=}"
 
         # Verify second call returns same results (stability check)
         def _ref_key(ref: dict) -> tuple:
-            rp = ref.get("relativePath", "")
+            rp = ref.get("relativePath") or ""
             rng = ref.get("range") or {}
             s = rng.get("start") or {}
             e = rng.get("end") or {}
@@ -86,7 +86,7 @@ class TestCppLanguageServer:
             )
 
         refs2 = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
-        assert sorted(map(_ref_key, refs2)) == sorted(map(_ref_key, refs)), "Reference results should be stable across calls"
+        assert sorted(map(_ref_key, [dict(_r) for _r in refs2])) == sorted(map(_ref_key, [dict(_r) for _r in refs])), "Reference results should be stable across calls"
 
     @pytest.mark.parametrize("language_server", _cpp_servers, indirect=True)
     @pytest.mark.xfail(
@@ -116,7 +116,7 @@ int use_add() {
             with language_server.open_file(new_file_path):
                 # Request document symbols to ensure the file is fully loaded by clangd
                 new_file_symbols = language_server.request_document_symbols(new_file_path).get_all_symbols_and_roots()
-                assert new_file_symbols, "New file should have symbols"
+                assert any(new_file_symbols), "New file should have symbols"
 
             # Verify the file stays in open_file_buffers after the context exits
             uri = pathlib.Path(new_file_abs_path).as_uri()
@@ -140,7 +140,7 @@ int use_add() {
 
             sel_start = _sel_range["start"]
             refs = language_server.request_references(b_file_path, sel_start["line"], sel_start["character"])
-            ref_files = [ref.get("relativePath", "") for ref in refs]
+            ref_files = [ref.get("relativePath") or "" for ref in refs]
 
             # Should find reference in the newly written file
             assert any("temp_new_file.cpp" in ref_file for ref_file in ref_files), (

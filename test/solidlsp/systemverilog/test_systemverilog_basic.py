@@ -161,7 +161,7 @@ class TestSystemVerilogHover:
         hover_info = language_server.request_hover("counter.sv", line, char)
         assert hover_info is not None, "Hover should return information for counter module"
         assert "contents" in hover_info, "Hover should have contents"
-        hover_text = _extract_hover_text(hover_info)
+        hover_text = _extract_hover_text(dict(hover_info) if hover_info else hover_info)
         assert len(hover_text) > 0, "Hover text should not be empty"
         assert "counter" in hover_text.lower(), f"Hover should mention 'counter', got: {hover_text}"
         assert "module" in hover_text.lower(), f"Hover should identify 'counter' as a module, got: {hover_text}"
@@ -178,7 +178,7 @@ class TestSystemVerilogHover:
         hover_info = language_server.request_hover("counter.sv", 7, 29)
         assert hover_info is not None, "Hover should return information for 'count' port"
         assert "contents" in hover_info, "Hover should have contents"
-        hover_text = _extract_hover_text(hover_info)
+        hover_text = _extract_hover_text(dict(hover_info) if hover_info else hover_info)
         assert "count" in hover_text.lower(), f"Hover should mention 'count', got: {hover_text}"
         assert "logic" in hover_text.lower(), f"Hover should include type 'logic', got: {hover_text}"
 
@@ -208,7 +208,7 @@ class TestSystemVerilogRename:
         workspace_edit = language_server.request_rename_symbol_edit("counter.sv", 7, 29, "cnt")
         assert workspace_edit is not None, "Rename should be supported for port signal 'count'"
 
-        changes = _extract_changes(workspace_edit)
+        changes = _extract_changes(dict(workspace_edit) if workspace_edit else workspace_edit)
         counter_edits = [edits for uri, edits in changes.items() if "counter.sv" in uri]
         assert len(counter_edits) >= 1, f"Should have edits for counter.sv, got: {list(changes.keys())}"
 
@@ -232,7 +232,7 @@ class TestSystemVerilogRename:
         workspace_edit = language_server.request_rename_symbol_edit("counter.sv", 13, 12, "cnt")
         assert workspace_edit is not None, "Rename should be supported for signal 'count' from usage site"
 
-        changes = _extract_changes(workspace_edit)
+        changes = _extract_changes(dict(workspace_edit) if workspace_edit else workspace_edit)
         counter_uris = [uri for uri in changes if "counter.sv" in uri]
         top_uris = [uri for uri in changes if "top.sv" in uri]
         assert len(counter_uris) >= 1, f"Expected edits in counter.sv, got: {list(changes.keys())}"
@@ -253,7 +253,7 @@ class TestSystemVerilogRename:
         workspace_edit = language_server.request_rename_symbol_edit("counter.sv", line, char, "my_counter")
         assert workspace_edit is not None, "Rename should be supported for module 'counter'"
 
-        changes = _extract_changes(workspace_edit)
+        changes = _extract_changes(dict(workspace_edit) if workspace_edit else workspace_edit)
         assert len(changes) > 0, "WorkspaceEdit should have changes"
         counter_edits = [edits for uri, edits in changes.items() if "counter.sv" in uri]
         assert len(counter_edits) >= 1, f"Should have edits for counter.sv, got: {list(changes.keys())}"

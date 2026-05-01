@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+from typing import Any, cast
 import pytest
 
 from serena.refactoring.checkpoints import CheckpointStore
@@ -43,9 +44,9 @@ def _isolate_runtime() -> Iterator[None]:
     ScalpelRuntime.reset_for_testing()
 
 
-def _make_tool(cls, project_root: Path):
+def _make_tool(cls, project_root: Path) -> Any:
     tool = cls.__new__(cls)
-    tool.get_project_root = lambda: str(project_root)  # type: ignore[method-assign]
+    cast(Any, tool).get_project_root = lambda: str(project_root)
     return tool
 
 
