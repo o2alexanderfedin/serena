@@ -5,6 +5,10 @@ Main entry point script for the test_repo application.
 
 This script demonstrates how a typical application entry point would be structured,
 with command-line arguments, configuration loading, and service initialization.
+
+Pyright is suppressed because this is a fixture for LSP tests: it intentionally
+calls into the loose ``models.User``/``Item`` ctors that don't strictly match
+their declared signatures, exercising the LSP's tolerance.
 """
 
 import argparse

@@ -1,6 +1,10 @@
 # pyright: reportCallIssue=false, reportAttributeAccessIssue=false, reportReturnType=false
 """
 Models module that demonstrates various Python class patterns.
+
+This file is a test fixture for LSP tests; pyright is suppressed because
+the deliberately-loose inheritance hierarchy (returning ``BaseModel`` from
+``User.from_dict`` and assigning subclass attrs) is part of the fixture.
 """
 
 from abc import ABC, abstractmethod
