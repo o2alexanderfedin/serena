@@ -1,3 +1,4 @@
+# pyright: reportIncompatibleMethodOverride=false, reportOperatorIssue=false
 """
 Utility functions and classes demonstrating various Python features.
 """

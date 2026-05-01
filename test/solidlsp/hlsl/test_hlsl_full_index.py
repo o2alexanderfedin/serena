@@ -8,6 +8,7 @@ silently dropped during workspace-wide indexing.
 
 from typing import Any
 
+from typing import Any, cast
 import pytest
 
 from solidlsp import SolidLanguageServer
@@ -40,7 +41,7 @@ class TestHlslFullIndex:
     def test_all_files_indexed_in_symbol_tree(self, language_server: SolidLanguageServer) -> None:
         """Every .hlsl file in the test repo must appear as a File symbol in the tree."""
         symbols = language_server.request_full_symbol_tree()
-        file_names = _collect_file_names(symbols)
+        file_names = _collect_file_names(cast(list[dict[str, Any]], symbols))
         missing = EXPECTED_FILES - file_names
         assert not missing, f"Files missing from full symbol tree: {missing}. Found: {file_names}"
 

@@ -19,7 +19,8 @@ from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name,
 def _find_symbol_by_name(language_server: SolidLanguageServer, file_path: str, name: str) -> dict[str, Any] | None:
     """Find a top-level symbol by name in a file's document symbols."""
     symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
-    return next((s for s in symbols[0] if s.get("name") == name), None)
+    found = next((s for s in symbols[0] if s.get("name") == name), None)
+    return dict(found) if found is not None else None
 
 
 def _get_symbol_selection_start(language_server: SolidLanguageServer, file_path: str, name: str) -> tuple[int, int]:
@@ -86,7 +87,7 @@ class TestSystemVerilogDefinition:
         # "counter" starts at column 4
         definitions = language_server.request_definition("top.sv", 16, 4)
         assert len(definitions) >= 1, f"Expected at least 1 definition, got {len(definitions)}"
-        def_paths = [d.get("relativePath", "") for d in definitions]
+        def_paths = [d.get("relativePath") or "" for d in definitions]
         assert any("counter.sv" in p for p in def_paths), f"Expected definition in counter.sv, got: {def_paths}"
         counter_defs = [d for d in definitions if "counter.sv" in (d.get("relativePath") or "")]
         assert counter_defs[0]["range"]["start"]["line"] == 1, (
@@ -110,7 +111,7 @@ class TestSystemVerilogReferences:
         # 'count' starts at char 29
         references = language_server.request_references("counter.sv", 7, 29)
         assert len(references) >= 1, f"Expected at least 1 reference, got {len(references)}"
-        ref_paths = [r.get("relativePath", "") for r in references]
+        ref_paths = [r.get("relativePath") or "" for r in references]
         refs_in_counter = [r for r in references if "counter.sv" in (r.get("relativePath") or "")]
         assert len(refs_in_counter) >= 1, f"Expected within-file references in counter.sv, got paths: {ref_paths}"
         ref_lines = sorted(r["range"]["start"]["line"] for r in refs_in_counter)
@@ -127,7 +128,7 @@ class TestSystemVerilogReferences:
         """
         line, char = _get_symbol_selection_start(language_server, "counter.sv", "counter")
         references = language_server.request_references("counter.sv", line, char)
-        ref_paths = [ref.get("relativePath", "") for ref in references]
+        ref_paths = [ref.get("relativePath") or "" for ref in references]
         assert any("top.sv" in p for p in ref_paths), f"Expected reference from top.sv, got: {ref_paths}"
         refs_in_top = [r for r in references if "top.sv" in (r.get("relativePath") or "")]
         # top.sv line 17 (0-indexed: 16): "    counter #(.WIDTH(8)) u_counter ("
@@ -136,11 +137,11 @@ class TestSystemVerilogReferences:
         )
 
 
-def _extract_hover_text(hover_info: dict[str, Any]) -> str:
+def _extract_hover_text(hover_info: Any) -> str:
     """Extract the text content from an LSP hover response."""
     contents = hover_info["contents"]
     if isinstance(contents, dict):
-        return contents.get("value", "")
+        return str(contents.get("value", ""))
     elif isinstance(contents, str):
         return contents
     return str(contents)
@@ -179,7 +180,7 @@ class TestSystemVerilogHover:
         assert "logic" in hover_text.lower(), f"Hover should include type 'logic', got: {hover_text}"
 
 
-def _extract_changes(workspace_edit: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+def _extract_changes(workspace_edit: Any) -> dict[str, list[dict[str, Any]]]:
     """Extract file URI → edits mapping from a WorkspaceEdit, handling both formats."""
     changes = workspace_edit.get("changes", {})
     if not changes:

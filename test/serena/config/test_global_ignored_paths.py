@@ -20,7 +20,7 @@ def _create_test_project(
         ignored_paths=project_ignored_paths or [],
         ignore_all_files_in_gitignore=False,
     )
-    serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=global_ignored_paths)
+    serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=global_ignored_paths or [])
     return Project(
         project_root=str(project_root),
         project_config=config,

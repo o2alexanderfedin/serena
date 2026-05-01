@@ -12,6 +12,7 @@ Reference: JSON-RPC 2.0 spec - params field is optional but must be object/array
 
 from typing import Any
 
+from typing import Any, cast
 import pytest
 
 from solidlsp.lsp_protocol_handler.server import make_notification, make_request
@@ -167,7 +168,7 @@ class TestMakeNotificationParamsHandling:
     def test_notification_with_explicit_params_list(self) -> None:
         """REQ-2: Methods with explicit params (list) MUST include them unchanged."""
         test_params = ["arg1", "arg2", "arg3"]
-        result = make_notification("custom/method", test_params)
+        result = make_notification("custom/method", cast(Any, test_params))
         assert_jsonrpc_structure(result, "custom/method", {"jsonrpc", "method", "params"})
         assert_params_equal(result, test_params, "REQ-2")
 
@@ -215,7 +216,7 @@ class TestMakeRequestParamsHandling:
     def test_request_with_explicit_params_list(self) -> None:
         """REQ-2: Requests with explicit params (list) MUST include them unchanged."""
         test_params = [1, 2, 3]
-        result = make_request("custom/sum", request_id=99, params=test_params)
+        result = make_request("custom/sum", request_id=99, params=cast(Any, test_params))
         assert_jsonrpc_structure(result, "custom/sum", {"jsonrpc", "method", "id", "params"}, expected_id=99)
         assert_params_equal(result, test_params, "REQ-2")
 

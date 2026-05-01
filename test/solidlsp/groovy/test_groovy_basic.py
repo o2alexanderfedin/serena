@@ -75,7 +75,7 @@ class TestGroovyLanguageServer:
         assert self.language_server is not None
         file_path = os.path.join("src", "main", "groovy", "com", "example", "Utils.groovy")
         refs = self.language_server.request_references(file_path, 3, 6)
-        assert any("Main.groovy" in ref.get("relativePath", "") for ref in refs), "Utils should be referenced from Main.groovy"
+        assert any("Main.groovy" in (ref.get("relativePath") or "") for ref in refs), "Utils should be referenced from Main.groovy"
 
         file_path = os.path.join("src", "main", "groovy", "com", "example", "Model.groovy")
         symbols = self.language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
@@ -87,15 +87,21 @@ class TestGroovyLanguageServer:
         assert model_symbol is not None, "Could not find 'Model' class symbol in Model.groovy"
 
         if "selectionRange" in model_symbol:
-            sel_start = model_symbol["selectionRange"]["start"]
+            _sel = model_symbol.get("selectionRange")
+
+            assert _sel is not None
+
+            sel_start = _sel["start"]
         else:
-            sel_start = model_symbol["range"]["start"]
+            _r = model_symbol.get("range")
+            assert _r is not None
+            sel_start = _r["start"]
         refs = self.language_server.request_references(file_path, sel_start["line"], sel_start["character"])
 
-        main_refs = [ref for ref in refs if "Main.groovy" in ref.get("relativePath", "")]
+        main_refs = [ref for ref in refs if "Main.groovy" in (ref.get("relativePath") or "")]
         assert len(main_refs) >= 2, f"Model should be referenced from Main.groovy at least 2 times, found {len(main_refs)}"
 
-        model_user_refs = [ref for ref in refs if "ModelUser.groovy" in ref.get("relativePath", "")]
+        model_user_refs = [ref for ref in refs if "ModelUser.groovy" in (ref.get("relativePath") or "")]
         assert len(model_user_refs) >= 1, f"Model should be referenced from ModelUser.groovy at least 1 time, found {len(model_user_refs)}"
 
     def test_overview_methods(self) -> None:

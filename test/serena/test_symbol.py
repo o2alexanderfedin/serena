@@ -1,3 +1,4 @@
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -240,12 +241,13 @@ class TestLanguageServerSymbolRetriever:
         symbol_retriever = LanguageServerSymbolRetriever(project_with_ls)
         create_user_method_symbol = symbol_retriever.find("UserService/create_user", within_relative_path="test_repo/services.py")[0]
         create_user_method_symbol_info = symbol_retriever.request_info_for_symbol(create_user_method_symbol)
+        assert create_user_method_symbol_info is not None
         assert "Create a new user and store it" in create_user_method_symbol_info
 
 
 class TestSymbolDictTypes:
     @staticmethod
-    def check_key_type(dict_type: type, key_type: type):
+    def check_key_type(dict_type: type, key_type: Any):
         """
         :param dict_type: a TypedDict type
         :param key_type: the corresponding key type (Literal[...]) that the dict should have for keys
@@ -302,7 +304,7 @@ class TestHoverBudget:
         # Create mock symbols with unique (line, col) pairs
         symbols = _make_mock_symbols(3)
 
-        result = symbol_retriever.request_info_for_symbol_batch(symbols)
+        result = symbol_retriever.request_info_for_symbol_batch(cast(Any, symbols))
 
         # All 3 symbols should have info (no budget exceeded)
         assert call_count == 3
@@ -338,7 +340,7 @@ class TestHoverBudget:
         # Create 5 mock symbols with unique (line, col) pairs
         symbols = _make_mock_symbols(5)
 
-        result = symbol_retriever.request_info_for_symbol_batch(symbols)
+        result = symbol_retriever.request_info_for_symbol_batch(cast(Any, symbols))
 
         # Budget is 0.1s, each call takes 0.05s, so only 2 calls should succeed
         # After 2 calls: 0.1s >= 0.1s budget, remaining 3 should be skipped
@@ -374,7 +376,7 @@ class TestHoverBudget:
         # Create mock symbols
         symbols = _make_mock_symbols(5)
 
-        result = symbol_retriever.request_info_for_symbol_batch(symbols)
+        result = symbol_retriever.request_info_for_symbol_batch(cast(Any, symbols))
 
         # All 5 symbols should be looked up (no budget limit)
         assert call_count == 5
@@ -408,7 +410,7 @@ class TestHoverBudget:
         # Create 5 mock symbols
         symbols = _make_mock_symbols(5)
 
-        symbol_retriever.request_info_for_symbol_batch(symbols)
+        symbol_retriever.request_info_for_symbol_batch(cast(Any, symbols))
 
         # Project budget is 0.05s, each call takes 0.03s
         # Budget check happens BEFORE starting a new call:
@@ -440,7 +442,7 @@ class TestHoverBudget:
         # Create 3 mock symbols
         symbols = _make_mock_symbols(3)
 
-        result = symbol_retriever.request_info_for_symbol_batch(symbols)
+        result = symbol_retriever.request_info_for_symbol_batch(cast(Any, symbols))
 
         # Global budget is 10s, all 3 should succeed
         assert call_count == 3

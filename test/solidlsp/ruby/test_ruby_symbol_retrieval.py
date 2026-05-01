@@ -10,6 +10,7 @@ These tests focus on the following methods:
 
 import os
 
+from typing import Any, cast
 import pytest
 
 from serena.util.text_utils import find_text_coordinates
@@ -154,7 +155,13 @@ class TestRubyLanguageServerSymbols:
         if not create_user_symbol or "selectionRange" not in create_user_symbol:
             pytest.skip("create_user symbol or its selectionRange not found")
 
-        sel_start = create_user_symbol["selectionRange"]["start"]
+        _sel_range = create_user_symbol.get("selectionRange")
+
+
+        assert _sel_range is not None
+
+
+        sel_start = _sel_range["start"]
         ref_symbols = [
             ref.symbol for ref in language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
         ]
@@ -181,7 +188,13 @@ class TestRubyLanguageServerSymbols:
         if not user_symbol or "selectionRange" not in user_symbol:
             pytest.skip("User symbol or its selectionRange not found")
 
-        sel_start = user_symbol["selectionRange"]["start"]
+        _sel_range = user_symbol.get("selectionRange")
+
+
+        assert _sel_range is not None
+
+
+        sel_start = _sel_range["start"]
         ref_symbols = [
             ref.symbol for ref in language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
         ]
@@ -204,6 +217,8 @@ class TestRubyLanguageServerSymbols:
 
         # This test might fail if the language server doesn't support it well
         if defining_symbol is not None:
+            assert defining_symbol is not None
+
             assert "name" in defining_symbol
             assert "kind" in defining_symbol
 
@@ -217,6 +232,8 @@ class TestRubyLanguageServerSymbols:
 
         # This might not work perfectly in all Ruby language servers
         if defining_symbol is not None:
+            assert defining_symbol is not None
+
             assert "name" in defining_symbol
             # The name might be "User" or the method that contains it
             assert defining_symbol.get("name") is not None
@@ -242,6 +259,8 @@ class TestRubyLanguageServerSymbols:
 
         # This is challenging for many language servers
         if defining_symbol is not None:
+            assert defining_symbol is not None
+
             assert "name" in defining_symbol
             assert defining_symbol.get("name") in ["NestedClass", "OuterClass"]
 
@@ -446,7 +465,7 @@ class TestRubyLanguageServerSymbols:
             assert len(services_symbols) > 0, "services.rb should have symbols"
 
             # Check for expected symbols with detailed verification
-            symbol_names = [s[0] for s in services_symbols if isinstance(s, tuple) and len(s) > 0]
+            symbol_names = [cast(Any, s)[0] for s in services_symbols if isinstance(s, tuple) and len(s) > 0]
             if not symbol_names:  # If not tuples, try different format
                 symbol_names = [s.get("name") for s in services_symbols if hasattr(s, "get")]
 
@@ -468,7 +487,7 @@ class TestRubyLanguageServerSymbols:
         symbol_names = set()
         for s_info in overview:
             if isinstance(s_info, tuple) and len(s_info) > 0:
-                symbol_names.add(s_info[0])
+                symbol_names.add(cast(Any, s_info)[0])
             elif hasattr(s_info, "get"):
                 symbol_names.add(s_info.get("name"))
             elif isinstance(s_info, str):
@@ -572,6 +591,8 @@ class TestRubyLanguageServerSymbols:
 
         # This might not work perfectly in all Ruby language servers due to require complexity
         if defining_symbol is not None:
+            assert defining_symbol is not None
+
             assert "name" in defining_symbol
             # The defining symbol should relate to UserService or Services
             # The defining symbol should relate to UserService, Services, or the containing class
@@ -590,7 +611,15 @@ class TestRubyLanguageServerSymbols:
             pos = find_text_coordinates(fb.contents, r"user = @service\.(create_user)")
 
         # Verify that we can find the method definition
+        assert pos is not None
+
+        assert pos is not None
+
+
         defining_symbol = language_server.request_defining_symbol(file_path, pos.line, pos.col)
+        assert defining_symbol is not None
+        assert defining_symbol is not None
+
         assert "name" in defining_symbol
         assert "kind" in defining_symbol
         assert defining_symbol.get("name") == "create_user"
@@ -606,6 +635,8 @@ class TestRubyLanguageServerSymbols:
 
         # This is challenging for many language servers
         if defining_symbol is not None:
+            assert defining_symbol is not None
+
             assert "name" in defining_symbol
             assert "kind" in defining_symbol
             # Could be method, function, or variable depending on implementation

@@ -80,7 +80,7 @@ class ClangdLanguageServer(SolidLanguageServer):
     @override
     def _document_symbols_cache_fingerprint(self) -> Hashable:
         cache_format_version = 1
-        cpp_settings: dict[str, Any] = self._custom_settings or {}
+        cpp_settings: SolidLSPSettings.CustomLSSettings | dict[str, Any] = self._custom_settings or {}
         return (
             cache_format_version,
             cpp_settings.get("clangd_version"),
@@ -152,7 +152,7 @@ class ClangdLanguageServer(SolidLanguageServer):
                 return None
 
             # Get the target directory from ls_specific_settings, default to .serena
-            cpp_settings: dict[str, Any] = self._custom_settings or {}
+            cpp_settings: SolidLSPSettings.CustomLSSettings | dict[str, Any] = self._custom_settings or {}
             compile_commands_rel_dir = cpp_settings.get("compile_commands_dir", ".serena")
             compile_commands_dir = os.path.join(self.repository_root_path, compile_commands_rel_dir)
             os.makedirs(compile_commands_dir, exist_ok=True)
@@ -382,17 +382,18 @@ class ClangdLanguageServer(SolidLanguageServer):
         init_response = self.server.send.initialize(initialize_params)
         capabilities = init_response["capabilities"]
 
-        text_document_sync = capabilities["textDocumentSync"]
+        text_document_sync = capabilities.get("textDocumentSync")
         if isinstance(text_document_sync, int):
-            assert text_document_sync == 2  # type: ignore
+            assert text_document_sync == 2
         else:
-            assert text_document_sync["change"] == 2  # type: ignore
+            assert text_document_sync is not None
+            assert text_document_sync.get("change") == 2
 
         assert "completionProvider" in capabilities
         completion_provider = capabilities["completionProvider"]
-        trigger_characters = set(completion_provider["triggerCharacters"])
+        trigger_characters = set(completion_provider.get("triggerCharacters") or [])
         assert {".", "<", ">", ":", '"', "/"}.issubset(trigger_characters)
-        assert completion_provider["resolveProvider"] is False
+        assert completion_provider.get("resolveProvider") is False
 
         self.server.notify.initialized({})
         # set ready flag, clangd sends no meaningful notification when ready

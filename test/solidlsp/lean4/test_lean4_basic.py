@@ -80,7 +80,7 @@ class TestLean4LanguageServer:
         assert len(references) >= 1, f"Expected at least 1 reference to isPositive (used in absolute), got {len(references)}"
 
         # Check that isPositive is referenced within Helper.lean at line 15 (absolute calls isPositive)
-        ref_locations = [(ref["relativePath"], ref["range"]["start"]["line"]) for ref in references]
+        ref_locations = [(ref["relativePath"] or "", ref["range"]["start"]["line"]) for ref in references]
         helper_refs = [(path, line) for path, line in ref_locations if "Helper.lean" in path]
         assert any(line == 15 for _, line in helper_refs), (
             f"Expected isPositive reference at Helper.lean:15 (in absolute), got: {ref_locations}"
@@ -99,7 +99,7 @@ class TestLean4LanguageServer:
         assert len(references) >= 1, f"Expected at least 1 reference to add in Main.lean, got {len(references)}"
 
         # Check for references in Main.lean with specific lines
-        ref_locations = [(ref["relativePath"], ref["range"]["start"]["line"]) for ref in references]
+        ref_locations = [(ref["relativePath"] or "", ref["range"]["start"]["line"]) for ref in references]
         main_refs = [(path, line) for path, line in ref_locations if "Main.lean" in path]
         assert len(main_refs) >= 1, f"Expected at least 1 reference to add in Main.lean, got: {ref_locations}"
         main_ref_lines = {line for _, line in main_refs}
@@ -120,7 +120,7 @@ class TestLean4LanguageServer:
 
         assert len(references) >= 1, f"Expected at least 1 reference to Calculator in Main.lean, got {len(references)}"
 
-        ref_locations = [(ref["relativePath"], ref["range"]["start"]["line"]) for ref in references]
+        ref_locations = [(ref["relativePath"] or "", ref["range"]["start"]["line"]) for ref in references]
         main_refs = [(path, line) for path, line in ref_locations if "Main.lean" in path]
         assert len(main_refs) >= 1, f"Expected at least 1 reference to Calculator in Main.lean, got: {ref_locations}"
         main_ref_lines = {line for _, line in main_refs}

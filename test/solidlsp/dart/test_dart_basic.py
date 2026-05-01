@@ -176,7 +176,7 @@ class TestDartLanguageServer:
         symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # Handle nested symbol structure - symbols can be nested in lists
-        symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
+        symbol_list = symbols[0]
 
         # Find the 'add' method symbol in Calculator class
         add_symbol = None
@@ -194,11 +194,15 @@ class TestDartLanguageServer:
                     break
 
         assert add_symbol is not None, "Could not find 'add' method symbol in main.dart"
-        sel_start = add_symbol["selectionRange"]["start"]
+        _sel_range = add_symbol.get("selectionRange")
+
+        assert _sel_range is not None
+
+        sel_start = _sel_range["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
 
         # Check that we found references - at least one should be in main.dart
-        assert any("main.dart" in ref.get("relativePath", "") or "main.dart" in ref.get("uri", "") for ref in refs), (
+        assert any("main.dart" in (ref.get("relativePath") or "") or "main.dart" in ref.get("uri", "") for ref in refs), (
             "main.dart should reference add method (tried all positions in selectionRange)"
         )
 
@@ -250,6 +254,9 @@ class TestDartLanguageServer:
         with language_server.open_file(file_path, open_in_ls=False) as f:
             pos = find_text_coordinates(f.contents, r"final (result) = a \+ b;")
 
+        assert pos is not None
+
+
         defining_symbol = language_server.request_defining_symbol(file_path, pos.line, pos.col)
 
         # The defining symbol might be the variable itself or the containing method
@@ -294,7 +301,7 @@ class TestDartLanguageServer:
         assert len(symbols) > 0
 
         # Flatten the symbols if they're nested
-        symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
+        symbol_list = symbols[0]
 
         # Look for expected classes and methods
         symbol_names = [s.get("name") for s in symbol_list]
@@ -318,7 +325,7 @@ class TestDartLanguageServer:
         symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # Handle nested symbol structure
-        symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
+        symbol_list = symbols[0]
 
         # Find Calculator class and test its references
         calculator_symbol = None
@@ -328,7 +335,11 @@ class TestDartLanguageServer:
                 break
 
         if calculator_symbol and "selectionRange" in calculator_symbol:
-            sel_start = calculator_symbol["selectionRange"]["start"]
+            _sel_range = calculator_symbol.get("selectionRange")
+
+            assert _sel_range is not None
+
+            sel_start = _sel_range["start"]
             refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
 
             # Should find references to Calculator (constructor calls, etc.)
@@ -347,16 +358,20 @@ class TestDartLanguageServer:
 
         # Test finding references to subtract function from helper.dart in main.dart
         helper_symbols = language_server.request_document_symbols(helper_file_path).get_all_symbols_and_roots()
-        symbol_list = helper_symbols[0] if helper_symbols and isinstance(helper_symbols[0], list) else helper_symbols
+        symbol_list = helper_symbols[0]
 
         subtract_symbol = next((s for s in symbol_list if s.get("name") == "subtract"), None)
 
         if subtract_symbol and "selectionRange" in subtract_symbol:
-            sel_start = subtract_symbol["selectionRange"]["start"]
+            _sel_range = subtract_symbol.get("selectionRange")
+
+            assert _sel_range is not None
+
+            sel_start = _sel_range["start"]
             refs = language_server.request_references(helper_file_path, sel_start["line"], sel_start["character"])
 
             # Should find references in main.dart
-            main_dart_refs = [ref for ref in refs if "main.dart" in ref.get("uri", "") or "main.dart" in ref.get("relativePath", "")]
+            main_dart_refs = [ref for ref in refs if "main.dart" in ref.get("uri", "") or "main.dart" in (ref.get("relativePath") or "")]
             # Note: This may not always work depending on language server capabilities
             # So we don't assert - just verify the structure if we get results
             if main_dart_refs:
@@ -387,7 +402,7 @@ class TestDartLanguageServer:
         """
         file_path = os.path.join("lib", "main.dart")
         symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
-        symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
+        symbol_list = symbols[0]
 
         # Find the 'add' method — defined across multiple lines in main.dart:
         #   int add(int a, int b) {
@@ -413,8 +428,8 @@ class TestDartLanguageServer:
         # The body range must span multiple lines (not just the identifier line).
         # With hierarchicalDocumentSymbolSupport declared, the Dart LSP returns
         # DocumentSymbol[] where range covers the full method body.
-        body_start = add_symbol["location"]["range"]["start"]["line"]
-        body_end = add_symbol["location"]["range"]["end"]["line"]
+        body_start = (add_symbol.get("location") or {}).get("range", {}).get("start", {}).get("line", 0)
+        body_end = (add_symbol.get("location") or {}).get("range", {}).get("end", {}).get("line", 0)
         assert body_end > body_start, (
             f"Expected multi-line body range for 'add' method, got start={body_start}, end={body_end}. "
             f"This likely means hierarchicalDocumentSymbolSupport is not declared in client capabilities."
@@ -422,5 +437,7 @@ class TestDartLanguageServer:
 
         # The body text must contain the method implementation, not just the name.
         if add_symbol.get("body"):
-            body_text = add_symbol["body"].get_text()
+            body = add_symbol.get("body")
+            assert body is not None
+            body_text = body.get_text()
             assert "return result" in body_text, f"Expected method body to contain implementation, got: {body_text!r}"

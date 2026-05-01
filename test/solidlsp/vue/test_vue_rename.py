@@ -1,5 +1,6 @@
 import os
 
+from typing import Any, cast
 import pytest
 
 from solidlsp import SolidLanguageServer
@@ -19,19 +20,25 @@ class TestVueRename:
         if not handle_digit_symbol or "selectionRange" not in handle_digit_symbol:
             pytest.skip("handleDigit symbol not found - test fixture may need updating")
 
-        sel_start = handle_digit_symbol["selectionRange"]["start"]
+        _sel_range = handle_digit_symbol.get("selectionRange")
+
+
+        assert _sel_range is not None
+
+
+        sel_start = _sel_range["start"]
 
         workspace_edit = language_server.request_rename_symbol_edit(file_path, sel_start["line"], sel_start["character"], "processDigit")
 
         assert workspace_edit is not None, "Should return WorkspaceEdit for rename operation"
 
-        has_changes = "changes" in workspace_edit and workspace_edit["changes"]
-        has_document_changes = "documentChanges" in workspace_edit and workspace_edit["documentChanges"]
+        has_changes = "changes" in workspace_edit and cast(dict[str, Any], workspace_edit)["changes"]
+        has_document_changes = "documentChanges" in workspace_edit and cast(dict[str, Any], workspace_edit)["documentChanges"]
 
         assert has_changes or has_document_changes, "WorkspaceEdit should contain either 'changes' or 'documentChanges'"
 
         if has_changes:
-            changes = workspace_edit["changes"]
+            changes = cast(dict[str, Any], workspace_edit)["changes"]
             assert len(changes) > 0, "Should have at least one file with changes"
 
             calculator_input_files = [uri for uri in changes.keys() if "CalculatorInput.vue" in uri]
@@ -51,7 +58,7 @@ class TestVueRename:
                 assert "character" in edit["range"]["start"], "Start position should have character offset"
 
         elif has_document_changes:
-            document_changes = workspace_edit["documentChanges"]
+            document_changes = cast(dict[str, Any], workspace_edit)["documentChanges"]
             assert isinstance(document_changes, list), "documentChanges should be a list"
             assert len(document_changes) > 0, "Should have at least one document change"
 
@@ -85,7 +92,13 @@ class TestVueRename:
         if not use_formatter_symbol or "selectionRange" not in use_formatter_symbol:
             pytest.skip("useFormatter symbol not found - test fixture may need updating")
 
-        sel_start = use_formatter_symbol["selectionRange"]["start"]
+        _sel_range = use_formatter_symbol.get("selectionRange")
+
+
+        assert _sel_range is not None
+
+
+        sel_start = _sel_range["start"]
 
         workspace_edit = language_server.request_rename_symbol_edit(
             composable_file, sel_start["line"], sel_start["character"], "useNumberFormatter"
@@ -93,13 +106,13 @@ class TestVueRename:
 
         assert workspace_edit is not None, "Should return WorkspaceEdit for cross-file rename"
 
-        has_changes = "changes" in workspace_edit and workspace_edit["changes"]
-        has_document_changes = "documentChanges" in workspace_edit and workspace_edit["documentChanges"]
+        has_changes = "changes" in workspace_edit and cast(dict[str, Any], workspace_edit)["changes"]
+        has_document_changes = "documentChanges" in workspace_edit and cast(dict[str, Any], workspace_edit)["documentChanges"]
 
         assert has_changes or has_document_changes, "WorkspaceEdit should contain either 'changes' or 'documentChanges'"
 
         if has_changes:
-            changes = workspace_edit["changes"]
+            changes = cast(dict[str, Any], workspace_edit)["changes"]
             assert len(changes) > 0, "Should have at least one file with changes"
 
             composable_files = [uri for uri in changes.keys() if "useFormatter.ts" in uri]
@@ -116,7 +129,7 @@ class TestVueRename:
                     assert "end" in edit["range"], f"Range in {uri} should have end position"
 
         elif has_document_changes:
-            document_changes = workspace_edit["documentChanges"]
+            document_changes = cast(dict[str, Any], workspace_edit)["documentChanges"]
             assert isinstance(document_changes, list), "documentChanges should be a list"
             assert len(document_changes) > 0, "Should have at least one document change"
 
@@ -150,7 +163,13 @@ class TestVueRename:
         if not app_title_symbol or "selectionRange" not in app_title_symbol:
             pytest.skip("appTitle symbol not found - test fixture may need updating")
 
-        sel_start = app_title_symbol["selectionRange"]["start"]
+        _sel_range = app_title_symbol.get("selectionRange")
+
+
+        assert _sel_range is not None
+
+
+        sel_start = _sel_range["start"]
 
         workspace_edit = language_server.request_rename_symbol_edit(
             file_path, sel_start["line"], sel_start["character"], "applicationTitle"
@@ -159,13 +178,13 @@ class TestVueRename:
         assert workspace_edit is not None, "Should return WorkspaceEdit for rename operation"
         assert isinstance(workspace_edit, dict), "WorkspaceEdit should be a dictionary"
 
-        has_changes = "changes" in workspace_edit and workspace_edit["changes"]
-        has_document_changes = "documentChanges" in workspace_edit and workspace_edit["documentChanges"]
+        has_changes = "changes" in workspace_edit and cast(dict[str, Any], workspace_edit)["changes"]
+        has_document_changes = "documentChanges" in workspace_edit and cast(dict[str, Any], workspace_edit)["documentChanges"]
 
         assert has_changes or has_document_changes, "WorkspaceEdit must have 'changes' or 'documentChanges'"
 
         if has_changes:
-            changes = workspace_edit["changes"]
+            changes = cast(dict[str, Any], workspace_edit)["changes"]
 
             assert isinstance(changes, dict), "changes should be a dict mapping URIs to TextEdit lists"
 
@@ -201,7 +220,7 @@ class TestVueRename:
                     assert edit["newText"] == "applicationTitle", f"newText should be 'applicationTitle', got {edit['newText']}"
 
         elif has_document_changes:
-            document_changes = workspace_edit["documentChanges"]
+            document_changes = cast(dict[str, Any], workspace_edit)["documentChanges"]
             assert isinstance(document_changes, list), "documentChanges should be a list"
             assert len(document_changes) > 0, "Should have at least one document change"
 

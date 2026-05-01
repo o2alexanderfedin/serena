@@ -1,3 +1,4 @@
+# pyright: reportCallIssue=false, reportGeneralTypeIssues=false, reportRedeclaration=false, reportAssignmentType=false
 """
 Example demonstrating user management with the test_repo module.
 

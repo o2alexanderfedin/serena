@@ -73,12 +73,18 @@ def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     if not user_symbol or "selectionRange" not in user_symbol:
         pytest.skip("User symbol not found for reference testing")
 
-    sel_start = user_symbol["selectionRange"]["start"]
+    _sel_range = user_symbol.get("selectionRange")
+
+
+    assert _sel_range is not None
+
+
+    sel_start = _sel_range["start"]
     references = ls_with_ignored_dirs.request_references(definition_file, sel_start["line"], sel_start["character"])
 
     # Assert that scripts and ignored_dir do not appear in the references
-    assert not any("scripts" in ref["relativePath"] for ref in references), "scripts should be ignored"
-    assert not any("ignored_dir" in ref["relativePath"] for ref in references), "ignored_dir should be ignored"
+    assert not any("scripts" in (ref["relativePath"] or "") for ref in references), "scripts should be ignored"
+    assert not any("ignored_dir" in (ref["relativePath"] or "") for ref in references), "ignored_dir should be ignored"
 
 
 @pytest.mark.slow
@@ -115,12 +121,16 @@ def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
                 break
 
         if user_symbol and "selectionRange" in user_symbol:
-            sel_start = user_symbol["selectionRange"]["start"]
+            _sel_range = user_symbol.get("selectionRange")
+
+            assert _sel_range is not None
+
+            sel_start = _sel_range["start"]
             references = ls.request_references(definition_file, sel_start["line"], sel_start["character"])
 
             # Assert that scripts and ignored_dir do not appear in references
-            assert not any("scripts" in ref["relativePath"] for ref in references), "scripts should be ignored (glob)"
-            assert not any("ignored_dir" in ref["relativePath"] for ref in references), "ignored_dir should be ignored (glob)"
+            assert not any("scripts" in (ref["relativePath"] or "") for ref in references), "scripts should be ignored (glob)"
+            assert not any("ignored_dir" in (ref["relativePath"] or "") for ref in references), "ignored_dir should be ignored (glob)"
 
 
 @pytest.mark.parametrize("language_server", [Language.ELIXIR], indirect=True)

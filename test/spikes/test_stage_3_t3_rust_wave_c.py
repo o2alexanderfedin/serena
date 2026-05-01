@@ -12,7 +12,9 @@ Per scope-report §4.2:
 from __future__ import annotations
 
 import json
+from collections.abc import Generator
 from pathlib import Path
+from typing import Any, TypeVar, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -27,16 +29,22 @@ from serena.tools.scalpel_facades import (
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
 
+_T = TypeVar("_T")
+
+
 @pytest.fixture(autouse=True)
-def reset_runtime():
+def reset_runtime() -> Generator[None, None, None]:
     ScalpelRuntime.reset_for_testing()
     yield
     ScalpelRuntime.reset_for_testing()
 
 
-def _make_tool(cls, project_root: Path):
+def _make_tool(cls: type[_T], project_root: Path) -> Any:
+    """Construct a tool instance bypassing __init__; returns Any so each call site
+    can use the subclass-specific apply() signature without type unification across
+    the imported tool union."""
     tool = cls.__new__(cls)
-    tool.get_project_root = lambda: str(project_root)  # type: ignore[method-assign]
+    cast(Any, tool).get_project_root = lambda: str(project_root)
     return tool
 
 

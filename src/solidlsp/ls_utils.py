@@ -145,19 +145,8 @@ class PathUtils:
 
         This method was obtained from https://stackoverflow.com/a/61922504
         """
-        try:
-            from urllib.parse import unquote, urlparse
-            from urllib.request import url2pathname
-        except ImportError:
-            # backwards compatibility (Python 2)
-            from urllib.parse import unquote as unquote_py2
-            from urllib.request import url2pathname as url2pathname_py2
-
-            from urlparse import urlparse as urlparse_py2
-
-            unquote = unquote_py2
-            url2pathname = url2pathname_py2
-            urlparse = urlparse_py2
+        from urllib.parse import unquote, urlparse
+        from urllib.request import url2pathname
         parsed = urlparse(uri)
         host = f"{os.path.sep}{os.path.sep}{parsed.netloc}{os.path.sep}"
         path = os.path.normpath(os.path.join(host, url2pathname(unquote(parsed.path))))
@@ -288,9 +277,10 @@ class FileUtils:
         """
         Downloads an archive from ``url`` and extracts it safely into ``target_path``.
         """
+        tmp_files: list[str] = []
+        tmp_file_name: str = ""
         try:
             # preparing the temporary download location
-            tmp_files: list[str] = []
             tmp_file_name = str(PurePath(os.path.expanduser("~"), "solidlsp_tmp", uuid.uuid4().hex))
             os.makedirs(os.path.dirname(tmp_file_name), exist_ok=True)
 

@@ -443,6 +443,7 @@ class TestProjectSerenaDataFolder:
             project_name="myproject",
             languages=[Language.PYTHON],
         )
+        assert serena_config is not None
         project = Project(
             project_root=str(self.project_path),
             project_config=project_config,

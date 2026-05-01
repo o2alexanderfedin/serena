@@ -65,7 +65,7 @@ class TestSearchText:
 
         # Search for variable assignments with a compiled regex
         pattern = re.compile(r"^\s*[A-Z_]+ = .+$")
-        matches = search_text(pattern, content=content)
+        matches = search_text(pattern.pattern, content=content)
 
         assert len(matches) == 2
         assert "DEBUG = True" in matches[0].lines[0].line_content

@@ -1,3 +1,4 @@
+# pyright: reportCallIssue=false, reportGeneralTypeIssues=false, reportRedeclaration=false, reportAssignmentType=false
 """Minimal seed package used by Phase 0 spikes."""
 from typing import Final
 

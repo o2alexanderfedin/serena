@@ -173,9 +173,9 @@ class TestYAMLLanguageServerBasics:
         port_symbols = [s for s in all_symbols if s.get("name") == "port"]
         assert len(port_symbols) > 0, "Should find 'port' symbols"
         # Find the one under 'app' (should be at line 4 in 0-indexed, actual line 5)
-        app_port = next((s for s in port_symbols if s["range"]["start"]["line"] == 4), None)
+        app_port = next((s for s in port_symbols if ((s.get("range") or {}).get("start") or {}).get("line", 0) == 4), None)
         assert app_port is not None, "Should find 'port' under 'app'"
-        assert app_port["range"]["start"]["character"] == 2, "'port' should be indented 2 spaces"
+        assert ((app_port.get("range") or {}).get("start") or {}).get("character", 0) == 2, "'port' should be indented 2 spaces"
 
     @pytest.mark.parametrize("language_server", [Language.YAML], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
