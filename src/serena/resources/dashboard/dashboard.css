@@ -196,8 +196,14 @@ body {
     border-radius: 2px;
 }
 
-.attribution-differences strong {
+.attribution-differences strong,
+.attribution-languages strong {
     color: var(--text-primary);
+}
+
+.attribution-languages {
+    font-size: 11px;
+    line-height: 1.7;
 }
 
 .header {

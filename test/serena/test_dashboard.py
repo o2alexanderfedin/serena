@@ -76,3 +76,16 @@ def test_dashboard_html_carries_serena_attribution_and_differences() -> None:
         f"dashboard must name at least one Scalpel-specific addition "
         f"(any of {differences_signals})"
     )
+    # Plugin language list: each of the 23 first-class plugin languages must appear.
+    plugin_languages = (
+        "clojure", "cpp", "crystal", "csharp", "elixir", "erlang", "go",
+        "haskell", "haxe", "java", "lean", "markdown", "ocaml", "perl",
+        "powershell", "problog", "prolog", "python", "ruby", "rust",
+        "smt2", "systemverilog", "typescript",
+    )
+    missing = [lang for lang in plugin_languages if lang not in html]
+    assert not missing, f"dashboard must list all 23 plugin languages — missing: {missing}"
+    # Engine-only LSP coverage callout.
+    assert "52 LSPs" in html or "engine level" in html, (
+        "dashboard must mention the broader engine-level LSP coverage beyond the 23 plugins"
+    )
