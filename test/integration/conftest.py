@@ -361,6 +361,52 @@ def assert_workspace_edit_round_trip():
 
 
 @pytest.fixture(scope="session")
+def pylsp_notebooks_lsp(calcpy_notebooks_workspace: Path) -> Iterator[Any]:
+    """Boot pylsp (with pylsp-rope) rooted at calcpy_notebooks.
+
+    Stage 1H Leaf 02 — the organize-imports + .ipynb-byte-stability
+    integration tests target ``calcpy_notebooks/src/calcpy_min.py``;
+    using the standard ``pylsp_lsp`` (rooted at ``calcpy``) yields a
+    workspace-root mismatch where ``open_file("src/calcpy_min.py")``
+    resolves to ``calcpy/src/calcpy_min.py`` (which doesn't exist).
+    """
+    _require_binary("pylsp")
+    srv = _build_python_server(
+        "solidlsp.language_servers.pylsp_server",
+        "PylspServer",
+        calcpy_notebooks_workspace,
+    )
+    with srv.start_server():
+        yield srv
+
+
+@pytest.fixture(scope="session")
+def basedpyright_notebooks_lsp(calcpy_notebooks_workspace: Path) -> Iterator[Any]:
+    """Boot basedpyright-langserver rooted at calcpy_notebooks."""
+    _require_binary("basedpyright-langserver")
+    srv = _build_python_server(
+        "solidlsp.language_servers.basedpyright_server",
+        "BasedpyrightServer",
+        calcpy_notebooks_workspace,
+    )
+    with srv.start_server():
+        yield srv
+
+
+@pytest.fixture(scope="session")
+def ruff_notebooks_lsp(calcpy_notebooks_workspace: Path) -> Iterator[Any]:
+    """Boot ruff (native LSP) rooted at calcpy_notebooks."""
+    _require_binary("ruff")
+    srv = _build_python_server(
+        "solidlsp.language_servers.ruff_server",
+        "RuffServer",
+        calcpy_notebooks_workspace,
+    )
+    with srv.start_server():
+        yield srv
+
+
+@pytest.fixture(scope="session")
 def python_coordinator(
     pylsp_lsp: Any,
     basedpyright_lsp: Any,
@@ -393,6 +439,36 @@ def python_coordinator(
         return MultiServerCoordinator(servers)
     except Exception as exc:  # noqa: BLE001
         pytest.skip(f"python_coordinator unavailable (construct error): {exc!r}")
+
+
+@pytest.fixture(scope="session")
+def python_coordinator_notebooks(
+    pylsp_notebooks_lsp: Any,
+    basedpyright_notebooks_lsp: Any,
+    ruff_notebooks_lsp: Any,
+) -> Any:
+    """3-server Python ``MultiServerCoordinator`` rooted at calcpy_notebooks.
+
+    Drives the organize-imports + .ipynb-byte-stability integration tests
+    that target ``calcpy_notebooks/src/calcpy_min.py``. Boots three
+    notebooks-rooted server fixtures so ``open_file("src/calcpy_min.py")``
+    resolves cleanly at the notebooks fixture root.
+    """
+    try:
+        from serena.refactoring.multi_server import MultiServerCoordinator
+        from serena.tools.scalpel_runtime import _AsyncAdapter
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"python_coordinator_notebooks unavailable (import error): {exc!r}")
+
+    try:
+        servers: dict[str, Any] = {
+            "pylsp-rope": _AsyncAdapter(pylsp_notebooks_lsp),
+            "basedpyright": _AsyncAdapter(basedpyright_notebooks_lsp),
+            "ruff": _AsyncAdapter(ruff_notebooks_lsp),
+        }
+        return MultiServerCoordinator(servers)
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"python_coordinator_notebooks unavailable (construct error): {exc!r}")
 
 
 # ---------------------------------------------------------------------------

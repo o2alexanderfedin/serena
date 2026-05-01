@@ -1,5 +1,7 @@
+from pathlib import Path
 from types import SimpleNamespace
 
+from serena.constants import SERENA_DASHBOARD_DIR
 from serena.dashboard import SerenaDashboardAPI
 from solidlsp.ls_config import Language
 
@@ -29,7 +31,12 @@ def _make_dashboard(project_languages: list[Language] | None) -> SerenaDashboard
     if project_languages is not None:
         project = SimpleNamespace(project_config=SimpleNamespace(languages=project_languages))
     agent = _DummyAgent(project)
-    return SerenaDashboardAPI(memory_log_handler=_DummyMemoryLogHandler(), tool_names=[], agent=agent, tool_usage_stats=None)
+    return SerenaDashboardAPI(
+        memory_log_handler=_DummyMemoryLogHandler(),  # pyright: ignore[reportArgumentType]
+        tool_names=[],
+        agent=agent,  # pyright: ignore[reportArgumentType]
+        tool_usage_stats=None,
+    )
 
 
 def test_available_languages_include_experimental_when_no_active_project():
@@ -47,3 +54,25 @@ def test_available_languages_exclude_project_languages():
     assert Language.MARKDOWN.value not in available
     # ensure experimental languages remain available for selection
     assert Language.ANSIBLE.value in available
+
+
+def test_dashboard_html_carries_serena_attribution_and_differences() -> None:
+    """The dashboard surfaces a fork-of-Serena attribution and a brief
+    differences callout — required so end-users can trace the upstream
+    project and understand what O2 Scalpel adds on top.
+
+    See `docs/superpowers/specs/2026-04-29-...` family for the rebrand
+    decision; the v1.8 dashboard rebrand intentionally keeps an upstream
+    credit visible.
+    """
+    html = (Path(SERENA_DASHBOARD_DIR) / "index.html").read_text(encoding="utf-8")
+    # Attribution
+    assert "Serena" in html, "dashboard must reference upstream Serena project"
+    assert "github.com/oraios/serena" in html, "dashboard must link to upstream Serena repo"
+    assert "fork" in html.lower(), "dashboard must state O2 Scalpel is a fork"
+    # Differences callout — at least one Scalpel-specific axis must be named
+    differences_signals = ("LSP", "MCP", "facade", "refactor")
+    assert any(signal in html for signal in differences_signals), (
+        f"dashboard must name at least one Scalpel-specific addition "
+        f"(any of {differences_signals})"
+    )

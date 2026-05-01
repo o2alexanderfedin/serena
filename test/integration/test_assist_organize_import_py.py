@@ -39,7 +39,7 @@ def _runner(coro: Any) -> Any:
 
 
 def test_organize_imports_returns_one_candidate(
-    python_coordinator: Any,
+    python_coordinator_notebooks: Any,
     calcpy_notebooks_workspace: Path,
 ) -> None:
     """The 3-server merge must return ≥1 organize-imports survivor."""
@@ -48,16 +48,16 @@ def test_organize_imports_returns_one_candidate(
     start, end = compute_file_range(str(src))
 
     # Open the file via every adapter so each server sees the buffer.
-    pylsp = python_coordinator.servers["pylsp-rope"]._inner
-    bp = python_coordinator.servers["basedpyright"]._inner
-    ruff = python_coordinator.servers["ruff"]._inner
+    pylsp = python_coordinator_notebooks.servers["pylsp-rope"]._inner
+    bp = python_coordinator_notebooks.servers["basedpyright"]._inner
+    ruff = python_coordinator_notebooks.servers["ruff"]._inner
 
     with pylsp.open_file("src/calcpy_min.py"):
         with bp.open_file("src/calcpy_min.py"):
             with ruff.open_file("src/calcpy_min.py"):
                 time.sleep(1.0)
                 merged = _runner(
-                    python_coordinator.merge_code_actions(
+                    python_coordinator_notebooks.merge_code_actions(
                         file=str(src),
                         start=start,
                         end=end,
@@ -82,23 +82,23 @@ def test_organize_imports_returns_one_candidate(
 
 
 def test_organize_imports_ruff_wins_over_pylsp_rope(
-    python_coordinator: Any,
+    python_coordinator_notebooks: Any,
     calcpy_notebooks_workspace: Path,
 ) -> None:
     """Per §11.7, ruff outranks pylsp-rope for ``source.organizeImports``."""
     src = calcpy_notebooks_workspace / "src" / "calcpy_min.py"
     start, end = compute_file_range(str(src))
 
-    pylsp = python_coordinator.servers["pylsp-rope"]._inner
-    bp = python_coordinator.servers["basedpyright"]._inner
-    ruff = python_coordinator.servers["ruff"]._inner
+    pylsp = python_coordinator_notebooks.servers["pylsp-rope"]._inner
+    bp = python_coordinator_notebooks.servers["basedpyright"]._inner
+    ruff = python_coordinator_notebooks.servers["ruff"]._inner
 
     with pylsp.open_file("src/calcpy_min.py"):
         with bp.open_file("src/calcpy_min.py"):
             with ruff.open_file("src/calcpy_min.py"):
                 time.sleep(1.0)
                 merged = _runner(
-                    python_coordinator.merge_code_actions(
+                    python_coordinator_notebooks.merge_code_actions(
                         file=str(src),
                         start=start,
                         end=end,
@@ -135,7 +135,7 @@ def test_organize_imports_ruff_wins_over_pylsp_rope(
 
 
 def test_companion_ipynb_unchanged_after_organize(
-    python_coordinator: Any,
+    python_coordinator_notebooks: Any,
     calcpy_notebooks_workspace: Path,
 ) -> None:
     """Organize-imports on the .py module must NOT touch the .ipynb companion."""
@@ -146,15 +146,15 @@ def test_companion_ipynb_unchanged_after_organize(
     nb_bytes_pre = nb.read_bytes()
 
     start, end = compute_file_range(str(src))
-    pylsp = python_coordinator.servers["pylsp-rope"]._inner
-    bp = python_coordinator.servers["basedpyright"]._inner
-    ruff = python_coordinator.servers["ruff"]._inner
+    pylsp = python_coordinator_notebooks.servers["pylsp-rope"]._inner
+    bp = python_coordinator_notebooks.servers["basedpyright"]._inner
+    ruff = python_coordinator_notebooks.servers["ruff"]._inner
     with pylsp.open_file("src/calcpy_min.py"):
         with bp.open_file("src/calcpy_min.py"):
             with ruff.open_file("src/calcpy_min.py"):
                 time.sleep(1.0)
                 _ = _runner(
-                    python_coordinator.merge_code_actions(
+                    python_coordinator_notebooks.merge_code_actions(
                         file=str(src),
                         start=start,
                         end=end,
