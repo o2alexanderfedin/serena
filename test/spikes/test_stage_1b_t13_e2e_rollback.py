@@ -88,7 +88,7 @@ def test_complex_multi_shape_edit_then_checkpoint_restore(
     # --- record checkpoint + restore ---
     store = CheckpointStore()
     cid = store.record(edit, report["snapshot"])
-    ok = store.restore(cid, applier._apply_workspace_edit)
+    ok = store.restore(cid, cast(Any, applier._apply_workspace_edit))
     assert ok is True
 
     # --- post-restore assertions: filesystem back to pre-state ---
@@ -142,7 +142,7 @@ def test_three_sequential_edits_transaction_rollback(
     assert b.read_text(encoding="utf-8") == "B1\n"
     assert c.read_text(encoding="utf-8") == "C1\n"
 
-    n = tstore.rollback(tid, applier._apply_workspace_edit)
+    n = tstore.rollback(tid, cast(Any, applier._apply_workspace_edit))
     assert n == 3
     assert a.read_text(encoding="utf-8") == "A0\n"
     assert b.read_text(encoding="utf-8") == "B0\n"

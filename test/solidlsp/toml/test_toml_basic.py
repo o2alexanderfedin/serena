@@ -190,7 +190,7 @@ class TestTomlLanguageServerBasics:
         name_symbols = [s for s in all_symbols if s.get("name") == "name"]
         assert len(name_symbols) > 0, "Should find 'name' symbols"
         # Find the one under 'package' (should be at line 1 in 0-indexed)
-        package_name = next((s for s in name_symbols if s["range"]["start"]["line"] == 1), None)
+        package_name = next((s for s in name_symbols if ((s.get("range") or {}).get("start") or {}).get("line", 0) == 1), None)
         assert package_name is not None, "Should find 'name' under 'package'"
 
         # Check the dependencies range - starts at line 9 (1-indexed), line 8 (0-indexed)

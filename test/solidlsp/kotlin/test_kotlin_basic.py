@@ -49,7 +49,9 @@ class TestKotlinLanguageServer:
 
             sel_start = _sel["start"]
         else:
-            sel_start = model_symbol["range"]["start"]
+            _r = model_symbol.get("range")
+            assert _r is not None
+            sel_start = _r["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
         assert any("Main.kt" in (ref.get("relativePath") or "") for ref in refs), (
             "Main should reference Model (tried all positions in selectionRange)"

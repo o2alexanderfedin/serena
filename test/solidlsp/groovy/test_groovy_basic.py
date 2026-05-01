@@ -93,7 +93,9 @@ class TestGroovyLanguageServer:
 
             sel_start = _sel["start"]
         else:
-            sel_start = model_symbol["range"]["start"]
+            _r = model_symbol.get("range")
+            assert _r is not None
+            sel_start = _r["start"]
         refs = self.language_server.request_references(file_path, sel_start["line"], sel_start["character"])
 
         main_refs = [ref for ref in refs if "Main.groovy" in (ref.get("relativePath") or "")]

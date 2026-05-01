@@ -437,5 +437,7 @@ class TestDartLanguageServer:
 
         # The body text must contain the method implementation, not just the name.
         if add_symbol.get("body"):
-            body_text = (((add_symbol.get("body").get_text() if add_symbol.get("body") is not None else "") if add_symbol.get("body") is not None else "") if add_symbol.get("body") is not None else "")
+            body = add_symbol.get("body")
+            assert body is not None
+            body_text = body.get_text()
             assert "return result" in body_text, f"Expected method body to contain implementation, got: {body_text!r}"
