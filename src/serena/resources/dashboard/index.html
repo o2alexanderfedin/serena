@@ -347,6 +347,25 @@
         </div>
     </div>
 
+    <footer id="o2-scalpel-attribution" class="attribution-footer">
+        <p>
+            <strong>O2 Scalpel</strong> is a fork of
+            <a href="https://github.com/oraios/serena" target="_blank" rel="noopener">Serena</a>
+            by oraios. Engine source:
+            <a href="https://github.com/o2alexanderfedin/o2-scalpel-engine" target="_blank" rel="noopener">o2-scalpel-engine</a>.
+        </p>
+        <p class="attribution-differences">
+            <strong>Differences from upstream Serena:</strong>
+            adds <strong>46 MCP tools</strong> for LSP-driven write/refactor operations
+            (<code>scalpel_rename</code>, <code>scalpel_extract</code>, <code>scalpel_split_file</code>, etc.),
+            a language-agnostic <strong>facade layer</strong> with per-language strategies,
+            <strong>dynamic LSP capability discovery</strong> (Pyright textDocument/implementation gap closed at runtime),
+            <strong>shadow-workspace</strong> dry-run, <strong>real on-disk rollback</strong>,
+            and polyglot coverage across 11+ languages
+            (Rust, Python, Markdown, TypeScript, Go, C/C++, Java, Lean&nbsp;4, SMT2, Prolog, ProbLog).
+        </p>
+    </footer>
+
     <!-- Edit Serena Config Modal -->
     <div id="edit-serena-config-modal" class="modal" style="display:none">
         <div class="modal-content modal-content-large">

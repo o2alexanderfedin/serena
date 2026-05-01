@@ -163,6 +163,43 @@ body {
     padding-top: var(--header-gap-main);
 }
 
+.attribution-footer {
+    margin: 40px 24px 24px 24px;
+    padding: 16px 20px;
+    border-top: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-muted);
+}
+
+.attribution-footer p {
+    margin: 0 0 8px 0;
+}
+
+.attribution-footer p:last-child {
+    margin-bottom: 0;
+}
+
+.attribution-footer a {
+    color: var(--text-link, var(--text-primary));
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.attribution-footer code {
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    padding: 1px 4px;
+    background: var(--bg-primary);
+    border-radius: 2px;
+}
+
+.attribution-differences strong {
+    color: var(--text-primary);
+}
+
 .header {
     top: 0;
     left: 0;

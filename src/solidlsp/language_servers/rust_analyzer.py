@@ -263,8 +263,14 @@ class RustAnalyzer(SolidLanguageServer):
             uri = pathlib.Path(file).as_uri()
         except (ValueError, OSError):
             uri = None
-        if uri is not None:
-            buf = self.open_file_buffers.get(uri)
+        # ``open_file_buffers`` is initialised in the base class
+        # ``__init__``; preflight unit tests construct adapters via
+        # ``__new__`` to bypass server-process startup so the attribute
+        # may not exist yet. Treat that as "no buffer open" and fall
+        # through to the on-disk path.
+        open_buffers = getattr(self, "open_file_buffers", None)
+        if uri is not None and open_buffers is not None:
+            buf = open_buffers.get(uri)
             if buf is not None:
                 contents = getattr(buf, "_contents", None) or getattr(buf, "contents", None)
                 if isinstance(contents, str):
