@@ -446,6 +446,7 @@ class TestProjectSerenaDataFolder:
         project = Project(
             project_root=str(self.project_path),
             project_config=project_config,
+            assert serena_config is not None
             serena_config=serena_config,
         )
         project._ignore_spec_available.wait()

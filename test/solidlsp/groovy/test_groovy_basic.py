@@ -87,7 +87,11 @@ class TestGroovyLanguageServer:
         assert model_symbol is not None, "Could not find 'Model' class symbol in Model.groovy"
 
         if "selectionRange" in model_symbol:
-            sel_start = model_symbol["selectionRange"]["start"]
+            _sel = model_symbol.get("selectionRange")
+
+            assert _sel is not None
+
+            sel_start = _sel["start"]
         else:
             sel_start = model_symbol["range"]["start"]
         refs = self.language_server.request_references(file_path, sel_start["line"], sel_start["character"])

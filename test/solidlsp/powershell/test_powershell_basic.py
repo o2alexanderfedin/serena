@@ -154,7 +154,11 @@ class TestPowerShellLanguageServerBasics:
         assert greet_user_symbol is not None, f"Should find Greet-User function in {[s['name'] for s in function_symbols]}"
 
         # Find references to Greet-User (should be called from Main function at line 91)
-        sel_start = greet_user_symbol["selectionRange"]["start"]
+        _sel = greet_user_symbol.get("selectionRange")
+
+        assert _sel is not None
+
+        sel_start = _sel["start"]
         refs = language_server.request_references(main_path, sel_start["line"], sel_start["character"])
 
         # Should find at least the call site in Main function

@@ -351,18 +351,18 @@ class TestLanguageServerSymbols:
         assert child_kinds == {SymbolKind.Package}
         examples_package = next(child for child in repo_structure[0]["children"] if child["name"] == "examples")
         # assert that children are __init__ and user_management
-        assert {child["name"] for child in examples_package["children"]} == {"__init__", "user_management"}
-        assert {child["kind"] for child in examples_package["children"]} == {SymbolKind.File}
+        assert {child["name"] for child in (examples_package.get("children") or [])} == {"__init__", "user_management"}
+        assert {child["kind"] for child in (examples_package.get("children") or [])} == {SymbolKind.File}
 
         # assert that tree of user_management node is same as retrieved directly
-        user_management_node = next(child for child in examples_package["children"] if child["name"] == "user_management")
+        user_management_node = next(child for child in (examples_package.get("children") or []) if child["name"] == "user_management")
         if "location" in user_management_node and "relativePath" in user_management_node["location"]:
             user_management_rel_path = user_management_node["location"]["relativePath"]
             assert user_management_rel_path == os.path.join("examples", "user_management.py")
             _, user_management_roots = language_server.request_document_symbols(
                 os.path.join("examples", "user_management.py")
             ).get_all_symbols_and_roots()
-            assert user_management_roots == user_management_node["children"]
+            assert user_management_roots == (user_management_node.get("children") or [])
 
     @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_symbol_tree_structure_subdir(self, language_server: SolidLanguageServer) -> None:
@@ -374,18 +374,18 @@ class TestLanguageServerSymbols:
         assert examples_package["name"] == "examples"
         assert examples_package["kind"] == SymbolKind.Package
         # assert that children are __init__ and user_management
-        assert {child["name"] for child in examples_package["children"]} == {"__init__", "user_management"}
-        assert {child["kind"] for child in examples_package["children"]} == {SymbolKind.File}
+        assert {child["name"] for child in (examples_package.get("children") or [])} == {"__init__", "user_management"}
+        assert {child["kind"] for child in (examples_package.get("children") or [])} == {SymbolKind.File}
 
         # assert that tree of user_management node is same as retrieved directly
-        user_management_node = next(child for child in examples_package["children"] if child["name"] == "user_management")
+        user_management_node = next(child for child in (examples_package.get("children") or []) if child["name"] == "user_management")
         if "location" in user_management_node and "relativePath" in user_management_node["location"]:
             user_management_rel_path = user_management_node["location"]["relativePath"]
             assert user_management_rel_path == os.path.join("examples", "user_management.py")
             _, user_management_roots = language_server.request_document_symbols(
                 os.path.join("examples", "user_management.py")
             ).get_all_symbols_and_roots()
-            assert user_management_roots == user_management_node["children"]
+            assert user_management_roots == (user_management_node.get("children") or [])
 
     @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_request_dir_overview(self, language_server: SolidLanguageServer) -> None:

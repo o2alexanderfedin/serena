@@ -31,7 +31,11 @@ class TestElmLanguageServer:
                 greet_symbol = sym
                 break
         assert greet_symbol is not None, "Could not find 'greet' symbol in Main.elm"
-        sel_start = greet_symbol["selectionRange"]["start"]
+        _sel = greet_symbol.get("selectionRange")
+
+        assert _sel is not None
+
+        sel_start = _sel["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
         assert any("Main.elm" in (ref.get("relativePath") or "") for ref in refs), "Main.elm should reference greet function"
 
@@ -48,7 +52,11 @@ class TestElmLanguageServer:
         assert formatMessage_symbol is not None, "Could not find 'formatMessage' symbol in Utils.elm"
 
         # Get references from the definition in Utils.elm
-        sel_start = formatMessage_symbol["selectionRange"]["start"]
+        _sel = formatMessage_symbol.get("selectionRange")
+
+        assert _sel is not None
+
+        sel_start = _sel["start"]
         refs = language_server.request_references(utils_path, sel_start["line"], sel_start["character"])
 
         # Verify that we found references

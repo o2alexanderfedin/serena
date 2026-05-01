@@ -33,7 +33,11 @@ class TestVueLanguageServer:
         assert store_symbol is not None, "useCalculatorStore function not found"
 
         # Get references
-        sel_start = store_symbol["selectionRange"]["start"]
+        _sel = store_symbol.get("selectionRange")
+
+        assert _sel is not None
+
+        sel_start = _sel["start"]
         refs = language_server.request_references(store_file, sel_start["line"], sel_start["character"])
 
         # Should have multiple references: definition + usage in App.vue, CalculatorInput.vue, CalculatorDisplay.vue
@@ -78,7 +82,11 @@ class TestVueDualLspArchitecture:
             pytest.skip("useCalculatorStore symbol not found - test fixture may need updating")
 
         # Request references for this symbol
-        sel_start = store_symbol["selectionRange"]["start"]
+        _sel = store_symbol.get("selectionRange")
+
+        assert _sel is not None
+
+        sel_start = _sel["start"]
         refs = language_server.request_references(store_file, sel_start["line"], sel_start["character"])
 
         # Verify we found references: definition + usage in App.vue, CalculatorInput.vue, CalculatorDisplay.vue
@@ -122,7 +130,11 @@ class TestVueDualLspArchitecture:
             pytest.skip("Operation type symbol not found - test fixture may need updating")
 
         # Request references for the Operation type
-        sel_start = operation_symbol["selectionRange"]["start"]
+        _sel = operation_symbol.get("selectionRange")
+
+        assert _sel is not None
+
+        sel_start = _sel["start"]
         refs = language_server.request_references(types_file, sel_start["line"], sel_start["character"])
 
         # Verify we found references: definition + usage in calculator.ts and Vue files
@@ -152,7 +164,11 @@ class TestVueDualLspArchitecture:
             pytest.skip("useCalculatorStore symbol not found - test fixture may need updating")
 
         # Request references
-        sel_start = store_symbol["selectionRange"]["start"]
+        _sel = store_symbol.get("selectionRange")
+
+        assert _sel is not None
+
+        sel_start = _sel["start"]
         refs = language_server.request_references(store_file, sel_start["line"], sel_start["character"])
 
         # Check for duplicate references (same file, line, and character)
@@ -205,7 +221,7 @@ class TestVueEdgeCases:
 
                 # Recurse into children
                 if "children" in symbols:
-                    extract_paths_from_tree(symbols["children"], paths)
+                    extract_paths_from_tree((symbols.get("children") or []), paths)
 
             return paths
 

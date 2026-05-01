@@ -40,7 +40,7 @@ class BasicTool(BaseMockTool):
         """
         return f"Hello {name}, you are {age} years old!"
 
-    def apply_ex(
+    def apply_ex(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
         log_call: bool = True,
         catch_exceptions: bool = True,

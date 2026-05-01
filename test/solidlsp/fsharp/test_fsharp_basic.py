@@ -98,7 +98,11 @@ class TestFSharpLanguageServer:
         assert add_symbol is not None, "Could not find 'add' function symbol in Calculator.fs"
 
         # Try to find references to the add function
-        sel_start = add_symbol["selectionRange"]["start"]
+        _sel = add_symbol.get("selectionRange")
+
+        assert _sel is not None
+
+        sel_start = _sel["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
 
         # The add function should be referenced in Program.fs
@@ -134,7 +138,11 @@ class TestFSharpLanguageServer:
         assert subtract_symbol is not None, "Could not find 'subtract' function symbol"
 
         # Find references to subtract function
-        sel_start = subtract_symbol["selectionRange"]["start"]
+        _sel = subtract_symbol.get("selectionRange")
+
+        assert _sel is not None
+
+        sel_start = _sel["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
 
         # The subtract function should be referenced in Program.fs

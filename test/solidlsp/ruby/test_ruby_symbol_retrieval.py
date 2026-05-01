@@ -10,6 +10,7 @@ These tests focus on the following methods:
 
 import os
 
+from typing import Any, cast
 import pytest
 
 from serena.util.text_utils import find_text_coordinates
@@ -464,7 +465,7 @@ class TestRubyLanguageServerSymbols:
             assert len(services_symbols) > 0, "services.rb should have symbols"
 
             # Check for expected symbols with detailed verification
-            symbol_names = [s[0] for s in services_symbols if isinstance(s, tuple) and len(s) > 0]
+            symbol_names = [cast(Any, s)[0] for s in services_symbols if isinstance(s, tuple) and len(s) > 0]
             if not symbol_names:  # If not tuples, try different format
                 symbol_names = [s.get("name") for s in services_symbols if hasattr(s, "get")]
 
@@ -486,7 +487,7 @@ class TestRubyLanguageServerSymbols:
         symbol_names = set()
         for s_info in overview:
             if isinstance(s_info, tuple) and len(s_info) > 0:
-                symbol_names.add(s_info[0])
+                symbol_names.add(cast(Any, s_info)[0])
             elif hasattr(s_info, "get"):
                 symbol_names.add(s_info.get("name"))
             elif isinstance(s_info, str):

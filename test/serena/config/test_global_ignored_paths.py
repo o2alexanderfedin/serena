@@ -20,11 +20,7 @@ def _create_test_project(
         ignored_paths=project_ignored_paths or [],
         ignore_all_files_in_gitignore=False,
     )
-    _ip = global_ignored_paths
-
-    assert _ip is not None
-
-    serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=_ip)
+    serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=global_ignored_paths or [])
     return Project(
         project_root=str(project_root),
         project_config=config,
@@ -128,11 +124,7 @@ class TestRegisteredProjectGlobalIgnoredPaths:
             ignored_paths=[],
             ignore_all_files_in_gitignore=False,
         )
-        _ip = ["node_modules"]
-
-        assert _ip is not None
-
-        serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=_ip)
+        serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=["node_modules"])
         registered = RegisteredProject(
             project_root=str(self.project_path),
             project_config=config,
@@ -152,11 +144,7 @@ class TestRegisteredProjectGlobalIgnoredPaths:
             project_root=str(self.project_path),
             project_config=config,
         )
-        _ip = []
-
-        assert _ip is not None
-
-        serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=_ip)
+        serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=[])
         project = registered.get_project_instance(serena_config=serena_config)
         assert not project.is_ignored_path(str(self.project_path / "node_modules" / "pkg.js"))
 
@@ -168,11 +156,7 @@ class TestRegisteredProjectGlobalIgnoredPaths:
         (serena_dir / "project.yml").write_text(
             'project_name: "test_project"\nlanguages: ["python"]\nignored_paths: []\nignore_all_files_in_gitignore: false\n'
         )
-        _ip = ["node_modules"]
-
-        assert _ip is not None
-
-        serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=_ip)
+        serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=["node_modules"])
         registered = RegisteredProject.from_project_root(
             str(self.project_path),
             serena_config=serena_config,
@@ -188,11 +172,7 @@ class TestRegisteredProjectGlobalIgnoredPaths:
             ignored_paths=[],
             ignore_all_files_in_gitignore=False,
         )
-        _ip = ["node_modules"]
-
-        assert _ip is not None
-
-        serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=_ip)
+        serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=["node_modules"])
         project = Project(
             project_root=str(self.project_path),
             project_config=config,
@@ -232,11 +212,7 @@ class TestGlobalIgnoredPathsWithGitignore:
             ignored_paths=["build"],
             ignore_all_files_in_gitignore=True,
         )
-        _ip = ["node_modules"]
-
-        assert _ip is not None
-
-        serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=_ip)
+        serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=["node_modules"])
         project = Project(
             project_root=str(self.project_path),
             project_config=config,
@@ -262,13 +238,9 @@ class TestSerenaConfigIgnoredPaths:
 
     def test_serena_config_with_ignored_paths(self) -> None:
         """SerenaConfig can be created with explicit ignored_paths."""
-        _ip = ["node_modules"
-
-        assert _ip is not None
-
         config = SerenaConfig(
             gui_log_window=False,
             web_dashboard=False,
-            ignored_paths=_ip, "*.log", "build"],
+            ignored_paths=["node_modules", "*.log", "build"],
         )
         assert config.ignored_paths == ["node_modules", "*.log", "build"]

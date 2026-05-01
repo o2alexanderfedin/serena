@@ -28,7 +28,11 @@ class TestTypescriptLanguageServer:
                 helper_symbol = sym
                 break
         assert helper_symbol is not None, "Could not find 'helperFunction' symbol in index.ts"
-        sel_start = helper_symbol["selectionRange"]["start"]
+        _sel = helper_symbol.get("selectionRange")
+
+        assert _sel is not None
+
+        sel_start = _sel["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
         assert any("index.ts" in (ref.get("relativePath") or "") for ref in refs), (
             "index.ts should reference helperFunction (tried all positions in selectionRange)"
