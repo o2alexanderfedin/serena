@@ -873,19 +873,28 @@ class MultiServerCoordinator:
         """Three-tier code-action kind gate.
 
         Tier 1: static catalog — eliminates kinds no strategy claims to
-                support before any per-server runtime check.
+                support before any per-server runtime check. Honours LSP
+                §3.18.1 prefix matching: a catalog entry for the parent
+                kind (e.g. ``refactor.extract``) matches a query for any
+                child (``refactor.extract.module``).
         Tier 2: dynamic registry — the responsible server must have
                 ``textDocument/codeAction`` either statically advertised
                 or dynamically registered.
         Tier 3: ``ServerCapabilities.codeActionProvider.codeActionKinds``
                 MUST contain the kind — or be absent/empty, which per
-                LSP 3.17 means "any kind is accepted".
+                LSP 3.17 means "any kind is accepted". Also honours
+                §3.18.1 prefix matching at this layer.
         """
-        # Tier 1: static catalog lookup.
+        # Tier 1: static catalog lookup with LSP §3.18.1 prefix matching.
+        # The catalog stores FAMILY-level kinds (e.g. ``refactor.extract``)
+        # per the comment in capabilities.py:331; a query for a child kind
+        # like ``refactor.extract.module`` must match the parent record.
         catalog_record = None
         if self._catalog is not None:
             for rec in self._catalog.records:
-                if rec.language == language and rec.kind == kind:
+                if rec.language != language:
+                    continue
+                if rec.kind == kind or kind.startswith(rec.kind + "."):
                     catalog_record = rec
                     break
         if catalog_record is None:
@@ -961,7 +970,14 @@ class MultiServerCoordinator:
             if not kinds_list:
                 # Absent or empty list means "any kind" per LSP 3.17.
                 return True
-            return kind in kinds_list
+            # LSP §3.18.1 — a parent kind subsumes child kinds. Match if any
+            # advertised kind equals ``kind`` exactly OR is a prefix-parent
+            # (advertised + "."). Without this, rust-analyzer's
+            # ``refactor.extract`` advertisement would fail to match a query
+            # for ``refactor.extract.module`` (the child kind) — which is
+            # exactly the gate that ``scalpel_split_file`` queries, hence
+            # CAPABILITY_NOT_AVAILABLE on every Rust split call.
+            return any(k == kind or kind.startswith(k + ".") for k in kinds_list)
         return False
 
     # -----------------------------------------------------------------------
