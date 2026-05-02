@@ -901,7 +901,7 @@ class SerenaAgent:
 
     def create_system_prompt(self, session_id: str = "global") -> str:
         """
-        Returns the 'Serena Instructions Manual', i.e. Serena's system prompt.
+        Returns the 'Scalpel Tool Manual', i.e. the engine's system prompt (Scalpel facades + Serena upstream primitives).
 
         :param session_id: the client session ID for the case where this is run from a tool; "global" for the connection time case
         :return: the prompt

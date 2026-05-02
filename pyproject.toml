@@ -74,6 +74,13 @@ explicit = true
 
 [project.scripts]
 o2-scalpel-newplugin = "serena.refactoring.cli_newplugin:main"
+# Preferred entrypoints for the o2-scalpel rebrand. The legacy `serena` and
+# `serena-hooks` aliases are kept for back-compat with existing installs and
+# the 23 published `.mcp.json` files (args index 2 is currently `"serena"`).
+# A future generator pass will switch the plugins to `"scalpel"`; until then
+# both names point at the same entrypoints.
+scalpel = "serena.cli:top_level"
+scalpel-hooks = "serena.hooks:hook_commands"
 serena = "serena.cli:top_level"
 serena-hooks = "serena.hooks:hook_commands"
 
