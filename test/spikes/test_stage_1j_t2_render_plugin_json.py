@@ -14,7 +14,7 @@ def test_render_plugin_json_for_rust(fake_strategy_rust) -> None:
     assert data["description"] == (
         "Scalpel refactor MCP server for Rust via rust-analyzer"
     )
-    assert data["version"] == "1.0.1"
+    assert data["version"] == "1.0.2"
     assert data["author"]["name"] == "Alex Fedin & AI Hive®"
     assert data["author"]["email"] == "af@O2.services"
     assert data["author"]["url"] == "https://O2.services"
