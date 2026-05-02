@@ -47,22 +47,6 @@ class Hook(ABC):
 
 
 class PreToolUseHook(Hook, ABC):
-    _NON_SYMBOLIC_SERENA_TOOL_NAME_SUBSTRINGS = frozenset(
-        (
-            "pattern",
-            "read",
-            "diagnostics",
-            "memory",
-            "onboarding",
-            "config",
-            "list_file",
-            "find_file",
-            "shell",
-            "dashboard",
-            "restart_language_server",
-        )
-    )
-
     def __init__(self, client: HookClient):
         super().__init__(client)
         _tool_name = self._input_data.get("tool_name") or self._input_data.get("toolName", "") or ""
@@ -82,25 +66,22 @@ class PreToolUseHook(Hook, ABC):
         permission_decision_reason: str
         additional_context: str = ""
 
-        def to_json_string(self, client: HookClient) -> str:
+        def to_json_string(self) -> str:
             hook_output = {
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "permissionDecision": self.permission_decision,
                     "permissionDecisionReason": self.permission_decision_reason,
+                    "additionalContext": self.additional_context,
                 }
             }
-            if client != HookClient.CODEX:
-                hook_output["hookSpecificOutput"]["additionalContext"] = self.additional_context
             return json.dumps(hook_output)
 
-    def is_serena_symbolic_tool(self) -> bool:
-        return "serena" in self._tool_name and not any(
-            substring in self._tool_name for substring in self._NON_SYMBOLIC_SERENA_TOOL_NAME_SUBSTRINGS
-        )
+    def is_serena_tool(self) -> bool:
+        return "serena" in self._tool_name
 
 
-class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
+class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
     """Pre-tool-use hook that nudges the agent toward Serena's symbolic tools.
 
     Tracks consecutive uses of grep and read-file tools via a persisted
@@ -203,14 +184,14 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
             except Exception:
                 pass
 
-        def update(self, hook: "PreToolUseRemindAboutSymbolicToolsHook") -> None:
-            if hook.is_serena_symbolic_tool():
+        def update(self, hook: "PreToolUseRemindAboutSerenaHook") -> None:
+            if hook.is_serena_tool():
                 self.reset()
                 return
 
             now = hook.triggered_at_timestamp
-            is_grep = hook.is_grep_call()
-            is_code_file_read = hook.is_read_code_file_call()
+            is_grep = hook.is_grep_tool()
+            is_read = hook.is_read_file_tool()
 
             # update grep counter
             if is_grep:
@@ -222,7 +203,7 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
                 self.last_grep_use_timestamp = now
 
             # update read file counter
-            if is_code_file_read:
+            if is_read:
                 read_period = self._READ_FILE_RESET_PERIOD_SECONDS
                 if (
                     self.last_read_file_use_timestamp is not None
@@ -235,7 +216,7 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
 
             # update combined non-symbolic counter — catches mixed bursts (e.g.
             # alternating grep/read) that neither per-tool counter would trip
-            if is_grep or is_code_file_read:
+            if is_grep or is_read:
                 combined_period = self._NON_SYMBOLIC_RESET_PERIOD_SECONDS
                 if (
                     self.last_non_symbolic_use_timestamp is not None
@@ -260,153 +241,24 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
     #: ingest. Conservative on purpose: only verbs that strongly imply *reading*
     #: a file, never *modifying* one — so ``view_file``/``open_file``/``show_file``
     #: are caught alongside ``read_file``, while ``write_file``/``edit_file`` are not.
-    _READ_FILE_VERB_SUBSTRINGS: frozenset[str] = frozenset(("read", "view", "open", "show"))
-
-    #: Shell commands that perform grep-like search; used to classify Codex
-    #: shell-command tool calls whose ``cmd`` or ``command`` field starts with one of these.
-    _GREP_SHELL_COMMANDS: frozenset[str] = frozenset(("grep", "rg", "ag", "ack", "fgrep", "egrep", "search_for_pattern"))
-
-    #: Shell commands that perform file-read operations; used to classify Codex
-    #: shell-command tool calls whose ``cmd`` or ``command`` field starts with one of these.
-    _READ_SHELL_COMMANDS: frozenset[str] = frozenset(("cat", "head", "tail", "sed", "less", "more", "bat", "get-content", "gc"))
-
-    #: file suffixes for source-like files where symbolic tools are usually more
-    #: appropriate than repeated raw reads. Lowercase and extension-only.
-    _CODE_FILE_EXTENSIONS: frozenset[str] = frozenset(
-        (
-            ".al",
-            ".bash",
-            ".c",
-            ".clj",
-            ".cljs",
-            ".cpp",
-            ".cs",
-            ".css",
-            ".dart",
-            ".elm",
-            ".ex",
-            ".exs",
-            ".fs",
-            ".fsx",
-            ".go",
-            ".groovy",
-            ".h",
-            ".hpp",
-            ".hs",
-            ".html",
-            ".java",
-            ".jl",
-            ".js",
-            ".jsx",
-            ".kt",
-            ".kts",
-            ".lean",
-            ".lua",
-            ".m",
-            ".matlab",
-            ".php",
-            ".ps1",
-            ".py",
-            ".r",
-            ".rb",
-            ".rs",
-            ".scala",
-            ".sh",
-            ".sol",
-            ".svelte",
-            ".swift",
-            ".ts",
-            ".tsx",
-            ".vue",
-            ".zig",
-        )
-    )
+    _READ_FILE_VERB_SUBSTRINGS: tuple[str, ...] = ("read", "view", "open", "show")
 
     def __init__(self, client: HookClient):
         super().__init__(client)
         self._tool_call_counter = self.ToolUseCounter.load(self)
 
-        # extract a shell ``cmd``/``command`` field (Codex shell-command-style payloads):
-        # split into command name (basename, lowercased) and the remaining argument string
-        # so both bare names (``rg``) and path-prefixed invocations (``/usr/bin/grep``) are
-        # normalised the same way. Stays ``None`` when no shell command is present.
-        self._command: str | None = None
-        self._command_name: str | None = None
-        self._command_args_str: str | None = None
-        # extract a direct file-path field (Claude Code's ``Read``/``Edit``/``Write`` tool
-        # payloads pass the target as ``file_path`` rather than via a shell command).
-        self._file_path: str | None = None
-        if self._tool_input is not None:
-            self._command = self._tool_input.get("cmd", self._tool_input.get("command", "")).strip()
-            if self._command:
-                cmd_split = self._command.split(maxsplit=1)
-                if len(cmd_split) > 1:
-                    self._command_args_str = cmd_split[1]
-                self._command_name = os.path.basename(cmd_split[0]).lower()
-            file_path = self._tool_input.get("file_path") or self._tool_input.get("filePath") or ""
-            self._file_path = str(file_path).strip() or None
-
-    def is_grep_call(self) -> bool:
+    def is_grep_tool(self) -> bool:
         if self._client == HookClient.CLAUDE_CODE:
-            return self._tool_name == "grep" or "search_for_pattern" in self._tool_name
-        if self._client == HookClient.CODEX and self._is_shell_command_call():
-            return self._command_name in self._GREP_SHELL_COMMANDS
-        # heuristic for other clients
+            return self._tool_name == "grep"
         return "grep" in self._tool_name
 
-    def is_read_call(self) -> bool:
+    def is_read_file_tool(self) -> bool:
         if self._client == HookClient.CLAUDE_CODE:
-            return self._tool_name == "read" or "read_file" in self._tool_name
-        if self._client == HookClient.CODEX and self._is_shell_command_call():
-            return self._command_name in self._READ_SHELL_COMMANDS
-        # heuristic for other clients
+            return self._tool_name == "read"
         name = self._tool_name
         if "file" not in name:
             return False
         return any(verb in name for verb in self._READ_FILE_VERB_SUBSTRINGS)
-
-    def _is_shell_command_call(self) -> bool:
-        """:return: whether the hook payload represents a shell-command tool call."""
-        return self._command_name is not None
-
-    def is_read_file_call(self) -> bool:
-        """:return: whether the tool call reads a file-like target."""
-        return self.is_read_call()
-
-    def is_read_code_file_call(self) -> bool:
-        """:return: whether the tool call reads a source-like file target."""
-        if not self.is_read_file_call():
-            return False
-
-        if self._file_path is not None:
-            return self._is_code_file_path(self._file_path)
-
-        if self._client == HookClient.CODEX and self._command_args_str is not None:
-            return any(self._is_code_file_path(argument) for argument in self._iter_shell_path_arguments())
-
-        return True
-
-    def _iter_shell_path_arguments(self) -> list[str]:
-        """:return: path-like shell arguments with quoting and common options removed."""
-        arguments: list[str] = []
-        if self._command_args_str is None:
-            return arguments
-
-        for raw_argument in self._command_args_str.split():
-            argument = raw_argument.strip().strip("'\"")
-            if not argument or argument.startswith("-"):
-                continue
-            arguments.append(argument)
-
-        return arguments
-
-    @classmethod
-    def _is_code_file_path(cls, file_path: str) -> bool:
-        """:return: whether ``file_path`` has a source-like suffix."""
-        cleaned_path = file_path.strip().strip("'\"")
-        if not cleaned_path:
-            return False
-        return Path(cleaned_path).suffix.lower() in cls._CODE_FILE_EXTENSIONS
 
     def execute(self) -> None:
         # gate the entire hook on the rate-limit window: while we are within
@@ -428,14 +280,14 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         too_many_non_symbolic = self._tool_call_counter.too_many_recent_non_symbolic()
 
         output_data: PreToolUseHook.OutputData | None = None
-        if self.is_grep_call() and too_many_greps:
+        if self.is_grep_tool() and too_many_greps:
             output_data = self._build_grep_deny()
-        elif self.is_read_code_file_call() and too_many_reads:
-            output_data = self._build_code_read_deny()
+        elif self.is_read_file_tool() and too_many_reads:
+            output_data = self._build_read_deny()
         elif too_many_greps:
             output_data = self._build_grep_deny()
         elif too_many_reads:
-            output_data = self._build_code_read_deny()
+            output_data = self._build_read_deny()
         elif too_many_non_symbolic:
             output_data = self._build_non_symbolic_deny()
 
@@ -445,7 +297,7 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
             # ensures we never reach this branch within the rate-limit window.
             self._tool_call_counter.reset()
             self._tool_call_counter.last_deny_timestamp = self.triggered_at_timestamp
-            click.echo(output_data.to_json_string(self._client))
+            click.echo(output_data.to_json_string())
         self._tool_call_counter.save(self)
 
     def _build_grep_deny(self) -> "PreToolUseHook.OutputData":
@@ -459,13 +311,13 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
             ),
         )
 
-    def _build_code_read_deny(self) -> "PreToolUseHook.OutputData":
+    def _build_read_deny(self) -> "PreToolUseHook.OutputData":
         return self.OutputData(
             permission_decision="deny",
-            permission_decision_reason="Too many consecutive read calls of files without using symbolic tools. "
+            permission_decision_reason="Too many consecutive read calls without using symbolic tools. "
             "You can continue using read now if needed, the counter was reset.",
             additional_context=(
-                "You were using many read calls on files recently. Consider using Serena's symbolic "
+                "You were using many read file calls recently. Consider using Serena's symbolic "
                 "mcp tools instead for more targeted reads. You can continue using read now if needed, the counter was reset."
             ),
         )
@@ -487,9 +339,8 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
 class SessionStartActivateProjectHook(Hook):
     def execute(self) -> None:
         message = (
-            "**IMPORTANT**: If the current directory is a coding project you are working on:"
-            " 1. activate it using Serena's activate_project tool unless already done. "
-            " 2. if you haven't read Serena Instructions Manual yet, do so. "
+            "**IMPORTANT**: Activate the current working directory as project using Scalpel's tools if not already done. "
+            "If you haven't read the Scalpel Tool Manual yet, do so. "
             "Follow this instruction before doing anything else."
         )
         result = {
@@ -507,43 +358,31 @@ class SessionEndCleanupHook(Hook):
 
 
 class PreToolUseAutoApproveSerenaHook(PreToolUseHook):
-    """Pre-tool-use hook that auto-approves Serena tool calls while the client is in a permissive permission mode.
+    """Pre-tool-use hook that auto-approves Serena tool calls while the client is in accept-edits mode.
 
-    Claude Code's permissive permission modes (``acceptEdits`` for blanket edit approval and
-    ``auto`` for hands-off autonomous execution) only apply to its built-in editing tools or
-    its auto-mode classifier; Serena's destructive tools (e.g. ``replace_symbol_body`` or
-    ``rename_symbol``) would still prompt the user on every call. This hook emits an ``allow``
-    decision for any Serena MCP tool call whenever the client reports one of these modes as
-    the active permission mode, so blanket approvals also cover Serena's tools. In all other
-    situations it stays silent, preserving the default approval flow.
-
-    ``bypassPermissions`` and ``dontAsk`` are deliberately excluded. ``bypassPermissions``
-    already approves everything before the hook would matter, so silence here is harmless.
-    ``dontAsk`` is the user's deliberate deny-by-default posture (auto-deny unless an explicit
-    allow rule matches); the hook honors that choice and stays silent rather than blanket
-    overriding it.
+    Claude Code's ``acceptEdits`` permission mode only applies to its built-in editing tools;
+    Serena's destructive tools (e.g. ``replace_symbol_body`` or ``rename_symbol``) would still
+    prompt the user on every call. This hook emits an ``allow`` decision for any Serena MCP
+    tool call whenever the client reports ``acceptEdits`` as the active permission mode, so
+    blanket edit approvals also cover Serena's tools. In all other situations it stays silent,
+    preserving the default approval flow.
     """
 
-    #: permission modes for which this hook emits an ``allow`` decision. Frozen so the
-    #: set is immutable at the class level; matching is exact (case-sensitive) against
-    #: the canonical mode strings emitted by Claude Code's hook payload.
-    _AUTO_APPROVE_MODES: frozenset[str] = frozenset({"acceptEdits", "auto"})
+    _ACCEPT_EDITS_MODE = "acceptEdits"
 
-    def is_auto_approve_mode(self) -> bool:
-        return self._permission_mode in self._AUTO_APPROVE_MODES
+    def is_accept_edits_mode(self) -> bool:
+        return self._permission_mode == self._ACCEPT_EDITS_MODE
 
     def execute(self) -> None:
         # only emit a decision when both the tool and the mode match; stay silent otherwise
-        if not self.is_serena_symbolic_tool() or not self.is_auto_approve_mode():
+        if not self.is_serena_tool() or not self.is_accept_edits_mode():
             return
 
-        # name the actual mode in the reason so logs/debug output are unambiguous
-        # (the same hook handles multiple modes now)
         output_data = self.OutputData(
             permission_decision="allow",
-            permission_decision_reason=f"Auto-approved: Serena tool call while client is in {self._permission_mode} mode.",
+            permission_decision_reason="Auto-approved: Serena tool call while client is in acceptEdits mode.",
         )
-        click.echo(output_data.to_json_string(self._client))
+        click.echo(output_data.to_json_string())
 
 
 _client_option = click.option(
@@ -581,13 +420,12 @@ class HookCommands(AutoRegisteringGroup):
     )
     @_client_option
     def remind(client: str) -> None:
-        PreToolUseRemindAboutSymbolicToolsHook(HookClient(client)).execute()
+        PreToolUseRemindAboutSerenaHook(HookClient(client)).execute()
 
     @staticmethod
     @click.command(
         "auto-approve",
-        help="Set this as hook at PreToolUse to auto-approve Serena tool calls while the client is in a "
-        "permissive permission mode (acceptEdits or auto, Claude Code).",
+        help="Set this as hook at PreToolUse to auto-approve Serena tool calls while the client is in acceptEdits mode (Claude Code).",
     )
     @_client_option
     def auto_approve(client: str) -> None:

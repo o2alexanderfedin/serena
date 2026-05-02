@@ -34,7 +34,7 @@ class CheckOnboardingPerformedTool(Tool):
                 f"Onboarding was already performed: {len(project_memories)} project memories are available. "
                 "Consider reading memories if they appear relevant to the task at hand."
             )
-        msg += " If you have not read the 'Serena Instructions Manual', do so now."
+        msg += " If you have not read the 'Scalpel Tool Manual', do so now."
         return msg
 
 
@@ -59,7 +59,7 @@ class OnboardingTool(Tool):
 
 class InitialInstructionsTool(Tool, ToolMarkerDoesNotRequireActiveProject):
     """
-    Provides instructions Serena usage (i.e. the 'Serena Instructions Manual')
+    Provides instructions for Scalpel/Serena usage (the 'Scalpel Tool Manual')
     for clients that do not read the initial instructions when the MCP server is connected.
     """
 
@@ -67,9 +67,10 @@ class InitialInstructionsTool(Tool, ToolMarkerDoesNotRequireActiveProject):
     # (session_id is injected via apply_ex)
     def apply(self, session_id: str) -> str:
         """
-        Provides the 'Serena Instructions Manual', which contains essential information on how to use the Serena toolbox.
-        IMPORTANT: If you have not yet read the manual, call this tool immediately after you are given your task by the user,
-        as it will critically inform you!
+        Provides the 'Scalpel Tool Manual', which contains essential information on how to use the Scalpel toolbox
+        (Scalpel facades + Serena upstream primitives). IMPORTANT: If you have not yet read the manual, call this
+        tool immediately after you are given your task by the user, as it will critically inform you which facade
+        to reach for first.
         """
         return self.agent.create_system_prompt(session_id=session_id)
 
