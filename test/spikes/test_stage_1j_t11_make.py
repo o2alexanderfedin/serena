@@ -51,7 +51,11 @@ def test_make_generate_plugins_includes_python(tmp_path) -> None:
     ).exists()
 
 
-def test_make_generate_plugins_marketplace_lists_both(tmp_path) -> None:
+def test_make_generate_plugins_marketplace_lists_every_emitted_tree(tmp_path) -> None:
+    """The marketplace.json aggregator must list every o2-scalpel-<lang>/
+    tree the generator wrote — and nothing else. Self-discovering against
+    the Makefile's LANGUAGES default so adding a language doesn't require
+    touching this assertion (was the v1.4.1 + v1.10 stale-12 problem)."""
     import json
 
     result = subprocess.run(
@@ -66,19 +70,16 @@ def test_make_generate_plugins_marketplace_lists_both(tmp_path) -> None:
     data = json.loads(
         (tmp_path / ".claude-plugin" / "marketplace.json").read_text()
     )
-    names = sorted(p["name"] for p in data["plugins"])
-    # Post-Stream-6 + v1.4.1 expansion: 12 plugins are emitted by default.
-    assert names == sorted([
-        "o2-scalpel-cpp",
-        "o2-scalpel-csharp",
-        "o2-scalpel-go",
-        "o2-scalpel-java",
-        "o2-scalpel-lean",
-        "o2-scalpel-markdown",
-        "o2-scalpel-prolog",
-        "o2-scalpel-problog",
-        "o2-scalpel-python",
-        "o2-scalpel-rust",
-        "o2-scalpel-smt2",
-        "o2-scalpel-typescript",
-    ])
+    marketplace_names = sorted(p["name"] for p in data["plugins"])
+    emitted_dirs = sorted(
+        p.name for p in tmp_path.iterdir()
+        if p.is_dir() and p.name.startswith("o2-scalpel-")
+    )
+    assert marketplace_names == emitted_dirs, (
+        f"marketplace.json plugin list out of sync with emitted trees:\n"
+        f"  marketplace lists: {marketplace_names}\n"
+        f"  generator wrote:   {emitted_dirs}"
+    )
+    # Sanity floor: at least the rust + python anchors used in other tests.
+    assert "o2-scalpel-rust" in marketplace_names
+    assert "o2-scalpel-python" in marketplace_names
