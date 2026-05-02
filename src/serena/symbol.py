@@ -49,10 +49,16 @@ class LanguageServerSymbolLocation:
         if self.relative_path is not None:
             self.relative_path = self.relative_path.replace("/", os.path.sep)
 
-    def to_dict(self, include_relative_path: bool = True) -> dict[str, Any]:
+    def to_dict(
+        self,
+        include_relative_path: bool = True,
+        project_root: str | None = None,
+    ) -> dict[str, Any]:
         result = asdict(self)
         if not include_relative_path:
             result.pop("relative_path", None)
+        if project_root is not None and self.relative_path is not None:
+            result["absolute_path"] = os.path.join(project_root, self.relative_path)
         return result
 
     def has_position_in_file(self) -> bool:
@@ -414,6 +420,8 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         name: NotRequired[str]
         location: NotRequired[dict[str, Any]]
         relative_path: NotRequired[str | None]
+        absolute_path: NotRequired[str]
+        """absolute path = project_root + relative_path; emitted only when caller passes project_root"""
         body_location: NotRequired[dict[str, Any]]
         body: NotRequired[str | None]
         kind: NotRequired[str]
@@ -437,6 +445,7 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         "children",
         "content_around_reference",
         "reference_line",
+        "absolute_path",
     ]
 
     def to_dict(
@@ -454,6 +463,7 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         children_name: bool | None = None,
         relative_path: bool = False,
         child_inclusion_predicate: Callable[[Self], bool] | None = None,
+        project_root: str | None = None,
     ) -> OutputDict:
         """
         Converts the symbol to a dictionary.
@@ -476,6 +486,10 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
             Relative paths of the symbol's children are always excluded.
         :param child_inclusion_predicate: an optional predicate that decides whether a child symbol
             should be included.
+        :param project_root: optional absolute path of the project root. When provided AND `relative_path`
+            is True, an `absolute_path` field is emitted alongside `relative_path` (or alongside the
+            location entry's `relative_path` when `location` is True). Lets shell-script consumers use
+            paths from any CWD without reconstructing the project root themselves.
         :return: a dictionary representation of the symbol
         """
         result: LanguageServerSymbol.OutputDict = {}
@@ -494,9 +508,14 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
             result["kind"] = self.symbol_kind_name
 
         if location:
-            result["location"] = self.location.to_dict(include_relative_path=relative_path)
+            result["location"] = self.location.to_dict(
+                include_relative_path=relative_path,
+                project_root=project_root if relative_path else None,
+            )
         elif relative_path:
             result["relative_path"] = self.relative_path
+            if project_root is not None and self.relative_path is not None:
+                result["absolute_path"] = os.path.join(project_root, self.relative_path)
 
         if body_location:
             body_start_line, body_end_line = self.get_body_line_numbers()

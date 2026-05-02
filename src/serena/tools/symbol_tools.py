@@ -220,6 +220,7 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
                 body=include_body,
                 children_name=True,
                 children_name_path=False,
+                project_root=self.project.project_root,
             )
             for s in symbols
         ]
@@ -281,7 +282,14 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
 
         reference_dicts = []
         for ref in references_in_symbols:
-            ref_dict_orig = ref.symbol.to_dict(kind=True, relative_path=True, depth=0, body=include_body, body_location=True)
+            ref_dict_orig = ref.symbol.to_dict(
+                kind=True,
+                relative_path=True,
+                depth=0,
+                body=include_body,
+                body_location=True,
+                project_root=self.project.project_root,
+            )
             ref_dict = dict(ref_dict_orig)
             if not include_body:
                 ref_relative_path = ref.symbol.location.relative_path
