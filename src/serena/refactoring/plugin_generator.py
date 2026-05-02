@@ -241,6 +241,7 @@ def _render_readme(strategy: _StrategyWithFacades) -> str:
         generator_sha=sha,
         plugin_name=_plugin_name(strategy),
         description=_description(strategy),
+        language=strategy.language,
         lsp_cmd=strategy.lsp_server_cmd[0],
         extensions=", ".join(strategy.file_extensions),
         facade_table=table,
