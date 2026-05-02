@@ -180,6 +180,7 @@ def _render_mcp_json(strategy: _StrategyLike) -> str:
                     "git+https://github.com/o2alexanderfedin/o2-scalpel-engine.git",
                     "serena",
                     "start-mcp-server",
+                    "--project-from-cwd",
                     "--server-name",
                     server_name,
                 ],

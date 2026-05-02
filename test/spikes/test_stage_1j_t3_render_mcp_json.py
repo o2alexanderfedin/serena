@@ -93,3 +93,23 @@ def test_mcp_json_rust_and_python_args_differ(
     rust_args = rust_out["mcpServers"]["scalpel-rust"]["args"]
     python_args = python_out["mcpServers"]["scalpel-python"]["args"]
     assert rust_args != python_args
+
+
+# --- § auto-project: --project-from-cwd activates the user's repo on launch -
+
+
+def test_mcp_json_rust_passes_project_from_cwd(fake_strategy_rust) -> None:
+    """Each plugin passes --project-from-cwd so the dashboard surfaces the
+    active project + languages instead of 'None / N/A' until the agent
+    manually calls activate_project."""
+    out = _render_mcp_json(fake_strategy_rust)
+    data = json.loads(out)
+    args = data["mcpServers"]["scalpel-rust"]["args"]
+    assert "--project-from-cwd" in args
+
+
+def test_mcp_json_python_passes_project_from_cwd(fake_strategy_python) -> None:
+    out = _render_mcp_json(fake_strategy_python)
+    data = json.loads(out)
+    args = data["mcpServers"]["scalpel-python"]["args"]
+    assert "--project-from-cwd" in args
