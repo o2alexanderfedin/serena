@@ -51,6 +51,9 @@ _SKILL_TMPL = _load_template("skill.md.tmpl")
 _README_TMPL = _load_template("readme.md.tmpl")
 _HOOK_TMPL = _load_template("verify_hook.sh.tmpl")
 _DASHBOARD_CMD_TMPL = _load_template("dashboard_command.md.tmpl")
+_UPDATE_CMD_TMPL = _load_template("update_command.md.tmpl")
+_CHECK_UPDATE_HOOK_TMPL = _load_template("check_update_hook.sh.tmpl")
+_STATUSLINE_TMPL = _load_template("scalpel_statusline.sh.tmpl")
 
 # Per-language install hints surfaced when the SessionStart hook fails.
 # Languages without an entry get the generic "see plugin README" pointer.
@@ -275,6 +278,49 @@ def _render_session_start_hook(strategy: _StrategyLike) -> str:
     )
 
 
+def _render_update_command() -> str:
+    """Render the per-plugin ``commands/o2-scalpel-update.md`` slash command.
+
+    The body is engine-global (not per-language) — the command refreshes the
+    uvx-cached ``o2-scalpel-engine`` and signals running ``scalpel-*`` MCP
+    servers to restart. Every plugin emits an identical copy so installing
+    any one plugin makes ``/o2-scalpel-update`` available; Claude Code's
+    plugin registry deduplicates identical-content slash commands.
+
+    Unlike the other ``_render_*`` helpers this one takes no ``strategy``
+    argument because the rendered body is constant across languages — there
+    are no $-vars to substitute. ``Template.substitute()`` is still called for
+    consistency with the loader contract.
+    """
+    return _UPDATE_CMD_TMPL.substitute()
+
+
+def _render_check_update_hook(strategy: _StrategyLike) -> str:
+    """Render the per-plugin ``hooks/check-scalpel-update.sh`` SessionStart hook.
+
+    Throttled (1 network call per 6h, shared cache) so when multiple scalpel-*
+    plugins are enabled the engine isn't probed N times per session-start.
+    """
+    return _CHECK_UPDATE_HOOK_TMPL.substitute(
+        plugin_name=_plugin_name(strategy),
+    )
+
+
+def _render_statusline_script(strategy: _StrategyLike) -> str:
+    """Render the per-plugin ``hooks/scalpel-statusline.sh`` script.
+
+    Shipped per plugin so users can wire ANY plugin's copy as their
+    Claude Code ``statusLine.command``. The script reads
+    ``~/.cache/o2-scalpel/update-check.json`` and emits a yellow
+    ``⬆ /o2-scalpel-update`` segment when an update is available; empty
+    otherwise. Cache is written by check-scalpel-update.sh and cleared by
+    /o2-scalpel-update.
+    """
+    return _STATUSLINE_TMPL.substitute(
+        plugin_name=_plugin_name(strategy),
+    )
+
+
 def _render_hooks_json(strategy: _StrategyLike) -> str:
     """Render ``hooks/hooks.json`` binding the verify script to SessionStart.
 
@@ -285,6 +331,7 @@ def _render_hooks_json(strategy: _StrategyLike) -> str:
     """
 
     hook_script = f"${{CLAUDE_PLUGIN_ROOT}}/hooks/verify-scalpel-{strategy.language}.sh"
+    check_update_script = "${CLAUDE_PLUGIN_ROOT}/hooks/check-scalpel-update.sh"
     payload = {
         "hooks": {
             "SessionStart": [
@@ -293,7 +340,11 @@ def _render_hooks_json(strategy: _StrategyLike) -> str:
                         {
                             "type": "command",
                             "command": hook_script,
-                        }
+                        },
+                        {
+                            "type": "command",
+                            "command": check_update_script,
+                        },
                     ]
                 }
             ]
@@ -371,6 +422,36 @@ class PluginGenerator:
             _render_dashboard_command(strategy), encoding="utf-8"
         )
 
+        # /o2-scalpel-update is engine-global (no language suffix).
+        # Every plugin ships an identical copy; Claude Code's plugin registry
+        # surfaces a single /o2-scalpel-update so the user has one stable name.
+        update_cmd_path = root / "commands" / "o2-scalpel-update.md"
+        update_cmd_path.write_text(
+            _render_update_command(), encoding="utf-8"
+        )
+
+        check_update_path = root / "hooks" / "check-scalpel-update.sh"
+        check_update_path.write_text(
+            _render_check_update_hook(strategy), encoding="utf-8"
+        )
+        check_update_path.chmod(
+            check_update_path.stat().st_mode
+            | _stat.S_IXUSR
+            | _stat.S_IXGRP
+            | _stat.S_IXOTH
+        )
+
+        statusline_path = root / "hooks" / "scalpel-statusline.sh"
+        statusline_path.write_text(
+            _render_statusline_script(strategy), encoding="utf-8"
+        )
+        statusline_path.chmod(
+            statusline_path.stat().st_mode
+            | _stat.S_IXUSR
+            | _stat.S_IXGRP
+            | _stat.S_IXOTH
+        )
+
         for facade in strategy.facades:
             skill_path = root / "skills" / f"{_skill_name_for(strategy, facade)}.md"
             skill_path.write_text(
@@ -383,6 +464,7 @@ class PluginGenerator:
 __all__ = [
     "PluginGenerator",
     "PluginManifest",  # re-export for callers
+    "_render_check_update_hook",
     "_render_dashboard_command",
     "_render_hooks_json",
     "_render_mcp_json",
@@ -390,4 +472,6 @@ __all__ = [
     "_render_readme",
     "_render_session_start_hook",
     "_render_skill_for_facade",
+    "_render_statusline_script",
+    "_render_update_command",
 ]
