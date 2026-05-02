@@ -50,6 +50,7 @@ def _load_template(name: str) -> Template:
 _SKILL_TMPL = _load_template("skill.md.tmpl")
 _README_TMPL = _load_template("readme.md.tmpl")
 _HOOK_TMPL = _load_template("verify_hook.sh.tmpl")
+_DASHBOARD_CMD_TMPL = _load_template("dashboard_command.md.tmpl")
 
 # Per-language install hints surfaced when the SessionStart hook fails.
 # Languages without an entry get the generic "see plugin README" pointer.
@@ -243,6 +244,26 @@ def _render_readme(strategy: _StrategyWithFacades) -> str:
     )
 
 
+def _render_dashboard_command(strategy: _StrategyLike) -> str:
+    """Render the per-plugin ``commands/o2-scalpel-<lang>-dashboard.md`` slash-command body.
+
+    Each emitted plugin ships a Claude Code slash command that opens the engine
+    dashboard for *that plugin's* MCP server (``scalpel-<lang>``). The command
+    discovers the actual TCP port at runtime via ``pgrep`` + ``lsof`` — needed
+    because (a) the dashboard binds lazily, only after the first tool call,
+    and (b) when multiple scalpel-* MCP servers run concurrently, the engine
+    increments past 0x5EDA to the first free port.
+
+    The slash command body is identical across plugins except for the two
+    template substitutions (``language``, ``plugin_name``); centralising it
+    here keeps the 23 emitted ``.md`` files byte-deterministic.
+    """
+    return _DASHBOARD_CMD_TMPL.substitute(
+        language=strategy.language,
+        plugin_name=_plugin_name(strategy),
+    )
+
+
 def _render_session_start_hook(strategy: _StrategyLike) -> str:
     """Render the POSIX-sh ``hooks/verify-scalpel-<lang>.sh`` probe."""
 
@@ -315,6 +336,7 @@ class PluginGenerator:
             shutil.rmtree(root)
 
         (root / ".claude-plugin").mkdir(parents=True, exist_ok=False)
+        (root / "commands").mkdir()
         (root / "hooks").mkdir()
         (root / "skills").mkdir()
 
@@ -342,6 +364,13 @@ class PluginGenerator:
             _render_hooks_json(strategy), encoding="utf-8"
         )
 
+        cmd_path = (
+            root / "commands" / f"{_plugin_name(strategy)}-dashboard.md"
+        )
+        cmd_path.write_text(
+            _render_dashboard_command(strategy), encoding="utf-8"
+        )
+
         for facade in strategy.facades:
             skill_path = root / "skills" / f"{_skill_name_for(strategy, facade)}.md"
             skill_path.write_text(
@@ -354,6 +383,7 @@ class PluginGenerator:
 __all__ = [
     "PluginGenerator",
     "PluginManifest",  # re-export for callers
+    "_render_dashboard_command",
     "_render_hooks_json",
     "_render_mcp_json",
     "_render_plugin_json",
