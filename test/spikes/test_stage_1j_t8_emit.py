@@ -80,3 +80,54 @@ def test_emit_hooks_json_has_session_start(tmp_path, fake_strategy_rust) -> None
         (tmp_path / "o2-scalpel-rust" / "hooks" / "hooks.json").read_text()
     )
     assert "SessionStart" in data["hooks"]
+
+
+# --- v1.10: emit must write commands/<plugin>-dashboard.md slash command ----
+
+
+def test_emit_writes_dashboard_command(tmp_path, fake_strategy_rust) -> None:
+    """v1.10: every plugin tree ships a /<plugin>-dashboard slash command."""
+    PluginGenerator().emit(fake_strategy_rust, tmp_path)
+    cmd = (
+        tmp_path
+        / "o2-scalpel-rust"
+        / "commands"
+        / "o2-scalpel-rust-dashboard.md"
+    )
+    assert cmd.exists()
+
+
+def test_emit_dashboard_command_targets_plugin_server_name(
+    tmp_path, fake_strategy_rust
+) -> None:
+    """The slash-command body must pin to the plugin's MCP server-name so a
+    /o2-scalpel-rust-dashboard call only opens the rust dashboard, not any
+    co-running scalpel-python or scalpel-markdown instance."""
+    PluginGenerator().emit(fake_strategy_rust, tmp_path)
+    body = (
+        tmp_path
+        / "o2-scalpel-rust"
+        / "commands"
+        / "o2-scalpel-rust-dashboard.md"
+    ).read_text()
+    # The discovery regex pins on --server-name scalpel-rust.
+    assert "--server-name scalpel-rust" in body
+    # The slash command name in the heading matches the plugin name.
+    assert "/o2-scalpel-rust-dashboard" in body
+
+
+def test_emit_dashboard_command_for_python(
+    tmp_path, fake_strategy_python
+) -> None:
+    """Per-language naming holds for any plugin, not just rust."""
+    PluginGenerator().emit(fake_strategy_python, tmp_path)
+    cmd = (
+        tmp_path
+        / "o2-scalpel-python"
+        / "commands"
+        / "o2-scalpel-python-dashboard.md"
+    )
+    assert cmd.exists()
+    body = cmd.read_text()
+    assert "--server-name scalpel-python" in body
+    assert "/o2-scalpel-python-dashboard" in body
