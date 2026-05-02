@@ -266,6 +266,67 @@ class TestSymbolDictTypes:
         self.check_key_type(SymbolDTO, SymbolDTOKey)
 
 
+class TestAbsolutePathEmission:
+    """v1.13.0 — when project_root is passed, to_dict emits absolute_path alongside relative_path
+    so shell-script consumers (e.g. agent-generated commit batches) can use a path that resolves
+    from any CWD without reconstructing the project root themselves.
+    """
+
+    def _mock_symbol(self, relative_path: str) -> LanguageServerSymbol:
+        sym = MagicMock(spec=LanguageServerSymbol)
+        # Bind the real to_dict via class-level dispatch so we exercise the actual method.
+        sym.to_dict = LanguageServerSymbol.to_dict.__get__(sym)
+        sym.relative_path = relative_path
+        sym.name = "Foo"
+        sym.symbol_kind_name = "Struct"
+        sym.get_name_path = lambda: "Foo"
+        sym.symbol_root = {"children": []}
+        sym.iter_children = lambda: iter([])
+        sym.get_body_line_numbers = lambda: (1, 5)
+        sym.body = None
+        sym.location = MagicMock()
+        sym.location.to_dict = lambda include_relative_path=True, project_root=None: (
+            {"relative_path": relative_path, "absolute_path": f"{project_root}/{relative_path}"}
+            if project_root is not None else {"relative_path": relative_path}
+        )
+        return cast(LanguageServerSymbol, sym)
+
+    def test_omits_absolute_path_when_project_root_not_passed(self):
+        sym = self._mock_symbol("crates/foo/src/lib.rs")
+        d = sym.to_dict(name_path=True, kind=True, relative_path=True)
+        assert d["relative_path"] == "crates/foo/src/lib.rs"
+        assert "absolute_path" not in d, "absolute_path must be omitted when project_root not provided"
+
+    def test_emits_absolute_path_when_project_root_passed(self):
+        sym = self._mock_symbol("crates/foo/src/lib.rs")
+        d = sym.to_dict(
+            name_path=True, kind=True, relative_path=True,
+            project_root="/abs/proj",
+        )
+        assert d["relative_path"] == "crates/foo/src/lib.rs"
+        assert d["absolute_path"] == "/abs/proj/crates/foo/src/lib.rs"
+
+    def test_emits_absolute_path_inside_location_when_location_true(self):
+        sym = self._mock_symbol("crates/foo/src/lib.rs")
+        d = sym.to_dict(
+            name_path=True, kind=True, relative_path=True, location=True,
+            project_root="/abs/proj",
+        )
+        # Top-level relative_path/absolute_path are NOT emitted when location=True;
+        # the path lives inside the location entry instead.
+        assert "relative_path" not in d
+        assert "absolute_path" not in d
+        assert d["location"]["relative_path"] == "crates/foo/src/lib.rs"
+        assert d["location"]["absolute_path"] == "/abs/proj/crates/foo/src/lib.rs"
+
+    def test_no_emission_when_relative_path_flag_false(self):
+        sym = self._mock_symbol("crates/foo/src/lib.rs")
+        d = sym.to_dict(name_path=True, kind=True, relative_path=False, project_root="/abs/proj")
+        # If the caller didn't ask for relative_path, we don't synthesize absolute_path either.
+        assert "relative_path" not in d
+        assert "absolute_path" not in d
+
+
 def _make_mock_symbols(count: int, *, relative_path: str = "test_repo/services.py") -> list[MagicMock]:
     symbols: list[MagicMock] = []
     for i in range(count):
