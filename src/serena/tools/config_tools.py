@@ -35,7 +35,7 @@ class ActivateProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
         is_new_activation = self.agent.activate_project_from_path_or_name(project)
         mark_used(is_new_activation)
         result = self.agent.get_project_activation_message(session_id)
-        result += "\nIMPORTANT: If you have not yet read the 'Serena Instructions Manual', do it now before continuing!"
+        result += "\nIMPORTANT: If you have not yet read the 'Scalpel Tool Manual', do it now before continuing!"
         return result
 
 

@@ -489,7 +489,7 @@ class TestSessionStartActivateProjectHook:
         result = json.loads(output)
         context = result["hookSpecificOutput"]["additionalContext"]
         assert "Activate" in context
-        assert "Serena Instructions Manual" in context
+        assert "Scalpel Tool Manual" in context
 
 
 class TestSessionEndCleanupHook:

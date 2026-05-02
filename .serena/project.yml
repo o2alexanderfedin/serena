@@ -61,7 +61,7 @@ read_only: false
 #  * `find_symbol`: Performs a global (or local) search using the language server backend.
 #  * `get_current_config`: Prints the current configuration of the agent, including the active and available projects, tools, contexts, and modes.
 #  * `get_symbols_overview`: Gets an overview of the top-level symbols defined in a given file.
-#  * `initial_instructions`: Provides instructions Serena usage (i.e. the 'Serena Instructions Manual')
+#  * `initial_instructions`: Provides instructions for Scalpel/Serena usage (the 'Scalpel Tool Manual')
 #       for clients that do not read the initial instructions when the MCP server is connected.
 #  * `insert_after_symbol`: Inserts content after the end of the definition of a given symbol.
 #  * `insert_before_symbol`: Inserts content before the beginning of the definition of a given symbol.
