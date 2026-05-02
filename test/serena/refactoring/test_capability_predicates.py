@@ -479,6 +479,81 @@ class TestSupportsKindTier3CodeActionKinds:
         assert coord.supports_kind("python", "source.completely.unknown") is False
 
 
+class TestSupportsKindLspPrefixMatching:
+    """v1.13.1 — LSP §3.18.1 kind hierarchy: a parent kind subsumes children.
+
+    Regression: rust-analyzer advertises ``refactor.extract`` (family-level),
+    but ``scalpel_split_file`` queries ``supports_kind("rust", "refactor.extract.module")``.
+    Pre-fix exact-membership returned False on every Rust split call, surfacing
+    as CAPABILITY_NOT_AVAILABLE despite the operation being legal.
+    """
+
+    def test_tier1_catalog_parent_matches_child_query(self) -> None:
+        """Catalog stores ``refactor.extract`` (family); query for child must match."""
+        rec = _make_record("rust", "refactor.extract", "rust-analyzer")
+        server = _make_async_server_with_caps(
+            "rust-analyzer",
+            {"codeActionProvider": {"codeActionKinds": ["refactor.extract"]}},
+        )
+        coord = MultiServerCoordinator(
+            servers={"rust-analyzer": server},
+            dynamic_registry=_empty_registry(),
+            catalog=_catalog_with(rec),
+        )
+        # Pre-fix: exact-match → False. Post-fix: prefix-match → True.
+        assert coord.supports_kind("rust", "refactor.extract.module") is True
+        assert coord.supports_kind("rust", "refactor.extract.function") is True
+        assert coord.supports_kind("rust", "refactor.extract.method") is True
+
+    def test_tier3_server_advertised_parent_matches_child_query(self) -> None:
+        """Server advertises ``refactor.extract`` only; child query must match."""
+        # Catalog also has the child kind (post-fix may add specific entries).
+        rec_parent = _make_record("rust", "refactor.extract", "rust-analyzer")
+        server = _make_async_server_with_caps(
+            "rust-analyzer",
+            {"codeActionProvider": {"codeActionKinds": ["refactor.extract"]}},
+        )
+        coord = MultiServerCoordinator(
+            servers={"rust-analyzer": server},
+            dynamic_registry=_empty_registry(),
+            catalog=_catalog_with(rec_parent),
+        )
+        assert coord.supports_kind("rust", "refactor.extract.module") is True
+
+    def test_no_partial_segment_match(self) -> None:
+        """``refactor.extract`` MUST NOT match ``refactor.extracted_thing``.
+
+        Prefix-match is segment-aware (parent + ``.``), not raw startswith.
+        """
+        rec = _make_record("rust", "refactor.extract", "rust-analyzer")
+        server = _make_async_server_with_caps(
+            "rust-analyzer",
+            {"codeActionProvider": {"codeActionKinds": ["refactor.extract"]}},
+        )
+        coord = MultiServerCoordinator(
+            servers={"rust-analyzer": server},
+            dynamic_registry=_empty_registry(),
+            catalog=_catalog_with(rec),
+        )
+        # 'refactor.extracted' is not a child of 'refactor.extract' under
+        # LSP §3.18.1 — they're sibling segments, must not match.
+        assert coord.supports_kind("rust", "refactor.extracted") is False
+
+    def test_exact_match_still_works(self) -> None:
+        """The exact-equality case must continue to work (back-compat)."""
+        rec = _make_record("python", "source.organizeImports", "ruff")
+        server = _make_async_server_with_caps(
+            "ruff",
+            {"codeActionProvider": {"codeActionKinds": ["source.organizeImports"]}},
+        )
+        coord = MultiServerCoordinator(
+            servers={"ruff": server},
+            dynamic_registry=_empty_registry(),
+            catalog=_catalog_with(rec),
+        )
+        assert coord.supports_kind("python", "source.organizeImports") is True
+
+
 # ---------------------------------------------------------------------------
 # DI: backward-compat — kwargs are optional (spec § 4.4.0)
 # ---------------------------------------------------------------------------
