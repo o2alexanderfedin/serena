@@ -45,31 +45,9 @@ def smoke_script_exists() -> None:
         pytest.skip(f"{SMOKE_SCRIPT} not executable - chmod +x and retry")
 
 
-@pytest.fixture(scope="module")
-def serena_mcp_entry_available() -> None:
-    """Skip if the Serena fork does not yet expose a ``serena-mcp`` script entry.
-
-    Stage 1J committed ``.mcp.json`` files referencing ``serena-mcp``; the
-    Serena fork is expected to add a ``[project.scripts] serena-mcp = ...``
-    entry pointing at a callable in ``serena.cli``. Until that lands,
-    ``uvx ... serena-mcp`` cannot resolve and the smoke is moot.
-    """
-    pyproject = REPO_ROOT / "vendor" / "serena" / "pyproject.toml"
-    if not pyproject.exists():
-        pytest.skip("vendor/serena/pyproject.toml missing")
-    text = pyproject.read_text(encoding="utf-8")
-    if "serena-mcp" not in text:
-        pytest.skip(
-            "Serena fork has no 'serena-mcp' [project.scripts] entry; "
-            "Stage 1J / Serena follow-up. T6 smoke deferred."
-        )
-
-
+@pytest.mark.usefixtures("uvx_available", "smoke_script_exists")
 @pytest.mark.parametrize("language", ["rust", "python"])
 def test_uvx_smoke_launches_and_lists_tools(
-    uvx_available: None,
-    smoke_script_exists: None,
-    serena_mcp_entry_available: None,
     language: str,
 ) -> None:
     """Run the smoke driver for one language and assert tools/list returns
