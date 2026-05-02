@@ -992,6 +992,728 @@ _LANGUAGE_METADATA: dict[str, _StrategyView] = {
             ),
         ),
     ),
+    # v1.14: minimal-row generator coverage for the 29 engine-only primary
+    # languages. Each row uses the universal ``rename_symbol`` + ``fix_lints``
+    # facade pair — works with any LSP that supports ``textDocument/rename``
+    # plus diagnostic-driven ``codeAction``. Adapter modules live under
+    # ``solidlsp/language_servers/<lang>_*.py``; canonical file extensions
+    # come from ``solidlsp.ls_config.Language._matcher``.
+    "al": _StrategyView(
+        # Microsoft Dynamics 365 Business Central / NAV scripting language.
+        # The AL Language Server ships inside the ms-dynamics-smb.al VS Code
+        # extension; the ALLanguageServer adapter auto-downloads the .vsix.
+        language="al",
+        display_name="AL",
+        file_extensions=(".al", ".dal"),
+        lsp_server_cmd=("al-language-server",),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "ansible": _StrategyView(
+        # @ansible/ansible-language-server. Experimental in solidlsp because
+        # it reuses YAML extensions; must be explicitly selected.
+        language="ansible",
+        display_name="Ansible",
+        file_extensions=(".yaml", ".yml"),
+        lsp_server_cmd=("ansible-language-server",),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "bash": _StrategyView(
+        # bash-language-server (npm package by mads-hartmann).
+        language="bash",
+        display_name="Bash",
+        file_extensions=(".sh", ".bash"),
+        lsp_server_cmd=("bash-language-server", "start"),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "dart": _StrategyView(
+        # Dart SDK ships ``dart language-server`` (analysis_server in stdio
+        # mode). Single-binary install with the SDK from dart.dev.
+        language="dart",
+        display_name="Dart",
+        file_extensions=(".dart",),
+        lsp_server_cmd=("dart", "language-server"),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "elm": _StrategyView(
+        # @elm-tooling/elm-language-server. Requires elm + elm-test on PATH
+        # for full functionality.
+        language="elm",
+        display_name="Elm",
+        file_extensions=(".elm",),
+        lsp_server_cmd=("elm-language-server",),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "fortran": _StrategyView(
+        # fortls (https://github.com/fortran-lang/fortls). pip-installable.
+        language="fortran",
+        display_name="Fortran",
+        file_extensions=(".f90", ".F90", ".f95", ".F95", ".f03", ".F03", ".f08", ".F08", ".f", ".F", ".for", ".FOR", ".fpp", ".FPP"),
+        lsp_server_cmd=("fortls",),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "fsharp": _StrategyView(
+        # fsautocomplete (https://github.com/fsharp/FsAutoComplete). Installed
+        # as a dotnet global tool.
+        language="fsharp",
+        display_name="F#",
+        file_extensions=(".fs", ".fsx", ".fsi"),
+        lsp_server_cmd=("fsautocomplete",),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "groovy": _StrategyView(
+        # groovy-language-server (GroovyLanguageServer/groovy-language-server)
+        # — distributed as a runnable jar. No package-manager install path.
+        language="groovy",
+        display_name="Groovy",
+        file_extensions=(".groovy", ".gvy"),
+        lsp_server_cmd=("groovy-language-server",),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "hlsl": _StrategyView(
+        # antaalt/shader-language-server (also known as shader-sense). The
+        # adapter auto-downloads the binary.
+        language="hlsl",
+        display_name="HLSL",
+        file_extensions=(".hlsl", ".hlsli", ".fx", ".fxh", ".cginc", ".compute", ".shader", ".glsl", ".vert", ".frag", ".geom", ".tesc", ".tese", ".comp", ".wgsl"),
+        lsp_server_cmd=("shader-language-server",),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "json": _StrategyView(
+        # vscode-langservers-extracted ships ``vscode-json-languageserver``.
+        language="json",
+        display_name="JSON",
+        file_extensions=(".json", ".jsonc"),
+        lsp_server_cmd=("vscode-json-languageserver", "--stdio"),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "julia": _StrategyView(
+        # julia-vscode/LanguageServer.jl. Conventionally invoked via
+        # ``julia --project=@languageserver -e 'using LanguageServer; runserver()'``.
+        # We list ``julia`` as the binary; the install hint documents the full
+        # invocation.
+        language="julia",
+        display_name="Julia",
+        file_extensions=(".jl",),
+        lsp_server_cmd=("julia",),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "kotlin": _StrategyView(
+        # fwcd/kotlin-language-server. Installed via release tarball; binary
+        # named ``kotlin-language-server``.
+        language="kotlin",
+        display_name="Kotlin",
+        file_extensions=(".kt", ".kts"),
+        lsp_server_cmd=("kotlin-language-server",),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "lua": _StrategyView(
+        # LuaLS/lua-language-server (sumneko-style).
+        language="lua",
+        display_name="Lua",
+        file_extensions=(".lua",),
+        lsp_server_cmd=("lua-language-server",),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "luau": _StrategyView(
+        # JohnnyMorganz/luau-lsp — for Roblox's typed Luau dialect.
+        language="luau",
+        display_name="Luau",
+        file_extensions=(".luau",),
+        lsp_server_cmd=("luau-lsp", "lsp"),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "matlab": _StrategyView(
+        # Official MathWorks matlab-language-server. Requires MATLAB R2021b+
+        # and a Node.js runtime. Conventionally launched via the
+        # ``matlab-language-server`` shim from the matlab-language-server
+        # npm package.
+        language="matlab",
+        display_name="MATLAB",
+        file_extensions=(".m", ".mlx", ".mlapp"),
+        lsp_server_cmd=("matlab-language-server", "--stdio"),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "msl": _StrategyView(
+        # Custom pygls server bundled with solidlsp for mIRC scripting (.mrc).
+        # The MSLLanguageServer adapter manages a private virtualenv on first
+        # use.
+        language="msl",
+        display_name="MSL",
+        file_extensions=(".mrc",),
+        lsp_server_cmd=("msl-lsp",),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "nix": _StrategyView(
+        # nix-community/nixd — modern Nix LSP.
+        language="nix",
+        display_name="Nix",
+        file_extensions=(".nix",),
+        lsp_server_cmd=("nixd",),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "pascal": _StrategyView(
+        # genericptr/pascal-language-server (pasls) — Free Pascal + Lazarus.
+        language="pascal",
+        display_name="Pascal",
+        file_extensions=(".pas", ".pp", ".lpr", ".dpr", ".dpk", ".inc"),
+        lsp_server_cmd=("pasls",),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "php": _StrategyView(
+        # Intelephense (default in solidlsp). Closed-source freemium; the
+        # ``php_phpactor`` alternate adapter ships the open-source path.
+        language="php",
+        display_name="PHP",
+        file_extensions=(".php",),
+        lsp_server_cmd=("intelephense", "--stdio"),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "r": _StrategyView(
+        # REditorSupport/languageserver. Conventionally launched via
+        # ``R --slave -e 'languageserver::run()'``.
+        language="r",
+        display_name="R",
+        file_extensions=(".R", ".r", ".Rmd", ".Rnw"),
+        lsp_server_cmd=("R", "--slave", "-e", "languageserver::run()"),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "rego": _StrategyView(
+        # StyraInc/regal — modern Rego linter + LSP for OPA policies.
+        language="rego",
+        display_name="Rego",
+        file_extensions=(".rego",),
+        lsp_server_cmd=("regal", "language-server"),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "scala": _StrategyView(
+        # scalameta/metals.
+        language="scala",
+        display_name="Scala",
+        file_extensions=(".scala", ".sbt"),
+        lsp_server_cmd=("metals",),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "solidity": _StrategyView(
+        # @nomicfoundation/solidity-language-server.
+        language="solidity",
+        display_name="Solidity",
+        file_extensions=(".sol",),
+        lsp_server_cmd=("nomicfoundation-solidity-language-server", "--stdio"),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "swift": _StrategyView(
+        # Swift toolchain ships sourcekit-lsp.
+        language="swift",
+        display_name="Swift",
+        file_extensions=(".swift",),
+        lsp_server_cmd=("sourcekit-lsp",),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "terraform": _StrategyView(
+        # HashiCorp's terraform-ls.
+        language="terraform",
+        display_name="Terraform",
+        file_extensions=(".tf", ".tfvars", ".tfstate"),
+        lsp_server_cmd=("terraform-ls", "serve"),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "toml": _StrategyView(
+        # tamasfe/taplo — TOML toolchain that doubles as an LSP via
+        # ``taplo lsp stdio``.
+        language="toml",
+        display_name="TOML",
+        file_extensions=(".toml",),
+        lsp_server_cmd=("taplo", "lsp", "stdio"),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "vue": _StrategyView(
+        # @vue/language-server (Volar).
+        language="vue",
+        display_name="Vue",
+        file_extensions=(".vue",),
+        lsp_server_cmd=("vue-language-server", "--stdio"),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "yaml": _StrategyView(
+        # redhat-developer/yaml-language-server.
+        language="yaml",
+        display_name="YAML",
+        file_extensions=(".yaml", ".yml"),
+        lsp_server_cmd=("yaml-language-server", "--stdio"),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "zig": _StrategyView(
+        # zigtools/zls.
+        language="zig",
+        display_name="Zig",
+        file_extensions=(".zig", ".zon"),
+        lsp_server_cmd=("zls",),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
 }
 
 

@@ -75,6 +75,38 @@ _INSTALL_HINTS: dict[str, str] = {
     "haskell": "ghcup install hls --set  # installs haskell-language-server via the Haskell toolchain manager",
     "perl": "cpanm Perl::LanguageServer  # requires cpanm + a system Perl",
     "ruby": "gem install --user-install ruby-lsp  # add user gem bindir to PATH",
+    # v1.14: minimal-row generator coverage for the 29 engine-only primary
+    # languages. Each install hint documents the canonical install path the
+    # SessionStart hook prints when the LSP binary is missing.
+    "al": "AL Language Server (auto-downloads VSIX from VS Code marketplace) — see plugin README",
+    "ansible": "npm install -g @ansible/ansible-language-server",
+    "bash": "npm install -g bash-language-server",
+    "dart": "Dart SDK ships dart language-server — install Dart from dart.dev",
+    "elm": "npm install -g @elm-tooling/elm-language-server",
+    "fortran": "pip install fortls",
+    "fsharp": "dotnet tool install --global fsautocomplete",
+    "groovy": "see https://github.com/GroovyLanguageServer/groovy-language-server (jar download)",
+    "hlsl": "see https://github.com/antaalt/shader-language-server (binary download)",
+    "json": "npm install -g vscode-langservers-extracted",
+    "julia": "julia --project=@languageserver -e 'using Pkg; Pkg.add(\"LanguageServer\")'",
+    "kotlin": "see https://github.com/fwcd/kotlin-language-server (release download)",
+    "lua": "brew install lua-language-server  # macOS; see github.com/LuaLS/lua-language-server",
+    "luau": "see https://github.com/JohnnyMorganz/luau-lsp (release download)",
+    "matlab": "MathWorks MATLAB R2021b+ ships matlab-language-server — see plugin README",
+    "msl": "see plugin README (custom pygls server for mIRC scripting)",
+    "nix": "see https://github.com/nix-community/nixd (cargo or nix-env install)",
+    "pascal": "see https://github.com/genericptr/pascal-language-server (build from source)",
+    "php": "npm install -g intelephense  # closed-source freemium; see also php_phpactor alternate",
+    "r": "Rscript -e 'install.packages(\"languageserver\")'",
+    "rego": "see https://github.com/StyraInc/regal (binary download)",
+    "scala": "brew install coursier && cs install metals  # macOS",
+    "solidity": "npm install -g @nomicfoundation/solidity-language-server",
+    "swift": "Swift toolchain ships sourcekit-lsp — install Swift from swift.org",
+    "terraform": "brew install hashicorp/tap/terraform-ls  # macOS; or download from releases.hashicorp.com",
+    "toml": "cargo install --features lsp --locked taplo-cli",
+    "vue": "npm install -g @vue/language-server",
+    "yaml": "npm install -g yaml-language-server",
+    "zig": "see https://github.com/zigtools/zls (binary download or zig build)",
 }
 
 # Identity constants for every emitted plugin. Kept module-private so they
