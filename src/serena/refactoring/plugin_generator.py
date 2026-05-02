@@ -85,7 +85,7 @@ _AUTHOR_EMAIL = "af@O2.services"
 _AUTHOR_URL = "https://O2.services"
 _LICENSE = "MIT"
 _REPO = "https://github.com/o2alexanderfedin/o2-scalpel"
-_VERSION = "1.0.4"
+_VERSION = "1.0.5"
 
 
 class _StrategyLike(Protocol):
