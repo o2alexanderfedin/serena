@@ -179,6 +179,25 @@ def test_emit_writes_check_update_hook(tmp_path, fake_strategy_rust) -> None:
     assert "update_available" in body  # writes the cache key
 
 
+def test_emit_check_update_hook_uses_plugin_data_dir(
+    tmp_path, fake_strategy_rust
+) -> None:
+    """v1.12: cache must live under ${CLAUDE_PLUGIN_DATA}/update-cache so
+    Claude Code auto-cleans it on plugin uninstall (research 2026-05-01).
+    Legacy ~/.cache/o2-scalpel/ kept only as a fallback when CLAUDE_PLUGIN_DATA
+    is unset (ad-hoc invocations outside plugin context)."""
+    PluginGenerator().emit(fake_strategy_rust, tmp_path)
+    body = (
+        tmp_path / "o2-scalpel-rust" / "hooks" / "check-scalpel-update.sh"
+    ).read_text()
+    assert "${CLAUDE_PLUGIN_DATA}/update-cache" in body
+    # Fallback path is still present (script must remain useful when run
+    # without Claude Code's env), but the primary path is plugin-data.
+    assert body.index("${CLAUDE_PLUGIN_DATA}") < body.index(
+        "${HOME}/.cache/o2-scalpel"
+    ), "primary path must be CLAUDE_PLUGIN_DATA, fallback after"
+
+
 def test_emit_writes_statusline_script(tmp_path, fake_strategy_rust) -> None:
     """v1.11: scalpel-statusline.sh ships per-plugin so users can wire any
     plugin's copy into their ~/.claude/settings.json statusLine.command."""
@@ -191,6 +210,44 @@ def test_emit_writes_statusline_script(tmp_path, fake_strategy_rust) -> None:
     body = script.read_text()
     assert "/o2-scalpel-update" in body
     assert "update-check.json" in body
+
+
+def test_emit_statusline_glob_falls_back_across_plugins(
+    tmp_path, fake_strategy_rust
+) -> None:
+    """v1.12: statusLine script must be robust to plugin uninstall — the
+    fallback glob across ~/.claude/plugins/data/o2-scalpel-*/ ensures the
+    script keeps emitting the indicator (or empty) even if THIS plugin is
+    uninstalled but another scalpel-* plugin remains installed."""
+    PluginGenerator().emit(fake_strategy_rust, tmp_path)
+    body = (
+        tmp_path / "o2-scalpel-rust" / "hooks" / "scalpel-statusline.sh"
+    ).read_text()
+    # Primary: read this plugin's CLAUDE_PLUGIN_DATA cache when present.
+    assert "${CLAUDE_PLUGIN_DATA}/update-cache" in body
+    # Fallback: glob across all installed scalpel-* plugin data dirs.
+    assert (
+        "/.claude/plugins/data/o2-scalpel-*/update-cache" in body
+    ), "statusLine script must fall back to a glob across scalpel-* plugin data dirs"
+
+
+def test_emit_update_command_clears_all_plugin_caches(
+    tmp_path, fake_strategy_rust
+) -> None:
+    """v1.12: /o2-scalpel-update must update the cache JSON for EVERY enabled
+    plugin in one go, not just the one that owns the slash command. Without
+    this, the status-line indicator persists for plugins whose cache wasn't
+    touched until their next SessionStart fires."""
+    PluginGenerator().emit(fake_strategy_rust, tmp_path)
+    body = (
+        tmp_path / "o2-scalpel-rust" / "commands" / "o2-scalpel-update.md"
+    ).read_text()
+    # Glob across all plugin-data dirs.
+    assert (
+        "/.claude/plugins/data/o2-scalpel-*/update-cache" in body
+    ), "/o2-scalpel-update must clear all plugins' caches"
+    # Legacy migration cleanup.
+    assert "rm -rf" in body and "/.cache/o2-scalpel" in body
 
 
 def test_emit_hooks_json_registers_check_update_hook(
