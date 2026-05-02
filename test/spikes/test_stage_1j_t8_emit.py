@@ -131,3 +131,81 @@ def test_emit_dashboard_command_for_python(
     body = cmd.read_text()
     assert "--server-name scalpel-python" in body
     assert "/o2-scalpel-python-dashboard" in body
+
+
+# --- v1.11: emit must write the engine-global /o2-scalpel-update slash command
+# and the SessionStart check-update + statusline scripts ---------------------
+
+
+def test_emit_writes_update_command(tmp_path, fake_strategy_rust) -> None:
+    """v1.11: every plugin tree ships /o2-scalpel-update at commands/o2-scalpel-update.md."""
+    PluginGenerator().emit(fake_strategy_rust, tmp_path)
+    cmd = tmp_path / "o2-scalpel-rust" / "commands" / "o2-scalpel-update.md"
+    assert cmd.exists()
+    body = cmd.read_text()
+    # Engine-global: filename has no language suffix, body refers to the
+    # canonical engine git URL and the global slash-command name.
+    assert "/o2-scalpel-update" in body
+    assert "o2-scalpel-engine.git" in body
+
+
+def test_emit_update_command_is_identical_across_languages(
+    tmp_path, fake_strategy_rust, fake_strategy_python
+) -> None:
+    """The /o2-scalpel-update body must be byte-identical regardless of plugin
+    so Claude Code's plugin registry treats them as a single command and the
+    user has one stable name to type."""
+    PluginGenerator().emit(fake_strategy_rust, tmp_path)
+    PluginGenerator().emit(fake_strategy_python, tmp_path)
+    rust_body = (
+        tmp_path / "o2-scalpel-rust" / "commands" / "o2-scalpel-update.md"
+    ).read_text()
+    py_body = (
+        tmp_path / "o2-scalpel-python" / "commands" / "o2-scalpel-update.md"
+    ).read_text()
+    assert rust_body == py_body
+
+
+def test_emit_writes_check_update_hook(tmp_path, fake_strategy_rust) -> None:
+    """v1.11: check-scalpel-update.sh ships in every plugin's hooks/ dir."""
+    PluginGenerator().emit(fake_strategy_rust, tmp_path)
+    hook = tmp_path / "o2-scalpel-rust" / "hooks" / "check-scalpel-update.sh"
+    assert hook.exists()
+    # Executable bit must be set for SessionStart hook to run.
+    assert hook.stat().st_mode & stat.S_IXUSR
+    body = hook.read_text()
+    assert "git ls-remote" in body
+    assert "o2-scalpel-engine.git" in body
+    assert "update_available" in body  # writes the cache key
+
+
+def test_emit_writes_statusline_script(tmp_path, fake_strategy_rust) -> None:
+    """v1.11: scalpel-statusline.sh ships per-plugin so users can wire any
+    plugin's copy into their ~/.claude/settings.json statusLine.command."""
+    PluginGenerator().emit(fake_strategy_rust, tmp_path)
+    script = (
+        tmp_path / "o2-scalpel-rust" / "hooks" / "scalpel-statusline.sh"
+    )
+    assert script.exists()
+    assert script.stat().st_mode & stat.S_IXUSR
+    body = script.read_text()
+    assert "/o2-scalpel-update" in body
+    assert "update-check.json" in body
+
+
+def test_emit_hooks_json_registers_check_update_hook(
+    tmp_path, fake_strategy_rust
+) -> None:
+    """SessionStart array must include the check-update hook alongside the
+    LSP-verify hook, so update detection runs without user opt-in."""
+    PluginGenerator().emit(fake_strategy_rust, tmp_path)
+    data = json.loads(
+        (tmp_path / "o2-scalpel-rust" / "hooks" / "hooks.json").read_text()
+    )
+    commands = [
+        h["command"] for entry in data["hooks"]["SessionStart"]
+        for h in entry["hooks"]
+    ]
+    # Both hooks must be wired.
+    assert any("verify-scalpel-rust.sh" in c for c in commands)
+    assert any("check-scalpel-update.sh" in c for c in commands)
