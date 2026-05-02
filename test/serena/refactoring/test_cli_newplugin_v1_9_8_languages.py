@@ -131,8 +131,11 @@ def test_v1_9_8_languages_are_distinct_from_existing() -> None:
 def test_v1_9_8_metadata_table_has_all_languages() -> None:
     """Sanity: the metadata table must contain every documented language.
 
-    Includes the eleven pre-v1.9.8 languages PLUS the eleven v1.9.8 newcomers
-    for a total of 23 — matches the parent ``marketplace.json`` plugin count.
+    Includes the eleven pre-v1.9.8 languages PLUS the eleven v1.9.8 newcomers.
+    v1.14 adds 29 engine-only primaries on top, bringing the table to 52 rows
+    — matches the parent ``marketplace.json`` plugin count. The assertion is
+    ``actual >= expected`` so future leaves can append without touching this
+    test.
     """
 
     expected = {
