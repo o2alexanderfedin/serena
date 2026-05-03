@@ -357,7 +357,8 @@
         <p class="attribution-differences">
             <strong>Differences from upstream Serena:</strong>
             adds <strong>46 MCP tools</strong> for LSP-driven write/refactor operations
-            (<code>scalpel_rename</code>, <code>scalpel_extract</code>, <code>scalpel_split_file</code>, etc.),
+            (<code>rename</code>, <code>extract</code>, <code>split_file</code>, etc. — legacy
+            <code>scalpel_*</code> aliases remain through v2.x for back-compat),
             a language-agnostic <strong>facade layer</strong> with per-language strategies,
             <strong>dynamic LSP capability discovery</strong> (Pyright textDocument/implementation gap closed at runtime),
             <strong>shadow-workspace</strong> dry-run, and <strong>real on-disk rollback</strong>.
