@@ -508,16 +508,37 @@ class RegisteredTool:
     is_optional: bool
     is_beta: bool
     tool_name: str
+    # v2.0 wire-name cleanup (spec 2026-05-03 § 6): legacy ``scalpel_*``
+    # tool names are dual-registered as deprecated aliases for one minor
+    # release window. Removed in v2.1.
+    is_legacy_alias: bool = False
+    canonical_name: str | None = None
 
     @property
     def class_docstring(self) -> str:
         """
-        :return: the tool description (high-level class docstring)
+        :return: the tool description (high-level class docstring). For
+            v2.0 legacy aliases, the description is prefixed with a
+            deprecation marker that names the canonical replacement.
         """
-        return self.tool_class.get_tool_description()
+        base = self.tool_class.get_tool_description()
+        if self.is_legacy_alias and self.canonical_name:
+            return (
+                f"[DEPRECATED in v2.0; removed in v2.1; use `{self.canonical_name}`] "
+                + base
+            )
+        return base
 
 
 tool_packages = ["serena.tools"]
+
+# v2.0 wire-name cleanup (spec 2026-05-03 § 5.1): the Scalpel facade/primitive
+# modules whose tools dual-register under a legacy ``scalpel_<name>`` alias
+# during the deprecation window.
+_SCALPEL_LEGACY_ALIAS_MODULES = (
+    "serena.tools.scalpel_facades",
+    "serena.tools.scalpel_primitives",
+)
 
 
 @singleton
@@ -532,6 +553,9 @@ class ToolRegistry:
 
     def __init__(self) -> None:
         self._tool_dict: dict[str, RegisteredTool] = {}
+        # v2.0: legacy alias names → canonical tool name (used to filter the
+        # alias set out of the catalog/marketplace surfaces).
+        self._legacy_aliases: dict[str, str] = {}
         inclusion_predicate = lambda c: "apply" in c.__dict__  # include only concrete tool classes that implement apply
         for cls in iter_subclasses(Tool, inclusion_predicate=inclusion_predicate):
             if not any(cls.__module__.startswith(pkg) for pkg in tool_packages):
@@ -541,7 +565,31 @@ class ToolRegistry:
             name = cls.get_name_from_cls()
             if name in self._tool_dict:
                 raise ValueError(f"Duplicate tool name found: {name}. Tool classes must have unique names.")
-            self._tool_dict[name] = RegisteredTool(tool_class=cls, is_optional=is_optional, tool_name=name, is_beta=is_beta)
+            self._tool_dict[name] = RegisteredTool(
+                tool_class=cls, is_optional=is_optional, tool_name=name, is_beta=is_beta
+            )
+            # v2.0 wire-name cleanup (spec 2026-05-03 § 6.1): dual-register
+            # every Scalpel facade/primitive under its legacy ``scalpel_*``
+            # alias for the deprecation window.
+            if cls.__module__ in _SCALPEL_LEGACY_ALIAS_MODULES:
+                legacy_name = f"scalpel_{name}"
+                if legacy_name in self._tool_dict:
+                    # Defensive: if a class already happens to derive a
+                    # name colliding with a legacy alias, do not silently
+                    # shadow it.
+                    raise ValueError(
+                        f"Cannot install legacy alias {legacy_name!r}: "
+                        f"name already in use by another tool."
+                    )
+                self._tool_dict[legacy_name] = RegisteredTool(
+                    tool_class=cls,
+                    is_optional=is_optional,
+                    tool_name=legacy_name,
+                    is_beta=is_beta,
+                    is_legacy_alias=True,
+                    canonical_name=name,
+                )
+                self._legacy_aliases[legacy_name] = name
 
     def get_registered_tools_by_module(self) -> dict[str, list[RegisteredTool]]:
         """
@@ -564,19 +612,46 @@ class ToolRegistry:
         return self._tool_dict[tool_name].tool_class
 
     def get_all_tool_classes(self) -> list[type[Tool]]:
-        return list(t.tool_class for t in self._tool_dict.values())
+        # v2.0: dedupe by class identity — legacy aliases share their
+        # canonical entry's tool_class, so this list stays one-per-class.
+        seen: set[type[Tool]] = set()
+        out: list[type[Tool]] = []
+        for t in self._tool_dict.values():
+            if t.tool_class in seen:
+                continue
+            seen.add(t.tool_class)
+            out.append(t.tool_class)
+        return out
 
     def get_tool_classes_default_enabled(self) -> list[type[Tool]]:
         """
         :return: the list of tool classes that are enabled by default (i.e. non-optional tools).
         """
-        return [t.tool_class for t in self._tool_dict.values() if not t.is_optional]
+        seen: set[type[Tool]] = set()
+        out: list[type[Tool]] = []
+        for t in self._tool_dict.values():
+            if t.is_optional:
+                continue
+            if t.tool_class in seen:
+                continue
+            seen.add(t.tool_class)
+            out.append(t.tool_class)
+        return out
 
     def get_tool_classes_optional(self) -> list[type[Tool]]:
         """
         :return: the list of tool classes that are optional (i.e. disabled by default).
         """
-        return [t.tool_class for t in self._tool_dict.values() if t.is_optional]
+        seen: set[type[Tool]] = set()
+        out: list[type[Tool]] = []
+        for t in self._tool_dict.values():
+            if not t.is_optional:
+                continue
+            if t.tool_class in seen:
+                continue
+            seen.add(t.tool_class)
+            out.append(t.tool_class)
+        return out
 
     def get_tool_names_default_enabled(self) -> list[str]:
         """
@@ -595,6 +670,29 @@ class ToolRegistry:
         :return: the list of all tool names.
         """
         return list(self._tool_dict.keys())
+
+    # v2.0 wire-name cleanup (spec 2026-05-03 § 6.1) helpers
+    def get_legacy_alias_names(self) -> list[str]:
+        """
+        :return: the list of v2.0-deprecated legacy ``scalpel_<name>``
+            tool names registered as aliases for the deprecation window.
+        """
+        return list(self._legacy_aliases.keys())
+
+    def get_canonical_name_for(self, tool_name: str) -> str:
+        """
+        :param tool_name: any registered tool name (canonical or legacy alias)
+        :return: the canonical tool name (i.e. the new v2.0 name without the
+            ``scalpel_`` prefix). Returns ``tool_name`` unchanged if not a
+            legacy alias.
+        """
+        return self._legacy_aliases.get(tool_name, tool_name)
+
+    def is_legacy_alias_name(self, tool_name: str) -> bool:
+        """
+        :return: True if ``tool_name`` is a v2.0-deprecated legacy alias.
+        """
+        return tool_name in self._legacy_aliases
 
     def print_tool_overview(
         self, tools: Iterable[type[Tool] | Tool] | None = None, include_optional: bool = False, only_optional: bool = False
