@@ -74,9 +74,12 @@ def test_v1_9_8_emit_round_trip(language: str, tmp_path: Path) -> None:
 
     Asserts the four invariants every plugin tree must satisfy:
     1. ``.claude-plugin/plugin.json`` parses + advertises the expected name.
-    2. ``.mcp.json`` parses + registers an ``mcpServers.scalpel-<lang>`` entry.
+    2. ``.mcp.json`` parses + registers an ``mcpServers.lsp`` entry whose
+       ``--server-name`` CLI arg is ``scalpel-<lang>`` (v2.0 wire-name
+       cleanup — spec 2026-05-03 § 5.2).
     3. ``hooks/hooks.json`` parses + binds the verify script to SessionStart.
-    4. At least one ``skills/using-scalpel-*-<lang>.md`` lands.
+    4. At least one ``skills/using-*-<lang>.md`` lands (v2.0 dropped the
+       ``scalpel-`` infix from the skill filename pattern).
     """
 
     strategy = _resolve_strategy(language)
@@ -90,7 +93,12 @@ def test_v1_9_8_emit_round_trip(language: str, tmp_path: Path) -> None:
     assert language in plugin_json["tags"]
 
     mcp_json = json.loads((root / ".mcp.json").read_text(encoding="utf-8"))
-    assert f"scalpel-{language}" in mcp_json["mcpServers"]
+    # v2.0: server JSON-key collapses to "lsp" across all 52 plugins.
+    assert "lsp" in mcp_json["mcpServers"], mcp_json
+    # v2.0: --server-name CLI arg stays per-language for dashboard pgrep.
+    args = mcp_json["mcpServers"]["lsp"]["args"]
+    assert "--server-name" in args
+    assert args[args.index("--server-name") + 1] == f"scalpel-{language}"
 
     hooks_json = json.loads(
         (root / "hooks" / "hooks.json").read_text(encoding="utf-8")
@@ -98,7 +106,7 @@ def test_v1_9_8_emit_round_trip(language: str, tmp_path: Path) -> None:
     session_start = hooks_json["hooks"]["SessionStart"]
     assert session_start, "SessionStart hooks list must be non-empty"
 
-    skill_files = list((root / "skills").glob(f"using-scalpel-*-{language}.md"))
+    skill_files = list((root / "skills").glob(f"using-*-{language}.md"))
     assert skill_files, f"No skill files emitted for {language!r}"
     assert len(skill_files) == len(strategy.facades)
 

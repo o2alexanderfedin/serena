@@ -31,14 +31,30 @@ def _classname_to_snake(name: str) -> str:
 
 
 def _enumerate_tools() -> list[str]:
+    """Enumerate Scalpel facade/primitive tools by their canonical
+    snake-case name.
+
+    v2.0 (spec 2026-05-03 § 5.1): the ``scalpel_`` class-name prefix was
+    dropped. Discovery now filters by source module + ``Tool`` suffix +
+    ``Tool`` subclass relation, instead of the old ``startswith("Scalpel")``
+    test.
+    """
+    from serena.tools.tools_base import Tool
+
     seen: set[str] = set()
     out: list[str] = []
     for module in (scalpel_facades, scalpel_primitives):
         for name in dir(module):
-            if not name.startswith("Scalpel") or not name.endswith("Tool"):
+            if not name.endswith("Tool"):
                 continue
             cls = getattr(module, name)
             if not isinstance(cls, type):
+                continue
+            # Only count classes that are concrete Tool subclasses defined
+            # in this module (not re-exported helpers like ``Tool`` itself).
+            if not issubclass(cls, Tool) or cls is Tool:
+                continue
+            if cls.__module__ != module.__name__:
                 continue
             snake = _classname_to_snake(name)
             if snake in seen:
@@ -54,52 +70,52 @@ def _enumerate_tools() -> list[str]:
 # name AND its 3-user-request demand evidence to the v2.0 roadmap doc
 # referenced in the module docstring above.
 EXPECTED_TOOLS = frozenset({
-    "scalpel_annotate_return_type",
-    "scalpel_apply_capability",
-    "scalpel_auto_import_specialized",
-    "scalpel_capabilities_list",
-    "scalpel_capability_describe",
-    "scalpel_change_return_type",
-    "scalpel_change_type_shape",
-    "scalpel_change_visibility",
-    "scalpel_complete_match_arms",
-    "scalpel_confirm_annotations",
-    "scalpel_convert_from_relative_imports",
-    "scalpel_convert_module_layout",
-    "scalpel_convert_to_async",
-    "scalpel_convert_to_method_object",
-    "scalpel_dry_run_compose",
-    "scalpel_execute_command",
-    "scalpel_expand_glob_imports",
-    "scalpel_expand_macro",
-    "scalpel_extract",
-    "scalpel_extract_lifetime",
-    "scalpel_extract_section",
-    "scalpel_fix_lints",
-    "scalpel_generate_constructor",
-    "scalpel_generate_from_undefined",
-    "scalpel_generate_member",
-    "scalpel_generate_trait_impl_scaffold",
-    "scalpel_ignore_diagnostic",
-    "scalpel_imports_organize",
-    "scalpel_inline",
-    "scalpel_install_lsp_servers",
-    "scalpel_introduce_parameter",
-    "scalpel_local_to_field",
-    "scalpel_organize_links",
-    "scalpel_override_methods",
-    "scalpel_reload_plugins",
-    "scalpel_rename",
-    "scalpel_rename_heading",
-    "scalpel_rollback",
-    "scalpel_split_doc",
-    "scalpel_split_file",
-    "scalpel_tidy_structure",
-    "scalpel_transaction_commit",
-    "scalpel_transaction_rollback",
-    "scalpel_use_function",
-    "scalpel_verify_after_refactor",
-    "scalpel_workspace_health",
+    "annotate_return_type",
+    "apply_capability",
+    "auto_import_specialized",
+    "capabilities_list",
+    "capability_describe",
+    "change_return_type",
+    "change_type_shape",
+    "change_visibility",
+    "complete_match_arms",
+    "confirm_annotations",
+    "convert_from_relative_imports",
+    "convert_module_layout",
+    "convert_to_async",
+    "convert_to_method_object",
+    "dry_run_compose",
+    "execute_command",
+    "expand_glob_imports",
+    "expand_macro",
+    "extract",
+    "extract_lifetime",
+    "extract_section",
+    "fix_lints",
+    "generate_constructor",
+    "generate_from_undefined",
+    "generate_member",
+    "generate_trait_impl_scaffold",
+    "ignore_diagnostic",
+    "imports_organize",
+    "inline",
+    "install_lsp_servers",
+    "introduce_parameter",
+    "local_to_field",
+    "organize_links",
+    "override_methods",
+    "reload_plugins",
+    "rename",
+    "rename_heading",
+    "rollback",
+    "split_doc",
+    "split_file",
+    "tidy_structure",
+    "transaction_commit",
+    "transaction_rollback",
+    "use_function",
+    "verify_after_refactor",
+    "workspace_health",
 })
 
 

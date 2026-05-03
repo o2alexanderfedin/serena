@@ -18,8 +18,10 @@ def test_emit_writes_full_tree(tmp_path, fake_strategy_rust) -> None:
     assert (root / ".mcp.json").exists()
     assert (root / "README.md").exists()
     assert (root / "hooks" / "verify-scalpel-rust.sh").exists()
-    assert (root / "skills" / "using-scalpel-split-file-rust.md").exists()
-    assert (root / "skills" / "using-scalpel-rename-symbol-rust.md").exists()
+    # v2.0 wire-name cleanup (spec 2026-05-03 § 5.1): skill filenames drop
+    # the ``scalpel-`` infix to match the unprefixed v2.0 tool name.
+    assert (root / "skills" / "using-split-file-rust.md").exists()
+    assert (root / "skills" / "using-rename-symbol-rust.md").exists()
 
 
 def test_emit_hook_is_executable(tmp_path, fake_strategy_rust) -> None:
@@ -61,7 +63,8 @@ def test_emit_returns_root_path(tmp_path, fake_strategy_rust) -> None:
 def test_emit_for_python(tmp_path, fake_strategy_python) -> None:
     PluginGenerator().emit(fake_strategy_python, tmp_path)
     root = tmp_path / "o2-scalpel-python"
-    assert (root / "skills" / "using-scalpel-split-file-python.md").exists()
+    # v2.0: ``scalpel-`` infix dropped (spec 2026-05-03 § 5.1).
+    assert (root / "skills" / "using-split-file-python.md").exists()
 
 
 # --- § 3.2: emit must write hooks.json alongside verify-scalpel-*.sh --------

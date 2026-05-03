@@ -8,12 +8,12 @@ and ranks every registered ``scalpel_*`` facade against the prompt using
 TF-IDF cosine similarity. Two boosts that make the ranking robust:
 
 1. **Name-token boost** (``_NAME_BOOST``): the snake-case tool name is
-   tokenized (``scalpel_imports_organize`` → ``imports``, ``organize``)
+   tokenized (``imports_organize`` → ``imports``, ``organize``)
    and added to the facade vector at ``_NAME_BOOST`` × IDF weight. This
-   makes ``scalpel_extract`` win prompts that say "extract" without
+   makes ``extract`` win prompts that say "extract" without
    relying on docstring keyword stuffing.
 
-2. **Routing aliases** (``ScalpelXTool.routing_aliases`` ClassVar): each
+2. **Routing aliases** (``XTool.routing_aliases`` ClassVar): each
    facade may declare extra vocabulary that users speak when wanting that
    operation. Aliases enter the facade vector at the same boost level as
    name tokens. Defined on the tool class — discoverable, drift-resistant,
@@ -21,7 +21,7 @@ TF-IDF cosine similarity. Two boosts that make the ranking robust:
 
 3. **Generic-name dampener** (``_GENERIC_NAME_TOKENS``): super-common
    English / programming verbs that happen to appear in tool names (e.g.,
-   ``use``, ``function``, ``import``) are weighted down so ``scalpel_use_function``
+   ``use``, ``function``, ``import``) are weighted down so ``use_function``
    does not cannibalize any prompt that says "function".
 
 Reports a single percentage: ``routing_accuracy = correct_top_1 / total``.
@@ -106,20 +106,32 @@ def _name_tokens(tool: str, aliases: tuple[str, ...]) -> dict[str, float]:
 
 
 def _gather_facade_records() -> dict[str, tuple[str, tuple[str, ...]]]:
-    """Collect every ``Scalpel*Tool`` keyed by canonical snake_case tool name.
+    """Collect every Scalpel facade/primitive keyed by canonical snake_case tool name.
 
     Returns ``{tool_name: (docstring, routing_aliases)}``.
+
+    v2.0 wire-name cleanup (spec 2026-05-03 § 5.1): the ``Scalpel`` class
+    prefix was dropped, so discovery now filters by source module +
+    ``Tool`` suffix + ``Tool`` subclass relation, not by class-name prefix.
     """
+    from serena.tools.tools_base import Tool as _Tool
+
+    _SCALPEL_MODULES = {
+        "serena.tools.scalpel_facades",
+        "serena.tools.scalpel_primitives",
+    }
     records: dict[str, tuple[str, tuple[str, ...]]] = {}
     seen_classes: set[type] = set()
     for attr_name in dir(tools_module):
-        if not attr_name.startswith("Scalpel"):
+        if not attr_name.endswith("Tool"):
             continue
         cls = getattr(tools_module, attr_name)
         if not isinstance(cls, type) or cls in seen_classes:
             continue
         seen_classes.add(cls)
-        if not attr_name.endswith("Tool"):
+        if not issubclass(cls, _Tool) or cls is _Tool:
+            continue
+        if cls.__module__ not in _SCALPEL_MODULES:
             continue
         canonical = _classname_to_tool_name(attr_name)
         doc = (cls.__doc__ or "").strip()
@@ -137,7 +149,7 @@ def _gather_facade_docstrings() -> dict[str, str]:
 
 
 def _classname_to_tool_name(class_name: str) -> str:
-    """``ScalpelExtractTool`` -> ``scalpel_extract``."""
+    """``ExtractTool`` -> ``extract``."""
     stripped = class_name[: -len("Tool")] if class_name.endswith("Tool") else class_name
     out: list[str] = []
     for i, ch in enumerate(stripped):

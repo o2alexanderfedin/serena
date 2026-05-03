@@ -9,7 +9,9 @@ def test_skill_has_yaml_frontmatter(fake_strategy_rust) -> None:
     facade = fake_strategy_rust.facades[0]  # split_file
     out = _render_skill_for_facade(fake_strategy_rust, facade)
     assert out.startswith("---\n")
-    assert "name: using-scalpel-split-file-rust\n" in out
+    # v2.0 wire-name cleanup (spec 2026-05-03 § 5.1): the ``scalpel-`` infix
+    # was dropped from skill filenames to match the unprefixed tool name.
+    assert "name: using-split-file-rust\n" in out
     assert "type: skill\n" in out
     assert "description:" in out
 
@@ -33,7 +35,8 @@ def test_skill_body_lists_primitive_chain(fake_strategy_rust) -> None:
 def test_skill_for_python(fake_strategy_python) -> None:
     facade = fake_strategy_python.facades[0]
     out = _render_skill_for_facade(fake_strategy_python, facade)
-    assert "name: using-scalpel-split-file-python\n" in out
+    # v2.0: ``scalpel-`` infix dropped (spec 2026-05-03 § 5.1).
+    assert "name: using-split-file-python\n" in out
 
 
 def test_skill_is_deterministic(fake_strategy_rust) -> None:
