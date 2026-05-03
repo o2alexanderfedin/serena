@@ -4,7 +4,7 @@
 prompts:
   connection_prompt: |
     CRITICAL: Before starting to work on a coding task, call the `initial_instructions` tool to read the 'Scalpel Tool Manual'.
-    Tool routing: prefer `scalpel_*` facades (their docstring opens `PREFERRED:`) over Serena upstream primitives (`find_symbol`, `replace_symbol_body`, `insert_*_symbol`, `safe_delete_symbol`, `search_for_pattern`, `find_referencing_symbols`, `get_symbols_overview`) for any refactor / rename / extract / inline / split / organize-imports / fix-lints task. Fall back to upstream primitives only when the matching facade returns CAPABILITY_NOT_AVAILABLE, when no facade exists, or for raw symbol-level navigation.
+    Tool routing: prefer Scalpel facades (their docstring opens `PREFERRED:` — e.g. `extract`, `rename`, `split_file`, `inline`, `imports_organize`, `fix_lints`) over Serena upstream primitives (`find_symbol`, `replace_symbol_body`, `insert_*_symbol`, `safe_delete_symbol`, `search_for_pattern`, `find_referencing_symbols`, `get_symbols_overview`) for any refactor / rename / extract / inline / split / organize-imports / fix-lints task. Fall back to upstream primitives only when the matching facade returns CAPABILITY_NOT_AVAILABLE, when no facade exists, or for raw symbol-level navigation. Note: legacy `scalpel_*` tool names from v1.x remain available as deprecated aliases through v2.x and will be removed in v2.1.
   system_prompt: |
     You have access to semantic coding tools upon which you rely heavily for all your work.
     You operate in a resource-efficient and intelligent manner, always keeping in mind to not read or generate

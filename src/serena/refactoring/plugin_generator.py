@@ -202,10 +202,21 @@ def _render_mcp_json(strategy: _StrategyLike) -> str:
     o2-scalpel-* plugins are installed simultaneously.
     """
 
-    server_name = f"scalpel-{strategy.language}"
+    # v2.0 wire-name cleanup (spec 2026-05-03 § 5.2): the ``mcpServers``
+    # JSON-key is the constant ``"lsp"`` (the server's role) so the wire
+    # namespace becomes ``mcp__plugin_o2-scalpel-<lang>_lsp__<verb>``
+    # instead of the v1.x ``mcp__plugin_o2-scalpel-<lang>_scalpel-<lang>__scalpel_<verb>``.
+    # The ``--server-name`` CLI arg stays per-language so:
+    #   (a) Claude Code's plugin manager still dedupes per-plugin args
+    #       arrays — different ``args`` => different plugins.
+    #   (b) The dashboard ``pgrep -f "--server-name scalpel-<lang>"`` and
+    #       update-command ``pgrep -f "--server-name scalpel-"`` patterns
+    #       in the generated commands keep working unchanged.
+    server_key = "lsp"
+    cli_server_name = f"scalpel-{strategy.language}"
     payload = {
         "mcpServers": {
-            server_name: {
+            server_key: {
                 "command": "uvx",
                 "args": [
                     "--from",
@@ -214,7 +225,7 @@ def _render_mcp_json(strategy: _StrategyLike) -> str:
                     "start-mcp-server",
                     "--project-from-cwd",
                     "--server-name",
-                    server_name,
+                    cli_server_name,
                 ],
                 "env": {},
             }
@@ -224,20 +235,25 @@ def _render_mcp_json(strategy: _StrategyLike) -> str:
 
 
 def _skill_name_for(strategy: _StrategyLike, facade: _FacadeLike) -> str:
-    """Compute the canonical skill name for a (strategy, facade) pair."""
+    """Compute the canonical skill name for a (strategy, facade) pair.
 
-    return f"using-scalpel-{facade.name.replace('_', '-')}-{strategy.language}"
+    v2.0 wire-name cleanup (spec 2026-05-03 § 5.1): the ``scalpel-`` infix
+    is dropped to match the v2.0 unprefixed tool name. The skill name is
+    user-facing on disk and in the plugin's skills directory.
+    """
+
+    return f"using-{facade.name.replace('_', '-')}-{strategy.language}"
 
 
 def _render_skill_for_facade(
     strategy: _StrategyLike, facade: _FacadeLike
 ) -> str:
-    """Render a single ``skills/using-scalpel-<facade>-<lang>.md`` file."""
+    """Render a single ``skills/using-<facade>-<lang>.md`` file."""
 
     skill_name = _skill_name_for(strategy, facade)
     description = (
         f"When user asks to {facade.summary.lower()} in {strategy.display_name}, "
-        f"use scalpel_{facade.name}"
+        f"use {facade.name}"
     )
     trigger_list = "\n".join(f'- "{p}"' for p in facade.trigger_phrases)
     primitive_list = "\n".join(
