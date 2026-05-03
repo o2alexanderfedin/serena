@@ -2,7 +2,7 @@
 
 Backs ``confirmation_mode='manual'`` for ``scalpel_dry_run_compose`` and the
 new ``scalpel_confirm_annotations`` MCP tool. When the LLM opts into manual
-review, ``ScalpelDryRunComposeTool`` writes a ``PendingTransaction`` to disk
+review, ``DryRunComposeTool`` writes a ``PendingTransaction`` to disk
 keyed by ``transaction_id``; ``scalpel_confirm_annotations`` reads it back,
 filters the underlying ``WorkspaceEdit`` by accepted ``AnnotationGroup``
 labels, and applies the filtered edit before discarding the pending entry.
@@ -57,7 +57,7 @@ class PendingTransaction(BaseModel):
     annotation groups to accept. ``workspace_edit`` is the raw LSP
     ``WorkspaceEdit`` dict whose ``changeAnnotations`` produced the
     ``groups`` projection — kept verbatim so
-    :class:`~serena.tools.scalpel_primitives.ScalpelConfirmAnnotationsTool`
+    :class:`~serena.tools.scalpel_primitives.ConfirmAnnotationsTool`
     can build a filtered edit (only the accepted groups' edits) and apply it.
     """
 

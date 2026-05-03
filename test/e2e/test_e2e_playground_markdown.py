@@ -10,10 +10,10 @@ All tests use the ``mcp_driver_playground_markdown`` fixture (conftest.py)
 which clones ``playground/markdown/`` into a per-test ``tmp_path``.
 
 Facade → Driver method mapping (all from ``_McpDriver``):
-- scalpel_rename_heading  → ``rename_heading(**kwargs)``  — marksman LSP
-- scalpel_split_doc       → ``split_doc(**kwargs)``       — pure-text
-- scalpel_extract_section → ``extract_section(**kwargs)`` — pure-text
-- scalpel_organize_links  → ``organize_links(**kwargs)``  — pure-text
+- rename_heading  → ``rename_heading(**kwargs)``  — marksman LSP
+- split_doc       → ``split_doc(**kwargs)``       — pure-text
+- extract_section → ``extract_section(**kwargs)`` — pure-text
+- organize_links  → ``organize_links(**kwargs)``  — pure-text
 
 The three pure-text facades (split_doc, extract_section, organize_links) do
 NOT require marksman on PATH. rename_heading drives marksman's
@@ -38,7 +38,7 @@ def test_playground_markdown_rename_heading(
 ) -> None:
     """Rename the "Authentication" heading in docs/api.md to "Auth".
 
-    Facade: scalpel_rename_heading.
+    Facade: rename_heading.
     The cross-file wiki-link ``[[Authentication]]`` in INDEX.md should also be
     updated to ``[[Auth]]`` by marksman's workspace-wide rename.
     """
@@ -109,7 +109,7 @@ def test_playground_markdown_split_doc(
 ) -> None:
     """Split docs/api.md along H2 headings into sibling files.
 
-    Facade: scalpel_split_doc.
+    Facade: split_doc.
     docs/api.md has H2 headings: Authentication, Endpoints, Data Models,
     Rate Limiting. After the split each section becomes a sibling .md file
     and api.md becomes a TOC of links.
@@ -176,7 +176,7 @@ def test_playground_markdown_extract_section(
 ) -> None:
     """Extract the "Getting Started" section from docs/tutorial.md.
 
-    Facade: scalpel_extract_section.
+    Facade: extract_section.
     After the extract: a new ``getting-started.md`` appears alongside
     tutorial.md; tutorial.md contains a link placeholder in its place.
 
@@ -241,7 +241,7 @@ def test_playground_markdown_organize_links(
 ) -> None:
     """Sort and deduplicate links in docs/links.md.
 
-    Facade: scalpel_organize_links.
+    Facade: organize_links.
     docs/links.md has wiki-links and markdown links in a non-alphabetical
     order with duplicates (``[[Authentication]]`` and ``[Tutorial](tutorial.md)``
     appear twice). After organize: wiki-links first (sorted), then markdown

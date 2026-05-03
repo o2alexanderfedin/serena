@@ -20,14 +20,14 @@ SMOKE_SCRIPT = REPO_ROOT / "scripts" / "stage_1i_uvx_smoke.sh"
 # Always-on scalpel tools per scope-report section 5.1 (subset that is
 # language-agnostic and ships at MVP regardless of strategy).
 EXPECTED_TOOLS_MIN: set[str] = {
-    "scalpel_split_file",
-    "scalpel_extract",
-    "scalpel_inline",
-    "scalpel_rename",
-    "scalpel_imports_organize",
-    "scalpel_capabilities_list",
-    "scalpel_apply_capability",
-    "scalpel_dry_run_compose",
+    "split_file",
+    "extract",
+    "inline",
+    "rename",
+    "imports_organize",
+    "capabilities_list",
+    "apply_capability",
+    "dry_run_compose",
 }
 
 

@@ -13,8 +13,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from serena.tools.scalpel_facades import (
-    ScalpelExpandMacroTool,
-    ScalpelVerifyAfterRefactorTool,
+    ExpandMacroTool,
+    VerifyAfterRefactorTool,
 )
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
@@ -33,14 +33,14 @@ def rust_workspace(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _make_expand(project_root: Path) -> ScalpelExpandMacroTool:
-    tool = ScalpelExpandMacroTool.__new__(ScalpelExpandMacroTool)
+def _make_expand(project_root: Path) -> ExpandMacroTool:
+    tool = ExpandMacroTool.__new__(ExpandMacroTool)
     tool.get_project_root = lambda: str(project_root)  # type: ignore[method-assign]
     return tool
 
 
-def _make_verify(project_root: Path) -> ScalpelVerifyAfterRefactorTool:
-    tool = ScalpelVerifyAfterRefactorTool.__new__(ScalpelVerifyAfterRefactorTool)
+def _make_verify(project_root: Path) -> VerifyAfterRefactorTool:
+    tool = VerifyAfterRefactorTool.__new__(VerifyAfterRefactorTool)
     tool.get_project_root = lambda: str(project_root)  # type: ignore[method-assign]
     return tool
 

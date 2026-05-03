@@ -7,7 +7,7 @@ Proves the :class:`Smt2Server` adapter can:
 
 Skips cleanly when ``dolmenls`` is not on PATH — the production wiring
 expects :class:`Smt2Installer` (Leaf B) to provision the binary via the
-``scalpel_install_lsp_servers`` MCP primitive (dry_run=True default,
+``install_lsp_servers`` MCP primitive (dry_run=True default,
 allow_install=True opt-in).
 
 Dolmenls is a **diagnostics-focused** LSP (per upstream

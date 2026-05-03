@@ -1,4 +1,4 @@
-"""T8 — ScalpelExecuteCommandTool: typed pass-through with whitelist."""
+"""T8 — ExecuteCommandTool: typed pass-through with whitelist."""
 
 from __future__ import annotations
 
@@ -20,19 +20,19 @@ def _reset_runtime() -> Iterator[None]:
 
 
 def _build_tool(project_root: Path):  # type: ignore[no-untyped-def]
-    from serena.tools.scalpel_primitives import ScalpelExecuteCommandTool
+    from serena.tools.scalpel_primitives import ExecuteCommandTool
 
     agent = MagicMock(name="SerenaAgent")
     agent.get_active_project_or_raise.return_value = MagicMock(
         project_root=str(project_root),
     )
-    return ScalpelExecuteCommandTool(agent=agent)
+    return ExecuteCommandTool(agent=agent)
 
 
 def test_tool_name_is_scalpel_execute_command() -> None:
-    from serena.tools.scalpel_primitives import ScalpelExecuteCommandTool
+    from serena.tools.scalpel_primitives import ExecuteCommandTool
 
-    assert ScalpelExecuteCommandTool.get_name_from_cls() == "scalpel_execute_command"
+    assert ExecuteCommandTool.get_name_from_cls() == "execute_command"
 
 
 def test_apply_unknown_command_returns_capability_not_available(tmp_path: Path) -> None:

@@ -1,4 +1,4 @@
-"""v1.9.2 Item C — shadow-workspace simulation for ``scalpel_dry_run_compose``.
+"""v1.9.2 Item C — shadow-workspace simulation for ``dry_run_compose``.
 
 Closes the v1.6 SHIP-B deferral. ``shadow_mode=True`` redirects each
 dry-run step to an isolated copy of the project so any side effect that
@@ -30,7 +30,7 @@ from typing import Any
 import pytest
 
 from serena.refactoring.checkpoints import CheckpointStore
-from serena.tools.scalpel_primitives import ScalpelDryRunComposeTool
+from serena.tools.scalpel_primitives import DryRunComposeTool
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
 
@@ -43,8 +43,8 @@ def _isolate_runtime() -> Iterator[None]:
     ScalpelRuntime.reset_for_testing()
 
 
-def _make_tool(project_root: Path) -> ScalpelDryRunComposeTool:
-    tool = ScalpelDryRunComposeTool.__new__(ScalpelDryRunComposeTool)
+def _make_tool(project_root: Path) -> DryRunComposeTool:
+    tool = DryRunComposeTool.__new__(DryRunComposeTool)
     tool.get_project_root = lambda: str(project_root)  # type: ignore[method-assign]
     return tool
 
@@ -71,7 +71,7 @@ def test_dry_run_shadow_keeps_live_workspace_untouched(tmp_path: Path) -> None:
     tool = _make_tool(workspace)
     raw = tool.apply(
         steps=[{
-            "tool": "scalpel_split_file",
+            "tool": "split_file",
             "args": {
                 "file": str(src),
                 "groups": {"target.py": ["move_b"]},
@@ -160,7 +160,7 @@ def test_dry_run_default_is_not_shadow_mode(tmp_path: Path) -> None:
     tool = _make_tool(workspace)
     raw = tool.apply(
         steps=[{
-            "tool": "scalpel_split_file",
+            "tool": "split_file",
             "args": {
                 "file": str(src),
                 "groups": {"target.py": ["move_b"]},

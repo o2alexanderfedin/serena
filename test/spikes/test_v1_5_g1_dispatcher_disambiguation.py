@@ -167,7 +167,7 @@ def test_dispatcher_title_match_routes_to_correct_action(tmp_path):
         return_value=fake_coord,
     ):
         out = _dispatch_single_kind_facade(
-            stage_name="scalpel_change_visibility",
+            stage_name="change_visibility",
             file=str(src),
             position={"line": 0, "character": 0},
             kind="refactor.rewrite.change_visibility",
@@ -205,7 +205,7 @@ def test_dispatcher_title_match_ambiguous_returns_envelope_no_disk_change(tmp_pa
         return_value=fake_coord,
     ):
         out = _dispatch_single_kind_facade(
-            stage_name="scalpel_change_visibility",
+            stage_name="change_visibility",
             file=str(src),
             position={"line": 0, "character": 0},
             kind="refactor.rewrite.change_visibility",
@@ -256,7 +256,7 @@ def test_python_dispatcher_title_match_routes_correctly(tmp_path):
         return_value=fake_coord,
     ):
         out = _python_dispatch_single_kind(
-            stage_name="scalpel_use_function",
+            stage_name="use_function",
             file=str(src),
             position={"line": 0, "character": 4},
             kind="refactor.inline",

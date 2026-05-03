@@ -483,7 +483,7 @@ class TestSupportsKindLspPrefixMatching:
     """v1.13.1 — LSP §3.18.1 kind hierarchy: a parent kind subsumes children.
 
     Regression: rust-analyzer advertises ``refactor.extract`` (family-level),
-    but ``scalpel_split_file`` queries ``supports_kind("rust", "refactor.extract.module")``.
+    but ``split_file`` queries ``supports_kind("rust", "refactor.extract.module")``.
     Pre-fix exact-membership returned False on every Rust split call, surfacing
     as CAPABILITY_NOT_AVAILABLE despite the operation being legal.
     """

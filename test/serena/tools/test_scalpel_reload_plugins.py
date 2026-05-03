@@ -1,4 +1,4 @@
-"""Stream 5 / Leaf 03 Task 3 — ``ScalpelReloadPluginsTool`` tests.
+"""Stream 5 / Leaf 03 Task 3 — ``ReloadPluginsTool`` tests.
 
 These tests bypass the full ``Tool.apply_ex`` lifecycle (it requires an
 agent + active project) and call ``apply`` directly; the cross-MCP
@@ -14,7 +14,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from serena.plugins.registry import PluginRegistry
-from serena.tools.scalpel_primitives import ScalpelReloadPluginsTool
+from serena.tools.scalpel_primitives import ReloadPluginsTool
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
 
@@ -37,7 +37,7 @@ def _make_plugin(plugin_dir: Path, *, id_: str) -> Path:
     return manifest_path
 
 
-def _build_tool(registry: PluginRegistry) -> ScalpelReloadPluginsTool:
+def _build_tool(registry: PluginRegistry) -> ReloadPluginsTool:
     """Inject a ``PluginRegistry`` into the ScalpelRuntime singleton.
 
     ``Tool.__init__`` requires an agent — we hand it a ``MagicMock``
@@ -45,7 +45,7 @@ def _build_tool(registry: PluginRegistry) -> ScalpelReloadPluginsTool:
     """
     runtime = ScalpelRuntime.instance()
     runtime.set_plugin_registry_for_testing(registry)
-    return ScalpelReloadPluginsTool(agent=MagicMock(name="SerenaAgent"))
+    return ReloadPluginsTool(agent=MagicMock(name="SerenaAgent"))
 
 
 def test_reload_tool_returns_clean_report_for_new_plugin(tmp_path: Path) -> None:

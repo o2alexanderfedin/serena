@@ -67,6 +67,6 @@ def test_plugin_manifest_rejects_uppercase_name() -> None:
 def test_skill_frontmatter_default_type_is_skill() -> None:
     sf = SkillFrontmatter(
         name="using-scalpel-split-file",
-        description="When user asks to split a file, use scalpel_split_file",
+        description="When user asks to split a file, use split_file",
     )
     assert sf.type == "skill"

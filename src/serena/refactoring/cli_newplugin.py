@@ -109,8 +109,8 @@ _LANGUAGE_METADATA: dict[str, _StrategyView] = {
     "markdown": _StrategyView(
         # v1.1.1 Leaf 01: marksman ``server`` subcommand drives the LSP over
         # stdio. The four facades below are the contract Leaf 02 will
-        # implement (``ScalpelRenameHeadingTool``, ``ScalpelSplitDocTool``,
-        # ``ScalpelExtractSectionTool``, ``ScalpelOrganizeLinksTool``); this
+        # implement (``RenameHeadingTool``, ``SplitDocTool``,
+        # ``ExtractSectionTool``, ``OrganizeLinksTool``); this
         # row only declares them so the plugin generator can render the
         # marketplace + skill trees ahead of facade-class wiring.
         language="markdown",

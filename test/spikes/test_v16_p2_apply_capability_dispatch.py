@@ -1,4 +1,4 @@
-"""v1.6 PR 3 / Plan 2 — Fix scalpel_apply_capability dispatcher.
+"""v1.6 PR 3 / Plan 2 — Fix apply_capability dispatcher.
 
 RED tests:
 1. ``test_dispatch_capability_not_available_returns_envelope`` — when
@@ -45,13 +45,13 @@ def _isolate_runtime() -> Iterator[None]:
 
 
 def _build_tool(project_root: Path):  # type: ignore[no-untyped-def]
-    from serena.tools.scalpel_primitives import ScalpelApplyCapabilityTool
+    from serena.tools.scalpel_primitives import ApplyCapabilityTool
 
     agent = MagicMock(name="SerenaAgent")
     agent.get_active_project_or_raise.return_value = MagicMock(
         project_root=str(project_root),
     )
-    return ScalpelApplyCapabilityTool(agent=agent)
+    return ApplyCapabilityTool(agent=agent)
 
 
 def _first_python_capability_id() -> str:

@@ -1,4 +1,4 @@
-"""Stage 2A T8 — ScalpelTransactionCommitTool tests."""
+"""Stage 2A T8 — TransactionCommitTool tests."""
 from __future__ import annotations
 
 import json
@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from serena.tools.scalpel_facades import ScalpelTransactionCommitTool
+from serena.tools.scalpel_facades import TransactionCommitTool
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
 
@@ -18,8 +18,8 @@ def reset_runtime():
     ScalpelRuntime.reset_for_testing()
 
 
-def _make_tool(project_root: Path) -> ScalpelTransactionCommitTool:
-    tool = ScalpelTransactionCommitTool.__new__(ScalpelTransactionCommitTool)
+def _make_tool(project_root: Path) -> TransactionCommitTool:
+    tool = TransactionCommitTool.__new__(TransactionCommitTool)
     tool.get_project_root = lambda: str(project_root)  # type: ignore[method-assign]
     return tool
 
@@ -39,10 +39,10 @@ def test_commit_replays_all_steps(tmp_path):
     runtime = ScalpelRuntime.instance()
     txn_store = runtime.transaction_store()
     raw_id = txn_store.begin()
-    txn_store.add_step(raw_id, {"tool": "scalpel_extract",
+    txn_store.add_step(raw_id, {"tool": "extract",
                                 "args": {"file": str(tmp_path / "x.py"),
                                          "target": "function"}})
-    txn_store.add_step(raw_id, {"tool": "scalpel_inline",
+    txn_store.add_step(raw_id, {"tool": "inline",
                                 "args": {"file": str(tmp_path / "x.py"),
                                          "target": "call"}})
     tool = _make_tool(tmp_path)
@@ -66,7 +66,7 @@ def test_commit_replays_all_steps(tmp_path):
     ))
     with patch.dict(
         "serena.tools.scalpel_facades._FACADE_DISPATCH",
-        {"scalpel_extract": fake_extract, "scalpel_inline": fake_inline},
+        {"extract": fake_extract, "inline": fake_inline},
         clear=False,
     ):
         out = tool.apply(transaction_id=f"txn_{raw_id}")
@@ -80,10 +80,10 @@ def test_commit_first_failing_step_aborts(tmp_path):
     runtime = ScalpelRuntime.instance()
     txn_store = runtime.transaction_store()
     raw_id = txn_store.begin()
-    txn_store.add_step(raw_id, {"tool": "scalpel_extract",
+    txn_store.add_step(raw_id, {"tool": "extract",
                                 "args": {"file": str(tmp_path / "x.py"),
                                          "target": "function"}})
-    txn_store.add_step(raw_id, {"tool": "scalpel_inline",
+    txn_store.add_step(raw_id, {"tool": "inline",
                                 "args": {"file": str(tmp_path / "x.py"),
                                          "target": "call"}})
     tool = _make_tool(tmp_path)
@@ -102,7 +102,7 @@ def test_commit_first_failing_step_aborts(tmp_path):
     second = MagicMock()
     with patch.dict(
         "serena.tools.scalpel_facades._FACADE_DISPATCH",
-        {"scalpel_extract": failing, "scalpel_inline": second},
+        {"extract": failing, "inline": second},
         clear=False,
     ):
         out = tool.apply(transaction_id=f"txn_{raw_id}")
@@ -117,7 +117,7 @@ def test_commit_preview_expired(tmp_path):
     txn_store = runtime.transaction_store()
     raw_id = txn_store.begin()
     # Insert a step so the empty-steps short-circuit doesn't fire first.
-    txn_store.add_step(raw_id, {"tool": "scalpel_extract", "args": {}})
+    txn_store.add_step(raw_id, {"tool": "extract", "args": {}})
     txn_store.set_expires_at(raw_id, 1.0)  # always-past
     tool = _make_tool(tmp_path)
     out = tool.apply(transaction_id=f"txn_{raw_id}")

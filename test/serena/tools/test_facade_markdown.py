@@ -2,22 +2,22 @@
 
 Four facades, one apply path each:
 
-  - ``scalpel_rename_heading`` — rename a heading and propagate to all
+  - ``rename_heading`` — rename a heading and propagate to all
     wiki-links via marksman's ``textDocument/rename``. Uses the
     coordinator merge_rename path stubbed via the
     ``MultiServerCoordinator.merge_rename`` mock.
 
-  - ``scalpel_split_doc`` — split-by-headings; pure file mutation,
+  - ``split_doc`` — split-by-headings; pure file mutation,
     delegates to ``markdown_doc_ops.split_doc_along_headings``.
 
-  - ``scalpel_extract_section`` — pull one section out into a new file,
+  - ``extract_section`` — pull one section out into a new file,
     delegating to ``markdown_doc_ops.extract_section``.
 
-  - ``scalpel_organize_links`` — sort + dedup the file's links,
+  - ``organize_links`` — sort + dedup the file's links,
     delegating to ``markdown_doc_ops.organize_markdown_links``.
 
 The latter three operate purely on the filesystem (no LSP boot
-needed); ``scalpel_rename_heading`` patches ``coordinator_for_facade``
+needed); ``rename_heading`` patches ``coordinator_for_facade``
 so the test never touches a real marksman.
 """
 
@@ -33,10 +33,10 @@ import pytest
 
 from serena.tools import scalpel_facades as facades_mod
 from serena.tools.scalpel_facades import (
-    ScalpelExtractSectionTool,
-    ScalpelOrganizeLinksTool,
-    ScalpelRenameHeadingTool,
-    ScalpelSplitDocTool,
+    ExtractSectionTool,
+    OrganizeLinksTool,
+    RenameHeadingTool,
+    SplitDocTool,
 )
 from serena.tools.scalpel_runtime import ScalpelRuntime
 from serena.tools.tools_base import Tool
@@ -66,7 +66,7 @@ def _build_tool(cls: type[_T], tmp_path: Path) -> _T:
 
 
 # ---------------------------------------------------------------------------
-# scalpel_split_doc
+# split_doc
 # ---------------------------------------------------------------------------
 
 
@@ -82,7 +82,7 @@ def test_split_doc_creates_subdocs_and_replaces_source(tmp_path: Path) -> None:
         "Install.\n",
         encoding="utf-8",
     )
-    tool = _build_tool(ScalpelSplitDocTool, tmp_path)
+    tool = _build_tool(SplitDocTool, tmp_path)
     payload = json.loads(tool.apply(file="guide.md", allow_out_of_workspace=True))
     assert payload["applied"] is True
 
@@ -101,7 +101,7 @@ def test_split_doc_creates_subdocs_and_replaces_source(tmp_path: Path) -> None:
 def test_split_doc_no_headings_returns_no_op(tmp_path: Path) -> None:
     src = tmp_path / "plain.md"
     src.write_text("Just prose.\n", encoding="utf-8")
-    tool = _build_tool(ScalpelSplitDocTool, tmp_path)
+    tool = _build_tool(SplitDocTool, tmp_path)
     payload = json.loads(tool.apply(file="plain.md", allow_out_of_workspace=True))
     assert payload["applied"] is False
     assert payload["no_op"] is True
@@ -113,7 +113,7 @@ def test_split_doc_dry_run_does_not_touch_files(tmp_path: Path) -> None:
     src = tmp_path / "guide.md"
     original = "# Intro\n\nHello.\n"
     src.write_text(original, encoding="utf-8")
-    tool = _build_tool(ScalpelSplitDocTool, tmp_path)
+    tool = _build_tool(SplitDocTool, tmp_path)
     payload = json.loads(
         tool.apply(file="guide.md", dry_run=True, allow_out_of_workspace=True),
     )
@@ -125,7 +125,7 @@ def test_split_doc_dry_run_does_not_touch_files(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# scalpel_extract_section
+# extract_section
 # ---------------------------------------------------------------------------
 
 
@@ -141,7 +141,7 @@ def test_extract_section_creates_target_and_links_source(tmp_path: Path) -> None
         "Install steps.\n",
         encoding="utf-8",
     )
-    tool = _build_tool(ScalpelExtractSectionTool, tmp_path)
+    tool = _build_tool(ExtractSectionTool, tmp_path)
     payload = json.loads(
         tool.apply(
             file="guide.md", heading="Setup", allow_out_of_workspace=True,
@@ -161,7 +161,7 @@ def test_extract_section_creates_target_and_links_source(tmp_path: Path) -> None
 def test_extract_section_unknown_heading_returns_failure(tmp_path: Path) -> None:
     src = tmp_path / "guide.md"
     src.write_text("# Intro\n\nHello.\n", encoding="utf-8")
-    tool = _build_tool(ScalpelExtractSectionTool, tmp_path)
+    tool = _build_tool(ExtractSectionTool, tmp_path)
     payload = json.loads(
         tool.apply(
             file="guide.md", heading="Missing", allow_out_of_workspace=True,
@@ -175,7 +175,7 @@ def test_extract_section_dry_run_does_not_touch_files(tmp_path: Path) -> None:
     src = tmp_path / "guide.md"
     original = "# Setup\n\nInstall steps.\n"
     src.write_text(original, encoding="utf-8")
-    tool = _build_tool(ScalpelExtractSectionTool, tmp_path)
+    tool = _build_tool(ExtractSectionTool, tmp_path)
     payload = json.loads(
         tool.apply(
             file="guide.md", heading="Setup",
@@ -188,7 +188,7 @@ def test_extract_section_dry_run_does_not_touch_files(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# scalpel_organize_links
+# organize_links
 # ---------------------------------------------------------------------------
 
 
@@ -201,7 +201,7 @@ def test_organize_links_sorts_wiki_first_then_markdown(tmp_path: Path) -> None:
         "[[wiki-aaa]]\n",
         encoding="utf-8",
     )
-    tool = _build_tool(ScalpelOrganizeLinksTool, tmp_path)
+    tool = _build_tool(OrganizeLinksTool, tmp_path)
     payload = json.loads(
         tool.apply(file="page.md", allow_out_of_workspace=True),
     )
@@ -219,7 +219,7 @@ def test_organize_links_no_links_returns_no_op(tmp_path: Path) -> None:
     src = tmp_path / "page.md"
     original = "# Just prose.\n\nNo links here.\n"
     src.write_text(original, encoding="utf-8")
-    tool = _build_tool(ScalpelOrganizeLinksTool, tmp_path)
+    tool = _build_tool(OrganizeLinksTool, tmp_path)
     payload = json.loads(
         tool.apply(file="page.md", allow_out_of_workspace=True),
     )
@@ -229,7 +229,7 @@ def test_organize_links_no_links_returns_no_op(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# scalpel_rename_heading
+# rename_heading
 # ---------------------------------------------------------------------------
 
 
@@ -276,7 +276,7 @@ def test_rename_heading_applies_marksman_workspace_edit(
         },
     }
     coord = _patch_marksman_rename(monkeypatch, workspace_edit)
-    tool = _build_tool(ScalpelRenameHeadingTool, tmp_path)
+    tool = _build_tool(RenameHeadingTool, tmp_path)
     payload = json.loads(
         tool.apply(
             file="guide.md", heading="Old Heading",
@@ -299,7 +299,7 @@ def test_rename_heading_marksman_returns_none_surfaces_failure(
     src = tmp_path / "guide.md"
     src.write_text("# Old Heading\n", encoding="utf-8")
     _patch_marksman_rename(monkeypatch, workspace_edit=None)
-    tool = _build_tool(ScalpelRenameHeadingTool, tmp_path)
+    tool = _build_tool(RenameHeadingTool, tmp_path)
     payload = json.loads(
         tool.apply(
             file="guide.md", heading="Old Heading",
@@ -330,7 +330,7 @@ def test_rename_heading_dry_run_does_not_touch_file(
         },
     }
     _patch_marksman_rename(monkeypatch, workspace_edit)
-    tool = _build_tool(ScalpelRenameHeadingTool, tmp_path)
+    tool = _build_tool(RenameHeadingTool, tmp_path)
     payload = json.loads(
         tool.apply(
             file="guide.md", heading="Old Heading",
@@ -347,7 +347,7 @@ def test_rename_heading_unknown_heading_surfaces_failure(
 ) -> None:
     src = tmp_path / "guide.md"
     src.write_text("# Different Heading\n", encoding="utf-8")
-    tool = _build_tool(ScalpelRenameHeadingTool, tmp_path)
+    tool = _build_tool(RenameHeadingTool, tmp_path)
     payload = json.loads(
         tool.apply(
             file="guide.md", heading="Missing", new_name="X",
@@ -366,10 +366,10 @@ def test_rename_heading_unknown_heading_surfaces_failure(
 def test_facades_appear_in_iter_subclasses() -> None:
     discovered = {cls.get_name_from_cls() for cls in iter_subclasses(Tool)}
     for expected in (
-        "scalpel_rename_heading",
-        "scalpel_split_doc",
-        "scalpel_extract_section",
-        "scalpel_organize_links",
+        "rename_heading",
+        "split_doc",
+        "extract_section",
+        "organize_links",
     ):
         assert expected in discovered, (
             f"{expected} not found in iter_subclasses(Tool)"
@@ -378,12 +378,12 @@ def test_facades_appear_in_iter_subclasses() -> None:
 
 def test_facade_class_names_snake_case() -> None:
     assert (
-        ScalpelRenameHeadingTool.get_name_from_cls() == "scalpel_rename_heading"
+        RenameHeadingTool.get_name_from_cls() == "rename_heading"
     )
-    assert ScalpelSplitDocTool.get_name_from_cls() == "scalpel_split_doc"
+    assert SplitDocTool.get_name_from_cls() == "split_doc"
     assert (
-        ScalpelExtractSectionTool.get_name_from_cls() == "scalpel_extract_section"
+        ExtractSectionTool.get_name_from_cls() == "extract_section"
     )
     assert (
-        ScalpelOrganizeLinksTool.get_name_from_cls() == "scalpel_organize_links"
+        OrganizeLinksTool.get_name_from_cls() == "organize_links"
     )

@@ -1,4 +1,4 @@
-"""T3 — ScalpelCapabilitiesListTool: language filter, kind filter, descriptors."""
+"""T3 — CapabilitiesListTool: language filter, kind filter, descriptors."""
 
 from __future__ import annotations
 
@@ -20,16 +20,16 @@ def reset_runtime() -> Iterator[None]:
 def _build_tool():  # type: ignore[no-untyped-def]
     from unittest.mock import MagicMock
 
-    from serena.tools.scalpel_primitives import ScalpelCapabilitiesListTool
+    from serena.tools.scalpel_primitives import CapabilitiesListTool
 
     agent = MagicMock(name="SerenaAgent")
-    return ScalpelCapabilitiesListTool(agent=agent)
+    return CapabilitiesListTool(agent=agent)
 
 
 def test_tool_name_is_scalpel_capabilities_list() -> None:
-    from serena.tools.scalpel_primitives import ScalpelCapabilitiesListTool
+    from serena.tools.scalpel_primitives import CapabilitiesListTool
 
-    assert ScalpelCapabilitiesListTool.get_name_from_cls() == "scalpel_capabilities_list"
+    assert CapabilitiesListTool.get_name_from_cls() == "capabilities_list"
 
 
 def test_apply_returns_json_array_of_descriptors() -> None:

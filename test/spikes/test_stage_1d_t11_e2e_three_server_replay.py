@@ -207,7 +207,7 @@ async def test_log_replay_round_trip_after_three_merges(tmp_path):
     }
     log = EditAttributionLog(project_root=tmp_path)
     for i in range(3):
-        await log.append(checkpoint_id=f"ckpt_{i}", tool="scalpel_apply_capability",
+        await log.append(checkpoint_id=f"ckpt_{i}", tool="apply_capability",
                          server="ruff", edit=edit)
     records = list(log.replay())
     assert len(records) == 3

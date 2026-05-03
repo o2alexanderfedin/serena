@@ -2,9 +2,9 @@
 
 8 RED tests for the small behavior changes that ride along the doc batch:
 
-- 3 ``ScalpelExpandMacroTool.dry_run`` honoring tests (default applies, dry_run
+- 3 ``ExpandMacroTool.dry_run`` honoring tests (default applies, dry_run
   short-circuits and returns a preview token).
-- 3 ``ScalpelVerifyAfterRefactorTool.dry_run`` honoring tests (skip flycheck,
+- 3 ``VerifyAfterRefactorTool.dry_run`` honoring tests (skip flycheck,
   skip runnables, return preview token).
 - 3 threading tests (``generate_from_undefined.target_kind``,
   ``ignore_diagnostic.rule``, ``tidy_structure.scope``) — assert the post-merge
@@ -26,11 +26,11 @@ import pytest
 
 from serena.refactoring.checkpoints import CheckpointStore
 from serena.tools.scalpel_facades import (
-    ScalpelExpandMacroTool,
-    ScalpelGenerateFromUndefinedTool,
-    ScalpelIgnoreDiagnosticTool,
-    ScalpelTidyStructureTool,
-    ScalpelVerifyAfterRefactorTool,
+    ExpandMacroTool,
+    GenerateFromUndefinedTool,
+    IgnoreDiagnosticTool,
+    TidyStructureTool,
+    VerifyAfterRefactorTool,
 )
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
@@ -60,7 +60,7 @@ def test_expand_macro_dry_run_returns_applied_false_with_preview_token(
 ) -> None:
     src = tmp_path / "lib.rs"
     src.write_text('println!("hi");\n')
-    tool = _make_tool(ScalpelExpandMacroTool, tmp_path)
+    tool = _make_tool(ExpandMacroTool, tmp_path)
     coord = MagicMock()
 
     expand_calls: list[Any] = []
@@ -96,7 +96,7 @@ def test_expand_macro_default_apply_true_returns_expansion(
 ) -> None:
     src = tmp_path / "lib.rs"
     src.write_text('println!("hi");\n')
-    tool = _make_tool(ScalpelExpandMacroTool, tmp_path)
+    tool = _make_tool(ExpandMacroTool, tmp_path)
     coord = MagicMock()
 
     async def _expand(**kwargs):
@@ -146,7 +146,7 @@ def _verify_coord_with_call_log() -> tuple[MagicMock, list[str]]:
 def test_verify_dry_run_skips_flycheck_call(tmp_path: Path) -> None:
     src = tmp_path / "lib.rs"
     src.write_text("\n")
-    tool = _make_tool(ScalpelVerifyAfterRefactorTool, tmp_path)
+    tool = _make_tool(VerifyAfterRefactorTool, tmp_path)
     coord, calls = _verify_coord_with_call_log()
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
@@ -161,7 +161,7 @@ def test_verify_dry_run_skips_flycheck_call(tmp_path: Path) -> None:
 def test_verify_dry_run_skips_runnables_call(tmp_path: Path) -> None:
     src = tmp_path / "lib.rs"
     src.write_text("\n")
-    tool = _make_tool(ScalpelVerifyAfterRefactorTool, tmp_path)
+    tool = _make_tool(VerifyAfterRefactorTool, tmp_path)
     coord, calls = _verify_coord_with_call_log()
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
@@ -178,7 +178,7 @@ def test_verify_dry_run_returns_preview_token_no_findings(
 ) -> None:
     src = tmp_path / "lib.rs"
     src.write_text("\n")
-    tool = _make_tool(ScalpelVerifyAfterRefactorTool, tmp_path)
+    tool = _make_tool(VerifyAfterRefactorTool, tmp_path)
     coord, _calls = _verify_coord_with_call_log()
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
@@ -214,7 +214,7 @@ def test_generate_from_undefined_threads_target_kind_to_action_filter(
 ) -> None:
     src = tmp_path / "calc.py"
     src.write_text("from .x import y\n")
-    tool = _make_tool(ScalpelGenerateFromUndefinedTool, tmp_path)
+    tool = _make_tool(GenerateFromUndefinedTool, tmp_path)
     coord = MagicMock()
     coord.supports_kind = MagicMock(return_value=True)
 
@@ -265,7 +265,7 @@ def test_ignore_diagnostic_threads_rule_to_action_filter(
 ) -> None:
     src = tmp_path / "calc.py"
     src.write_text("import os\n")
-    tool = _make_tool(ScalpelIgnoreDiagnosticTool, tmp_path)
+    tool = _make_tool(IgnoreDiagnosticTool, tmp_path)
     coord = MagicMock()
     coord.supports_kind = MagicMock(return_value=True)
 
@@ -323,7 +323,7 @@ def test_tidy_structure_threads_scope_to_kind_restrict(
 ) -> None:
     src = tmp_path / "lib.rs"
     src.write_text("struct S { a: i32, b: i32 }\n")
-    tool = _make_tool(ScalpelTidyStructureTool, tmp_path)
+    tool = _make_tool(TidyStructureTool, tmp_path)
     coord = MagicMock()
     coord.supports_kind = MagicMock(return_value=True)
 

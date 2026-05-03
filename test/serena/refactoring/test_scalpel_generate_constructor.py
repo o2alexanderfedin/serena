@@ -1,4 +1,4 @@
-"""v1.5 Phase 2 — ``ScalpelGenerateConstructorTool`` unit tests.
+"""v1.5 Phase 2 — ``GenerateConstructorTool`` unit tests.
 
 The Java e2e fixture (``playground/java/``) is **not yet created**, so
 this Phase-2 test file ships **unit-only** with mocked jdtls responses.
@@ -22,7 +22,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from serena.tools.scalpel_facades import ScalpelGenerateConstructorTool
+from serena.tools.scalpel_facades import GenerateConstructorTool
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
 
@@ -33,8 +33,8 @@ def _reset_runtime() -> Iterator[None]:
     ScalpelRuntime.reset_for_testing()
 
 
-def _make_tool(project_root: Path) -> ScalpelGenerateConstructorTool:
-    tool = ScalpelGenerateConstructorTool.__new__(ScalpelGenerateConstructorTool)
+def _make_tool(project_root: Path) -> GenerateConstructorTool:
+    tool = GenerateConstructorTool.__new__(GenerateConstructorTool)
     tool.get_project_root = lambda: str(project_root)  # type: ignore[method-assign]
     return tool
 

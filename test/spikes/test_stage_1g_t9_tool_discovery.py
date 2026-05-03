@@ -8,78 +8,78 @@ from unittest.mock import MagicMock
 
 # Stage 1G — 8 always-on primitive tools.
 _STAGE_1G_NAMES: frozenset[str] = frozenset({
-    "scalpel_capabilities_list",
-    "scalpel_capability_describe",
-    "scalpel_apply_capability",
-    "scalpel_dry_run_compose",
-    "scalpel_rollback",
-    "scalpel_transaction_rollback",
-    "scalpel_workspace_health",
-    "scalpel_execute_command",
+    "capabilities_list",
+    "capability_describe",
+    "apply_capability",
+    "dry_run_compose",
+    "rollback",
+    "transaction_rollback",
+    "workspace_health",
+    "execute_command",
 })
 
 # Stage 2A — 5 ergonomic facades + 13th always-on transaction commit.
 _STAGE_2A_NAMES: frozenset[str] = frozenset({
-    "scalpel_split_file",
-    "scalpel_extract",
-    "scalpel_inline",
-    "scalpel_rename",
-    "scalpel_imports_organize",
-    "scalpel_transaction_commit",
+    "split_file",
+    "extract",
+    "inline",
+    "rename",
+    "imports_organize",
+    "transaction_commit",
 })
 
 # Stage 3 (v0.2.0) — 12 Rust + 8 Python ergonomic facades.
 _STAGE_3_NAMES: frozenset[str] = frozenset({
     # Rust Wave A
-    "scalpel_convert_module_layout",
-    "scalpel_change_visibility",
-    "scalpel_tidy_structure",
-    "scalpel_change_type_shape",
+    "convert_module_layout",
+    "change_visibility",
+    "tidy_structure",
+    "change_type_shape",
     # Rust Wave B
-    "scalpel_change_return_type",
-    "scalpel_complete_match_arms",
-    "scalpel_extract_lifetime",
-    "scalpel_expand_glob_imports",
+    "change_return_type",
+    "complete_match_arms",
+    "extract_lifetime",
+    "expand_glob_imports",
     # Rust Wave C
-    "scalpel_generate_trait_impl_scaffold",
-    "scalpel_generate_member",
-    "scalpel_expand_macro",
-    "scalpel_verify_after_refactor",
+    "generate_trait_impl_scaffold",
+    "generate_member",
+    "expand_macro",
+    "verify_after_refactor",
     # Python Wave A (pylsp-rope)
-    "scalpel_convert_to_method_object",
-    "scalpel_local_to_field",
-    "scalpel_use_function",
-    "scalpel_introduce_parameter",
+    "convert_to_method_object",
+    "local_to_field",
+    "use_function",
+    "introduce_parameter",
     # Python Wave B (multi-source)
-    "scalpel_generate_from_undefined",
-    "scalpel_auto_import_specialized",
-    "scalpel_fix_lints",
-    "scalpel_ignore_diagnostic",
+    "generate_from_undefined",
+    "auto_import_specialized",
+    "fix_lints",
+    "ignore_diagnostic",
 })
 
 # v1.1 Stream 5 — additional always-on primitives + facades.
 _V11_NAMES: frozenset[str] = frozenset({
-    "scalpel_reload_plugins",  # Leaf 03 — Q10 explicit-refresh
-    "scalpel_confirm_annotations",  # Leaf 06 — ChangeAnnotation review gate
-    "scalpel_convert_to_async",  # Leaf 07 — AST-based async conversion
-    "scalpel_annotate_return_type",  # Leaf 07 — basedpyright inlay-hint inference
-    "scalpel_convert_from_relative_imports",  # Leaf 07 — rope relatives_to_absolutes
+    "reload_plugins",  # Leaf 03 — Q10 explicit-refresh
+    "confirm_annotations",  # Leaf 06 — ChangeAnnotation review gate
+    "convert_to_async",  # Leaf 07 — AST-based async conversion
+    "annotate_return_type",  # Leaf 07 — basedpyright inlay-hint inference
+    "convert_from_relative_imports",  # Leaf 07 — rope relatives_to_absolutes
 })
 
 # v1.1.1 — markdown stream (single-LSP marksman; 4 facades + installer primitive).
 _V11_1_NAMES: frozenset[str] = frozenset({
-    "scalpel_rename_heading",  # Leaf 02 — marksman textDocument/rename
-    "scalpel_split_doc",  # Leaf 02 — split a doc along H1/H2 boundaries
-    "scalpel_extract_section",  # Leaf 02 — extract one section into a sibling file
-    "scalpel_organize_links",  # Leaf 02 — sort + dedup wiki + markdown links
-    "scalpel_install_lsp_servers",  # Leaf 03 — LSP installer infra (marksman PoC)
+    "rename_heading",  # Leaf 02 — marksman textDocument/rename
+    "split_doc",  # Leaf 02 — split a doc along H1/H2 boundaries
+    "extract_section",  # Leaf 02 — extract one section into a sibling file
+    "organize_links",  # Leaf 02 — sort + dedup wiki + markdown links
+    "install_lsp_servers",  # Leaf 03 — LSP installer infra (marksman PoC)
 })
 
 # v1.5 P2 — Java facade stream (single-LSP jdtls).
 _V15_P2_NAMES: frozenset[str] = frozenset({
-    "scalpel_generate_constructor",  # P2 — jdtls source.generate.constructor
-    "scalpel_override_methods",  # P2 — jdtls source.generate.overrideMethods
-    # NOTE: scalpel_extract grew a Java arm in P2 but the tool name is unchanged
+    "generate_constructor",  # P2 — jdtls source.generate.constructor
+    "override_methods",  # P2 — jdtls source.generate.overrideMethods
+    # NOTE: extract grew a Java arm in P2 but the tool name is unchanged
     # so it stays in _STAGE_2A_NAMES.
 })
 
@@ -95,26 +95,26 @@ EXPECTED_NAMES: frozenset[str] = (
 
 def test_all_eight_tools_appear_in_iter_subclasses() -> None:
     from serena.tools import (  # noqa: F401 — populates Tool subclass registry
-        ScalpelApplyCapabilityTool,
-        ScalpelCapabilitiesListTool,
-        ScalpelCapabilityDescribeTool,
-        ScalpelDryRunComposeTool,
-        ScalpelExecuteCommandTool,
-        ScalpelRollbackTool,
-        ScalpelTransactionRollbackTool,
-        ScalpelWorkspaceHealthTool,
+        ApplyCapabilityTool,
+        CapabilitiesListTool,
+        CapabilityDescribeTool,
+        DryRunComposeTool,
+        ExecuteCommandTool,
+        RollbackTool,
+        TransactionRollbackTool,
+        WorkspaceHealthTool,
     )
 
     # Reference each so import isn't unused.
     for sym in (
-        ScalpelApplyCapabilityTool,
-        ScalpelCapabilitiesListTool,
-        ScalpelCapabilityDescribeTool,
-        ScalpelDryRunComposeTool,
-        ScalpelExecuteCommandTool,
-        ScalpelRollbackTool,
-        ScalpelTransactionRollbackTool,
-        ScalpelWorkspaceHealthTool,
+        ApplyCapabilityTool,
+        CapabilitiesListTool,
+        CapabilityDescribeTool,
+        DryRunComposeTool,
+        ExecuteCommandTool,
+        RollbackTool,
+        TransactionRollbackTool,
+        WorkspaceHealthTool,
     ):
         assert sym is not None
     from serena.tools.tools_base import Tool
@@ -128,25 +128,25 @@ def test_all_eight_tools_appear_in_iter_subclasses() -> None:
 def test_each_apply_docstring_is_under_thirty_words() -> None:
     """§5.4 router-signage rule: <=30 words per apply docstring."""
     from serena.tools import (
-        ScalpelApplyCapabilityTool,
-        ScalpelCapabilitiesListTool,
-        ScalpelCapabilityDescribeTool,
-        ScalpelDryRunComposeTool,
-        ScalpelExecuteCommandTool,
-        ScalpelRollbackTool,
-        ScalpelTransactionRollbackTool,
-        ScalpelWorkspaceHealthTool,
+        ApplyCapabilityTool,
+        CapabilitiesListTool,
+        CapabilityDescribeTool,
+        DryRunComposeTool,
+        ExecuteCommandTool,
+        RollbackTool,
+        TransactionRollbackTool,
+        WorkspaceHealthTool,
     )
 
     classes = [
-        ScalpelApplyCapabilityTool,
-        ScalpelCapabilitiesListTool,
-        ScalpelCapabilityDescribeTool,
-        ScalpelDryRunComposeTool,
-        ScalpelExecuteCommandTool,
-        ScalpelRollbackTool,
-        ScalpelTransactionRollbackTool,
-        ScalpelWorkspaceHealthTool,
+        ApplyCapabilityTool,
+        CapabilitiesListTool,
+        CapabilityDescribeTool,
+        DryRunComposeTool,
+        ExecuteCommandTool,
+        RollbackTool,
+        TransactionRollbackTool,
+        WorkspaceHealthTool,
     ]
     for cls in classes:
         doc = cls.apply.__doc__ or ""
@@ -176,27 +176,53 @@ def test_make_mcp_tool_succeeds_for_every_class() -> None:
 
 
 def test_no_collision_with_serena_builtin_tool_names() -> None:
-    """§5.3 anti-collision: scalpel_* never reuses an existing serena name."""
+    """§5.3 anti-collision: Scalpel facade/primitive names never reuse an
+    existing Serena upstream name.
+
+    v2.0 wire-name cleanup (spec 2026-05-03 § 5.1): Scalpel facade classes
+    no longer carry a ``Scalpel`` prefix, so we partition by source-module
+    instead of class-name prefix. Other Serena tool modules
+    (``file_tools``, ``symbol_tools``, ``memory_tools``, ``config_tools``,
+    ``workflow_tools``, etc.) MUST NOT register a name that collides with
+    a Scalpel facade.
+    """
     from serena.tools.tools_base import Tool
     from serena.util.inspection import iter_subclasses
 
+    _SCALPEL_MODULES = {
+        "serena.tools.scalpel_facades",
+        "serena.tools.scalpel_primitives",
+    }
     serena_names = {
-        cls.get_name_from_cls() for cls in iter_subclasses(Tool)
-        if not cls.get_name_from_cls().startswith("scalpel_")
+        cls.get_name_from_cls()
+        for cls in iter_subclasses(Tool)
+        if cls.__module__ not in _SCALPEL_MODULES
     }
     assert EXPECTED_NAMES.isdisjoint(serena_names)
 
 
 def test_no_emergency_legacy_aliases_pollute_namespace() -> None:
-    """Stage 1G ships exactly 8 scalpel_* names; nothing more."""
+    """Scalpel facade/primitive modules ship exactly the EXPECTED_NAMES
+    set, no more, no less.
+
+    v2.0 (spec 2026-05-03 § 5.1): partition by module, not by class-name
+    prefix. Legacy ``scalpel_<verb>`` aliases live ONLY in the
+    ``ToolRegistry`` deprecation alias map, never as their own class.
+    """
     from serena.tools.tools_base import Tool
     from serena.util.inspection import iter_subclasses
 
+    _SCALPEL_MODULES = {
+        "serena.tools.scalpel_facades",
+        "serena.tools.scalpel_primitives",
+    }
     scalpel_names = {
-        cls.get_name_from_cls() for cls in iter_subclasses(Tool)
-        if cls.get_name_from_cls().startswith("scalpel_")
+        cls.get_name_from_cls()
+        for cls in iter_subclasses(Tool)
+        if cls.__module__ in _SCALPEL_MODULES
     }
     assert scalpel_names == EXPECTED_NAMES, (
-        f"Unexpected scalpel_* tools at Stage 1G close: "
-        f"{scalpel_names - EXPECTED_NAMES}"
+        f"Scalpel facade/primitive class-name set drifted from "
+        f"EXPECTED_NAMES; extras={scalpel_names - EXPECTED_NAMES}, "
+        f"missing={EXPECTED_NAMES - scalpel_names}"
     )

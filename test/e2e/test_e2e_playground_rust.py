@@ -12,11 +12,11 @@ which clones ``playground/rust/`` into a per-test ``tmp_path`` with ``target/``
 stripped so rust-analyzer always indexes a clean tree.
 
 Facade → Driver method mapping (all from ``_McpDriver``):
-- scalpel_split_file        → ``split_file(**kwargs)``
-- scalpel_rename            → ``rename(**kwargs)``
-- scalpel_extract           → ``extract(**kwargs)``
-- scalpel_change_visibility → ``change_visibility(**kwargs)``
-- scalpel_inline            → ``inline(**kwargs)``
+- split_file        → ``split_file(**kwargs)``
+- rename            → ``rename(**kwargs)``
+- extract           → ``extract(**kwargs)``
+- change_visibility → ``change_visibility(**kwargs)``
+- inline            → ``inline(**kwargs)``
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ def test_playground_rust_split(
 ) -> None:
     """Split calc/src/lib.rs inline modules ast/parser/eval into sibling files.
 
-    Facade: scalpel_split_file.
+    Facade: split_file.
     After the refactor: ast.rs, parser.rs, and eval.rs must exist alongside
     the original lib.rs in calc/src/.
     """
@@ -89,7 +89,7 @@ def test_playground_rust_rename(
 ) -> None:
     """Rename parser::parse_expr to parse_expression across the workspace.
 
-    Facade: scalpel_rename.
+    Facade: rename.
     After the refactor: the definition and all call sites must use the new name.
     """
     del rust_analyzer_bin
@@ -132,7 +132,7 @@ def test_playground_rust_extract(
 ) -> None:
     """Extract the `a + b` expression in eval::eval into a helper function.
 
-    Facade: scalpel_extract.
+    Facade: extract.
     Target expression: `let result = a + b;` in calc/src/lib.rs.
     The range covers lines 83-84 (0-indexed) where the expression lives.
     After the refactor: a new function (e.g. `add_values`) must appear in the file.
@@ -191,7 +191,7 @@ def test_playground_rust_change_visibility(
 ) -> None:
     """Promote pub(super) fn promote_to_public to pub in calc/src/visibility.rs.
 
-    Facade: scalpel_change_visibility.
+    Facade: change_visibility.
     Target: line 13 (1-indexed) = line 12 (0-indexed), character 0
     (`pub(super) fn promote_to_public`).
     After the refactor: the function must be declared `pub fn`.
@@ -244,7 +244,7 @@ def test_playground_rust_inline(
 ) -> None:
     """Inline sum_helper into its single call site in report (lints/src/lib.rs).
 
-    Facade: scalpel_inline.
+    Facade: inline.
     Target: the call `sum_helper(items)` at line 21 (1-indexed) = 20 (0-indexed),
     character 4 where `sum_helper` starts in the body of `report`.
     After the refactor: sum_helper definition is removed; report's body is direct.
@@ -336,7 +336,7 @@ def test_playground_rust_extract_lifetime(
 ) -> None:
     """Introduce an explicit lifetime on ``first_word`` in types/lifetimes.rs.
 
-    Facade: scalpel_extract_lifetime.
+    Facade: extract_lifetime.
     Target: the return-type ``&str`` token at line 13 (1-indexed) = 12 (0-indexed),
     column 30 in types/src/lifetimes.rs.
     After the refactor: the signature must contain a lifetime parameter (e.g. ``'a``).
@@ -386,7 +386,7 @@ def test_playground_rust_complete_match_arms(
 ) -> None:
     """Replace the wildcard arm in ``describe`` with all Direction variants.
 
-    Facade: scalpel_complete_match_arms.
+    Facade: complete_match_arms.
     Target: the ``match`` keyword at line 24 (1-indexed) = 23 (0-indexed),
     column 4 in types/src/arms.rs.
     After the refactor: all four Direction variants must appear in arms.rs.
@@ -439,7 +439,7 @@ def test_playground_rust_change_return_type(
 ) -> None:
     """Wrap the return type of ``square`` from ``i32`` to ``Option<i32>``.
 
-    Facade: scalpel_change_return_type.
+    Facade: change_return_type.
     Target: the ``i32`` return-type token at line 12 (1-indexed) = 11 (0-indexed),
     column 25 in types/src/returns.rs.
     After the refactor: the signature must contain ``Option``.
@@ -489,7 +489,7 @@ def test_playground_rust_change_type_shape(
 ) -> None:
     """Convert the named struct ``Point`` to a tuple struct.
 
-    Facade: scalpel_change_type_shape.
+    Facade: change_type_shape.
     Target: the ``Point`` identifier at line 14 (1-indexed) = 13 (0-indexed),
     column 11 in types/src/shapes.rs.
     After the refactor: the named-field form must be gone; tuple form present.
@@ -543,7 +543,7 @@ def test_playground_rust_generate_member(
 ) -> None:
     """Generate a getter for the ``value`` field on ``Counter``.
 
-    Facade: scalpel_generate_member.
+    Facade: generate_member.
     Target: the ``value`` field at line 14 (1-indexed) = 13 (0-indexed),
     column 8 in types/src/member.rs.
     After the refactor: a ``fn value`` getter method must appear in member.rs.
@@ -593,7 +593,7 @@ def test_playground_rust_generate_trait_impl_scaffold(
 ) -> None:
     """Generate an ``impl Describable for Widget`` scaffold.
 
-    Facade: scalpel_generate_trait_impl_scaffold.
+    Facade: generate_trait_impl_scaffold.
     Target: the ``Widget`` type name at line 23 (1-indexed) = 22 (0-indexed),
     column 11 in types/src/traits.rs.
     After the refactor: an ``impl Describable for Widget`` block must appear.
@@ -643,7 +643,7 @@ def test_playground_rust_expand_glob_imports(
 ) -> None:
     """Expand ``use std::collections::*;`` into explicit names in types/globs.rs.
 
-    Facade: scalpel_expand_glob_imports.
+    Facade: expand_glob_imports.
     Target: the ``*`` token at line 9 (1-indexed) = 8 (0-indexed),
     column 22 in types/src/globs.rs.
     After the refactor: the glob ``*`` must be gone; explicit names present.

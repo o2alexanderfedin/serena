@@ -20,7 +20,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from serena.tools.scalpel_facades import ScalpelGenerateFromUndefinedTool
+from serena.tools.scalpel_facades import GenerateFromUndefinedTool
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
 
@@ -38,8 +38,8 @@ def python_workspace(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _make_tool(project_root: Path) -> ScalpelGenerateFromUndefinedTool:
-    tool = ScalpelGenerateFromUndefinedTool.__new__(ScalpelGenerateFromUndefinedTool)
+def _make_tool(project_root: Path) -> GenerateFromUndefinedTool:
+    tool = GenerateFromUndefinedTool.__new__(GenerateFromUndefinedTool)
     tool.get_project_root = lambda: str(project_root)  # type: ignore[method-assign]
     return tool
 

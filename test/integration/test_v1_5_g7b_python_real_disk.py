@@ -13,16 +13,16 @@ Discipline (same as G7-A):
     end-to-end without requiring pylsp / ruff / basedpyright on PATH.
 
 Facades covered (10):
-  1. ScalpelInlineTool
-  2. ScalpelImportsOrganizeTool
-  3. ScalpelConvertToMethodObjectTool
-  4. ScalpelLocalToFieldTool
-  5. ScalpelUseFunctionTool
-  6. ScalpelIntroduceParameterTool
-  7. ScalpelGenerateFromUndefinedTool
-  8. ScalpelAutoImportSpecializedTool
-  9. ScalpelFixLintsTool
-  10. ScalpelIgnoreDiagnosticTool
+  1. InlineTool
+  2. ImportsOrganizeTool
+  3. ConvertToMethodObjectTool
+  4. LocalToFieldTool
+  5. UseFunctionTool
+  6. IntroduceParameterTool
+  7. GenerateFromUndefinedTool
+  8. AutoImportSpecializedTool
+  9. FixLintsTool
+  10. IgnoreDiagnosticTool
 
 Authored-by: AI Hive®.
 """
@@ -37,16 +37,16 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from serena.tools.scalpel_facades import (
-    ScalpelAutoImportSpecializedTool,
-    ScalpelConvertToMethodObjectTool,
-    ScalpelFixLintsTool,
-    ScalpelGenerateFromUndefinedTool,
-    ScalpelIgnoreDiagnosticTool,
-    ScalpelImportsOrganizeTool,
-    ScalpelInlineTool,
-    ScalpelIntroduceParameterTool,
-    ScalpelLocalToFieldTool,
-    ScalpelUseFunctionTool,
+    AutoImportSpecializedTool,
+    ConvertToMethodObjectTool,
+    FixLintsTool,
+    GenerateFromUndefinedTool,
+    IgnoreDiagnosticTool,
+    ImportsOrganizeTool,
+    InlineTool,
+    IntroduceParameterTool,
+    LocalToFieldTool,
+    UseFunctionTool,
 )
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
@@ -122,7 +122,7 @@ def _insert_edit(uri: str, line: int, ch: int, text: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# 1. ScalpelInlineTool — single_call_site, position-driven
+# 1. InlineTool — single_call_site, position-driven
 # ---------------------------------------------------------------------------
 
 
@@ -145,7 +145,7 @@ def test_g7b_inline_real_disk_single_call_site(tmp_path: Path) -> None:
             src.as_uri(), 4, 11, 4, 19, "42",
         )},
     )
-    tool = _make_tool(ScalpelInlineTool, tmp_path)
+    tool = _make_tool(InlineTool, tmp_path)
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=coord,
@@ -168,7 +168,7 @@ def test_g7b_inline_real_disk_single_call_site(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 2. ScalpelImportsOrganizeTool — remove_unused only
+# 2. ImportsOrganizeTool — remove_unused only
 # ---------------------------------------------------------------------------
 
 
@@ -190,7 +190,7 @@ def test_g7b_imports_organize_real_disk_remove_unused(tmp_path: Path) -> None:
             src.as_uri(), 2, 0, 3, 0, "",
         )},
     )
-    tool = _make_tool(ScalpelImportsOrganizeTool, tmp_path)
+    tool = _make_tool(ImportsOrganizeTool, tmp_path)
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=coord,
@@ -212,7 +212,7 @@ def test_g7b_imports_organize_real_disk_remove_unused(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 3. ScalpelConvertToMethodObjectTool
+# 3. ConvertToMethodObjectTool
 # ---------------------------------------------------------------------------
 
 
@@ -242,7 +242,7 @@ def test_g7b_convert_to_method_object_real_disk(tmp_path: Path) -> None:
             "        return _MMethodObject(self, x)()\n",
         )},
     )
-    tool = _make_tool(ScalpelConvertToMethodObjectTool, tmp_path)
+    tool = _make_tool(ConvertToMethodObjectTool, tmp_path)
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=coord,
@@ -261,7 +261,7 @@ def test_g7b_convert_to_method_object_real_disk(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 4. ScalpelLocalToFieldTool
+# 4. LocalToFieldTool
 # ---------------------------------------------------------------------------
 
 
@@ -283,7 +283,7 @@ def test_g7b_local_to_field_real_disk(tmp_path: Path) -> None:
             "self.x = 1\n        return self.x",
         )},
     )
-    tool = _make_tool(ScalpelLocalToFieldTool, tmp_path)
+    tool = _make_tool(LocalToFieldTool, tmp_path)
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=coord,
@@ -302,7 +302,7 @@ def test_g7b_local_to_field_real_disk(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 5. ScalpelUseFunctionTool
+# 5. UseFunctionTool
 # ---------------------------------------------------------------------------
 
 
@@ -325,7 +325,7 @@ def test_g7b_use_function_real_disk(tmp_path: Path) -> None:
             "a = doubler(3)\n    b = doubler(5)",
         )},
     )
-    tool = _make_tool(ScalpelUseFunctionTool, tmp_path)
+    tool = _make_tool(UseFunctionTool, tmp_path)
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=coord,
@@ -345,7 +345,7 @@ def test_g7b_use_function_real_disk(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 6. ScalpelIntroduceParameterTool — with caller-supplied name
+# 6. IntroduceParameterTool — with caller-supplied name
 # ---------------------------------------------------------------------------
 
 
@@ -368,7 +368,7 @@ def test_g7b_introduce_parameter_real_disk_with_caller_name(tmp_path: Path) -> N
             "def f(p=7):\n    x = p\n    return x\n",
         )},
     )
-    tool = _make_tool(ScalpelIntroduceParameterTool, tmp_path)
+    tool = _make_tool(IntroduceParameterTool, tmp_path)
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=coord,
@@ -390,7 +390,7 @@ def test_g7b_introduce_parameter_real_disk_with_caller_name(tmp_path: Path) -> N
 
 
 # ---------------------------------------------------------------------------
-# 7. ScalpelGenerateFromUndefinedTool — function target
+# 7. GenerateFromUndefinedTool — function target
 # ---------------------------------------------------------------------------
 
 
@@ -409,7 +409,7 @@ def test_g7b_generate_from_undefined_real_disk_function(tmp_path: Path) -> None:
             "def compute():\n    pass\n\n",
         )},
     )
-    tool = _make_tool(ScalpelGenerateFromUndefinedTool, tmp_path)
+    tool = _make_tool(GenerateFromUndefinedTool, tmp_path)
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=coord,
@@ -429,7 +429,7 @@ def test_g7b_generate_from_undefined_real_disk_function(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 8. ScalpelAutoImportSpecializedTool
+# 8. AutoImportSpecializedTool
 # ---------------------------------------------------------------------------
 
 
@@ -448,7 +448,7 @@ def test_g7b_auto_import_specialized_real_disk(tmp_path: Path) -> None:
             "from collections import OrderedDict\n",
         )},
     )
-    tool = _make_tool(ScalpelAutoImportSpecializedTool, tmp_path)
+    tool = _make_tool(AutoImportSpecializedTool, tmp_path)
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=coord,
@@ -468,7 +468,7 @@ def test_g7b_auto_import_specialized_real_disk(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 9. ScalpelFixLintsTool — single rule dispatch
+# 9. FixLintsTool — single rule dispatch
 # ---------------------------------------------------------------------------
 
 
@@ -491,7 +491,7 @@ def test_g7b_fix_lints_real_disk_dedups_imports(tmp_path: Path) -> None:
             "import os\n\n",
         )},
     )
-    tool = _make_tool(ScalpelFixLintsTool, tmp_path)
+    tool = _make_tool(FixLintsTool, tmp_path)
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=coord,
@@ -510,7 +510,7 @@ def test_g7b_fix_lints_real_disk_dedups_imports(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 10. ScalpelIgnoreDiagnosticTool — ruff noqa
+# 10. IgnoreDiagnosticTool — ruff noqa
 # ---------------------------------------------------------------------------
 
 
@@ -529,7 +529,7 @@ def test_g7b_ignore_diagnostic_real_disk_ruff_noqa(tmp_path: Path) -> None:
             "import unused_module  # noqa: F401",
         )},
     )
-    tool = _make_tool(ScalpelIgnoreDiagnosticTool, tmp_path)
+    tool = _make_tool(IgnoreDiagnosticTool, tmp_path)
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=coord,

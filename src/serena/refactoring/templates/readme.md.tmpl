@@ -31,7 +31,7 @@ This plugin ships two slash commands under `commands/`:
 
 | Command | Scope | What it does |
 |---|---|---|
-| `/$plugin_name-dashboard` | this plugin | Discovers the running `scalpel-$language` MCP server's dashboard port (`pgrep` + `lsof`) and opens it in the browser. **Lazy-bind caveat**: the engine binds the dashboard only after the first `scalpel_*` tool call against this server — if discovery reports "not yet bound", invoke any facade (e.g. `scalpel_workspace_health`) and re-run. |
+| `/$plugin_name-dashboard` | this plugin | Discovers the running `scalpel-$language` MCP server's dashboard port (`pgrep` + `lsof`) and opens it in the browser. **Lazy-bind caveat**: the engine binds the dashboard only after the first Scalpel tool call against this server — if discovery reports "not yet bound", invoke any facade (e.g. `workspace_health`) and re-run. |
 | `/o2-scalpel-update` | engine-wide | Force-refreshes the uvx-cached `o2-scalpel-engine` to the latest commit on `main` (`uvx --refresh ...`), updates `~/.cache/o2-scalpel/installed-sha`, clears the status-line update indicator, and prints restart guidance for any running `scalpel-*` MCP servers. Does **not** auto-restart MCP servers. The body is byte-identical across all 23 plugin trees so Claude Code's plugin registry surfaces a single command. |
 
 ## Hooks

@@ -6,7 +6,7 @@ filesystem. ``subprocess.run`` is always monkeypatched so the suite is
 fully offline.
 
 The class attributes test at the bottom asserts the stable API contract
-that ``ScalpelInstallLspServersTool`` relies on when it walks the
+that ``InstallLspServersTool`` relies on when it walks the
 installer registry.
 """
 

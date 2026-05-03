@@ -20,7 +20,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from serena.tools.scalpel_facades import ScalpelImportsOrganizeTool
+from serena.tools.scalpel_facades import ImportsOrganizeTool
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
 
@@ -45,7 +45,7 @@ def python_workspace(tmp_path: Path) -> Path:
 
 
 def _make_tool(project_root: Path) -> Any:
-    tool = ScalpelImportsOrganizeTool.__new__(ScalpelImportsOrganizeTool)
+    tool = ImportsOrganizeTool.__new__(ImportsOrganizeTool)
     tool.get_project_root = lambda: str(project_root)  # type: ignore[method-assign]
     return tool
 

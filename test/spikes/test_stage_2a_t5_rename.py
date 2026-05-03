@@ -1,4 +1,4 @@
-"""Stage 2A T6 — ScalpelRenameTool tests."""
+"""Stage 2A T6 — RenameTool tests."""
 from __future__ import annotations
 
 import json
@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from serena.tools.scalpel_facades import ScalpelRenameTool
+from serena.tools.scalpel_facades import RenameTool
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
 
@@ -18,8 +18,8 @@ def reset_runtime():
     ScalpelRuntime.reset_for_testing()
 
 
-def _make_tool(project_root: Path) -> ScalpelRenameTool:
-    tool = ScalpelRenameTool.__new__(ScalpelRenameTool)
+def _make_tool(project_root: Path) -> RenameTool:
+    tool = RenameTool.__new__(RenameTool)
     tool.get_project_root = lambda: str(project_root)  # type: ignore[method-assign]
     return tool
 
@@ -110,7 +110,7 @@ def test_rename_unknown_symbol_returns_symbol_not_found(tmp_path):
 def test_rename_real_disk_lands_new_name_on_disk(tmp_path):
     """G7-C acid test — sibling of test_*_real_disk_lands_* in G7-A/B.
 
-    ScalpelRenameTool.apply MUST invoke
+    RenameTool.apply MUST invoke
     ``_apply_workspace_edit_to_disk(workspace_edit)`` so that
     ``Path.read_text()`` post-apply reflects the rename. Pre-v1.5
     cleanup the call was missing (see deferred-items.md "Wave 4

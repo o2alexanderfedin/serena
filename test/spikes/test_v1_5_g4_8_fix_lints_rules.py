@@ -20,7 +20,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from serena.tools.scalpel_facades import ScalpelFixLintsTool
+from serena.tools.scalpel_facades import FixLintsTool
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
 
@@ -44,7 +44,7 @@ def python_workspace(tmp_path: Path) -> Path:
 
 
 def _make_tool(project_root: Path) -> Any:
-    tool = ScalpelFixLintsTool.__new__(ScalpelFixLintsTool)
+    tool = FixLintsTool.__new__(FixLintsTool)
     tool.get_project_root = lambda: str(project_root)  # type: ignore[method-assign]
     return tool
 

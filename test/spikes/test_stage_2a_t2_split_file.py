@@ -1,4 +1,4 @@
-"""Stage 2A T3 — ScalpelSplitFileTool tests."""
+"""Stage 2A T3 — SplitFileTool tests."""
 from __future__ import annotations
 
 import json
@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from serena.tools.scalpel_facades import ScalpelSplitFileTool
+from serena.tools.scalpel_facades import SplitFileTool
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
 
@@ -28,8 +28,8 @@ def python_workspace(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _make_tool(project_root: Path) -> ScalpelSplitFileTool:
-    tool = ScalpelSplitFileTool.__new__(ScalpelSplitFileTool)
+def _make_tool(project_root: Path) -> SplitFileTool:
+    tool = SplitFileTool.__new__(SplitFileTool)
     tool.get_project_root = lambda: str(project_root)  # type: ignore[method-assign]
     return tool
 

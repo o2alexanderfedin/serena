@@ -1,4 +1,4 @@
-"""v1.1 Stream 5 / Leaf 07 Task 3 — `scalpel_convert_from_relative_imports` tests.
+"""v1.1 Stream 5 / Leaf 07 Task 3 — `convert_from_relative_imports` tests.
 
 Drives rope's ``ImportTools.relatives_to_absolutes`` through the facade.
 Three branches per spec R3:
@@ -22,7 +22,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from serena.tools.scalpel_facades import ScalpelConvertFromRelativeImportsTool
+from serena.tools.scalpel_facades import ConvertFromRelativeImportsTool
 from serena.tools.scalpel_runtime import ScalpelRuntime
 from serena.tools.tools_base import Tool
 from serena.util.inspection import iter_subclasses
@@ -38,10 +38,10 @@ def _reset_runtime(
     ScalpelRuntime.reset_for_testing()
 
 
-def _build_tool(tmp_path: Path) -> ScalpelConvertFromRelativeImportsTool:
+def _build_tool(tmp_path: Path) -> ConvertFromRelativeImportsTool:
     agent = MagicMock(name="SerenaAgent")
     agent.get_project_root.return_value = str(tmp_path)
-    tool = ScalpelConvertFromRelativeImportsTool(agent=agent)
+    tool = ConvertFromRelativeImportsTool(agent=agent)
     object.__setattr__(tool, "get_project_root", lambda: str(tmp_path))
     return tool
 
@@ -158,11 +158,11 @@ def test_convert_from_relative_imports_skips_when_already_absolute(
 
 def test_convert_from_relative_imports_tool_appears_in_iter_subclasses() -> None:
     discovered = {cls.get_name_from_cls() for cls in iter_subclasses(Tool)}
-    assert "scalpel_convert_from_relative_imports" in discovered
+    assert "convert_from_relative_imports" in discovered
 
 
 def test_convert_from_relative_imports_tool_class_name_is_snake_cased() -> None:
     assert (
-        ScalpelConvertFromRelativeImportsTool.get_name_from_cls()
-        == "scalpel_convert_from_relative_imports"
+        ConvertFromRelativeImportsTool.get_name_from_cls()
+        == "convert_from_relative_imports"
     )

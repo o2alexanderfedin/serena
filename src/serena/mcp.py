@@ -252,12 +252,33 @@ class SerenaMCPFactory:
 
     # noinspection PyProtectedMember
     def _set_mcp_tools(self, mcp: FastMCP, openai_tool_compatible: bool = False) -> None:
-        """Update the tools in the MCP server"""
+        """Update the tools in the MCP server.
+
+        v2.0 wire-name cleanup (spec 2026-05-03 § 6.1): Scalpel facades and
+        primitives are dual-registered under their canonical name AND a
+        legacy ``scalpel_<name>`` alias. The alias entry's MCP description
+        is prefixed with ``[DEPRECATED in v2.0; removed in v2.1; use <new>]``
+        so users discover the new name via the MCP tool list.
+        """
         if mcp is not None:
+            from serena.tools import ToolRegistry
+
+            registry = ToolRegistry()
             mcp._tool_manager._tools = {}
             for tool in self._iter_tools():
+                canonical_name = tool.get_name()
                 mcp_tool = self.make_mcp_tool(tool, openai_tool_compatible=openai_tool_compatible)
-                mcp._tool_manager._tools[tool.get_name()] = mcp_tool
+                mcp._tool_manager._tools[canonical_name] = mcp_tool
+                # v2.0 deprecation alias — only for Scalpel facades/primitives.
+                legacy_name = f"scalpel_{canonical_name}"
+                if registry.is_legacy_alias_name(legacy_name):
+                    legacy_mcp_tool = self.make_mcp_tool(tool, openai_tool_compatible=openai_tool_compatible)
+                    legacy_mcp_tool.name = legacy_name
+                    legacy_mcp_tool.description = (
+                        f"[DEPRECATED in v2.0; removed in v2.1; use `{canonical_name}`] "
+                        + (legacy_mcp_tool.description or "")
+                    )
+                    mcp._tool_manager._tools[legacy_name] = legacy_mcp_tool
             log.info(f"Starting MCP server with {len(mcp._tool_manager._tools)} tools: {list(mcp._tool_manager._tools.keys())}")
 
     def _create_serena_agent(self, serena_config: SerenaConfig, modes: ModeSelectionDefinition | None = None) -> SerenaAgent:

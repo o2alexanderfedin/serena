@@ -3,7 +3,7 @@
 Wraps the canonical ``try`` / ``except*`` pattern (Python ≥ 3.11) so
 the Stream 5 Leaf 07 Python facades prove their parsers tolerate
 exception-group syntax. PEP 654 is intentionally NOT paired with
-``scalpel_convert_from_relative_imports`` — exception-group semantics
+``convert_from_relative_imports`` — exception-group semantics
 are orthogonal to import paths and this fixture has no relative
 imports to convert.
 

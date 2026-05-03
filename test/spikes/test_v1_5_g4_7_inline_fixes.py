@@ -1,4 +1,4 @@
-"""v1.5 G4-7 — scalpel_inline honors name_path + remove_definition;
+"""v1.5 G4-7 — inline honors name_path + remove_definition;
 no (0,0) fallback (HI-8 + HI-13).
 
 Acid tests:
@@ -19,7 +19,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from serena.tools.scalpel_facades import ScalpelInlineTool
+from serena.tools.scalpel_facades import InlineTool
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
 
@@ -42,7 +42,7 @@ def rust_workspace(tmp_path: Path) -> Path:
 
 
 def _make_tool(project_root: Path) -> Any:
-    tool = ScalpelInlineTool.__new__(ScalpelInlineTool)
+    tool = InlineTool.__new__(InlineTool)
     tool.get_project_root = lambda: str(project_root)  # type: ignore[method-assign]
     return tool
 

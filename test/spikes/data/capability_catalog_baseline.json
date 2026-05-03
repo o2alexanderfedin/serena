@@ -398,7 +398,7 @@
       "kind": "refactor.extract",
       "language": "java",
       "params_schema": {},
-      "preferred_facade": "scalpel_extract",
+      "preferred_facade": "extract",
       "source_server": "jdtls"
     },
     {
@@ -508,7 +508,7 @@
       "kind": "source.generate.constructor",
       "language": "java",
       "params_schema": {},
-      "preferred_facade": "scalpel_generate_constructor",
+      "preferred_facade": "generate_constructor",
       "source_server": "jdtls"
     },
     {
@@ -541,7 +541,7 @@
       "kind": "source.generate.overrideMethods",
       "language": "java",
       "params_schema": {},
-      "preferred_facade": "scalpel_override_methods",
+      "preferred_facade": "override_methods",
       "source_server": "jdtls"
     },
     {
@@ -635,7 +635,7 @@
       "kind": "refactor.extract",
       "language": "python",
       "params_schema": {},
-      "preferred_facade": "scalpel_extract",
+      "preferred_facade": "extract",
       "source_server": "pylsp-rope"
     },
     {
@@ -647,7 +647,7 @@
       "kind": "refactor.inline",
       "language": "python",
       "params_schema": {},
-      "preferred_facade": "scalpel_inline",
+      "preferred_facade": "inline",
       "source_server": "pylsp-rope"
     },
     {
@@ -683,7 +683,7 @@
       "kind": "source.fixAll",
       "language": "python",
       "params_schema": {},
-      "preferred_facade": "scalpel_fix_lints",
+      "preferred_facade": "fix_lints",
       "source_server": "ruff"
     },
     {
@@ -695,7 +695,7 @@
       "kind": "source.organizeImports",
       "language": "python",
       "params_schema": {},
-      "preferred_facade": "scalpel_imports_organize",
+      "preferred_facade": "imports_organize",
       "source_server": "ruff"
     },
     {
@@ -717,7 +717,7 @@
       "kind": "refactor.extract",
       "language": "rust",
       "params_schema": {},
-      "preferred_facade": "scalpel_extract",
+      "preferred_facade": "extract",
       "source_server": "rust-analyzer"
     },
     {
@@ -728,7 +728,7 @@
       "kind": "refactor.inline",
       "language": "rust",
       "params_schema": {},
-      "preferred_facade": "scalpel_inline",
+      "preferred_facade": "inline",
       "source_server": "rust-analyzer"
     },
     {
@@ -750,7 +750,7 @@
       "kind": "refactor.rewrite",
       "language": "rust",
       "params_schema": {},
-      "preferred_facade": "scalpel_change_visibility",
+      "preferred_facade": "change_visibility",
       "source_server": "rust-analyzer"
     },
     {
@@ -761,7 +761,7 @@
       "kind": "source.organizeImports",
       "language": "rust",
       "params_schema": {},
-      "preferred_facade": "scalpel_imports_organize",
+      "preferred_facade": "imports_organize",
       "source_server": "rust-analyzer"
     },
     {

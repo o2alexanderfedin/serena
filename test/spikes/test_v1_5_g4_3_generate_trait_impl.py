@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from serena.tools.scalpel_facades import ScalpelGenerateTraitImplScaffoldTool
+from serena.tools.scalpel_facades import GenerateTraitImplScaffoldTool
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
 
@@ -35,8 +35,8 @@ def rust_workspace(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _make_tool(project_root: Path) -> ScalpelGenerateTraitImplScaffoldTool:
-    tool = ScalpelGenerateTraitImplScaffoldTool.__new__(ScalpelGenerateTraitImplScaffoldTool)
+def _make_tool(project_root: Path) -> GenerateTraitImplScaffoldTool:
+    tool = GenerateTraitImplScaffoldTool.__new__(GenerateTraitImplScaffoldTool)
     tool.get_project_root = lambda: str(project_root)  # type: ignore[method-assign]
     return tool
 

@@ -15,18 +15,18 @@ import serena.tools as tools_module
 # Verified union of classes the 6 spike sites inspect (t1/t2/t3/t4/t5: 4 each;
 # 2A registry smoke: SCALPEL_2A_TOOLS minus TransactionCommit = 5).
 _FACADE_NAMES = (
-    "ScalpelConvertModuleLayoutTool", "ScalpelChangeVisibilityTool",
-    "ScalpelTidyStructureTool", "ScalpelChangeTypeShapeTool",
-    "ScalpelChangeReturnTypeTool", "ScalpelCompleteMatchArmsTool",
-    "ScalpelExtractLifetimeTool", "ScalpelExpandGlobImportsTool",
-    "ScalpelGenerateTraitImplScaffoldTool", "ScalpelGenerateMemberTool",
-    "ScalpelExpandMacroTool", "ScalpelVerifyAfterRefactorTool",
-    "ScalpelConvertToMethodObjectTool", "ScalpelLocalToFieldTool",
-    "ScalpelUseFunctionTool", "ScalpelIntroduceParameterTool",
-    "ScalpelGenerateFromUndefinedTool", "ScalpelAutoImportSpecializedTool",
-    "ScalpelFixLintsTool", "ScalpelIgnoreDiagnosticTool",
-    "ScalpelSplitFileTool", "ScalpelExtractTool", "ScalpelInlineTool",
-    "ScalpelRenameTool", "ScalpelImportsOrganizeTool",
+    "ConvertModuleLayoutTool", "ChangeVisibilityTool",
+    "TidyStructureTool", "ChangeTypeShapeTool",
+    "ChangeReturnTypeTool", "CompleteMatchArmsTool",
+    "ExtractLifetimeTool", "ExpandGlobImportsTool",
+    "GenerateTraitImplScaffoldTool", "GenerateMemberTool",
+    "ExpandMacroTool", "VerifyAfterRefactorTool",
+    "ConvertToMethodObjectTool", "LocalToFieldTool",
+    "UseFunctionTool", "IntroduceParameterTool",
+    "GenerateFromUndefinedTool", "AutoImportSpecializedTool",
+    "FixLintsTool", "IgnoreDiagnosticTool",
+    "SplitFileTool", "ExtractTool", "InlineTool",
+    "RenameTool", "ImportsOrganizeTool",
 )
 
 

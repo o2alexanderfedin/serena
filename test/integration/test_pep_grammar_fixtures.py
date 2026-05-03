@@ -2,9 +2,9 @@
 
 Drives the three Stream 5 Leaf 07 Python facades
 
-* ``scalpel_convert_to_async``                 (F1)
-* ``scalpel_annotate_return_type``             (F2)
-* ``scalpel_convert_from_relative_imports``    (F3)
+* ``convert_to_async``                 (F1)
+* ``annotate_return_type``             (F2)
+* ``convert_from_relative_imports``    (F3)
 
 against the three modern-grammar fixtures shipped under
 ``test/fixtures/python/{pep695,pep701,pep654}/``. Confirms that the
@@ -47,9 +47,9 @@ import pytest
 
 from serena.tools import scalpel_facades as facades_mod
 from serena.tools.scalpel_facades import (
-    ScalpelAnnotateReturnTypeTool,
-    ScalpelConvertFromRelativeImportsTool,
-    ScalpelConvertToAsyncTool,
+    AnnotateReturnTypeTool,
+    ConvertFromRelativeImportsTool,
+    ConvertToAsyncTool,
 )
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
@@ -109,28 +109,28 @@ def _reset_runtime(
 # ---------------------------------------------------------------------------
 
 
-def _build_async_tool(project_root: Path) -> ScalpelConvertToAsyncTool:
+def _build_async_tool(project_root: Path) -> ConvertToAsyncTool:
     agent = MagicMock(name="SerenaAgent")
     agent.get_project_root.return_value = str(project_root)
-    tool = ScalpelConvertToAsyncTool(agent=agent)
+    tool = ConvertToAsyncTool(agent=agent)
     object.__setattr__(tool, "get_project_root", lambda: str(project_root))
     return tool
 
 
-def _build_annotate_tool(project_root: Path) -> ScalpelAnnotateReturnTypeTool:
+def _build_annotate_tool(project_root: Path) -> AnnotateReturnTypeTool:
     agent = MagicMock(name="SerenaAgent")
     agent.get_project_root.return_value = str(project_root)
-    tool = ScalpelAnnotateReturnTypeTool(agent=agent)
+    tool = AnnotateReturnTypeTool(agent=agent)
     object.__setattr__(tool, "get_project_root", lambda: str(project_root))
     return tool
 
 
 def _build_relimports_tool(
     project_root: Path,
-) -> ScalpelConvertFromRelativeImportsTool:
+) -> ConvertFromRelativeImportsTool:
     agent = MagicMock(name="SerenaAgent")
     agent.get_project_root.return_value = str(project_root)
-    tool = ScalpelConvertFromRelativeImportsTool(agent=agent)
+    tool = ConvertFromRelativeImportsTool(agent=agent)
     object.__setattr__(tool, "get_project_root", lambda: str(project_root))
     return tool
 

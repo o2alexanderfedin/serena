@@ -9,7 +9,7 @@
         "Pull this code into its own function",
         "Refactor this selection into a function called helper"
       ],
-      "expected_tool": "scalpel_extract"
+      "expected_tool": "extract"
     },
     {
       "language": "rust",
@@ -18,7 +18,7 @@
         "Replace the function call with its body",
         "Inline this helper everywhere it is used"
       ],
-      "expected_tool": "scalpel_inline"
+      "expected_tool": "inline"
     },
     {
       "language": "rust",
@@ -27,7 +27,7 @@
         "Make this struct pub",
         "Rewrite this fn so it is publicly visible"
       ],
-      "expected_tool": "scalpel_change_visibility"
+      "expected_tool": "change_visibility"
     },
     {
       "language": "rust",
@@ -36,7 +36,7 @@
         "Sort and dedupe the use statements",
         "Tidy up the import block"
       ],
-      "expected_tool": "scalpel_imports_organize"
+      "expected_tool": "imports_organize"
     },
     {
       "language": "rust",
@@ -45,7 +45,7 @@
         "Show me what this macro expands to",
         "Replace the macro call with its expansion"
       ],
-      "expected_tool": "scalpel_expand_macro"
+      "expected_tool": "expand_macro"
     },
     {
       "language": "python",
@@ -54,7 +54,7 @@
         "Pull this code into its own function",
         "Refactor this selection into a function called helper"
       ],
-      "expected_tool": "scalpel_extract"
+      "expected_tool": "extract"
     },
     {
       "language": "python",
@@ -63,7 +63,7 @@
         "Replace the function call with its body",
         "Inline this helper everywhere it is used"
       ],
-      "expected_tool": "scalpel_inline"
+      "expected_tool": "inline"
     },
     {
       "language": "python",
@@ -72,7 +72,7 @@
         "Promote this local to self.x",
         "Move this local variable up to a field on the class"
       ],
-      "expected_tool": "scalpel_local_to_field"
+      "expected_tool": "local_to_field"
     },
     {
       "language": "python",
@@ -81,7 +81,7 @@
         "Sort and dedupe the import statements",
         "Tidy up the import block"
       ],
-      "expected_tool": "scalpel_imports_organize"
+      "expected_tool": "imports_organize"
     },
     {
       "language": "python",
@@ -90,7 +90,7 @@
         "Fix the lints in this file",
         "Run source.fixAll on this file"
       ],
-      "expected_tool": "scalpel_fix_lints"
+      "expected_tool": "fix_lints"
     }
   ]
 }

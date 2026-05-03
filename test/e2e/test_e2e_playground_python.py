@@ -12,11 +12,11 @@ which clones ``playground/python/`` into a per-test ``tmp_path`` with
 basedpyright always indexes a clean tree.
 
 Facade → Driver method mapping (all from ``_McpDriver``):
-- scalpel_split_file       → ``split_file(**kwargs)``
-- scalpel_rename           → ``rename(**kwargs)``
-- scalpel_extract          → ``extract(**kwargs)``
-- scalpel_inline           → ``inline(**kwargs)``
-- scalpel_imports_organize → ``imports_organize(**kwargs)``
+- split_file       → ``split_file(**kwargs)``
+- rename           → ``rename(**kwargs)``
+- extract          → ``extract(**kwargs)``
+- inline           → ``inline(**kwargs)``
+- imports_organize → ``imports_organize(**kwargs)``
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ def test_playground_python_split(
 ) -> None:
     """Split calc/src/calc/ast.py multi-class module into sibling files.
 
-    Facade: scalpel_split_file.
+    Facade: split_file.
     ``ast.py`` contains ``Num``, ``Add``, and ``Sub`` dataclass clusters.
     After the refactor the module is split into separate sibling files
     (e.g. ``num.py``, ``add.py``, ``sub.py``) or each class moves to its
@@ -106,7 +106,7 @@ def test_playground_python_rename(
 ) -> None:
     """Rename parse_expr to parse_expression in calc/src/calc/parser.py.
 
-    Facade: scalpel_rename.
+    Facade: rename.
     ``parse_expr`` is on line 12 (1-indexed) = line 11 (0-indexed).
     After the refactor the definition and all call sites must use the new name.
     """
@@ -158,7 +158,7 @@ def test_playground_python_extract(
 ) -> None:
     """Extract the `a + b` expression in evaluate() into a helper add_values.
 
-    Facade: scalpel_extract.
+    Facade: extract.
     Target expression: ``return a + b`` in calc/src/calc/eval.py.
     Line 34 (1-indexed) = line 33 (0-indexed).
     After the refactor: a new function ``add_values`` appears in the file.
@@ -214,7 +214,7 @@ def test_playground_python_inline(
 ) -> None:
     """Inline sum_helper into its single call site in report (lints/src/lints/core.py).
 
-    Facade: scalpel_inline.
+    Facade: inline.
     Target: the call ``sum_helper(items)`` at line 20 (1-indexed) = line 19 (0-indexed),
     character 11 where ``sum_helper`` starts in ``return sum_helper(items)``.
     After the refactor: sum_helper definition is removed; report's body is direct.
@@ -271,7 +271,7 @@ def test_playground_python_imports_organize(
 ) -> None:
     """Organize disorganized imports in calc/src/calc/eval.py.
 
-    Facade: scalpel_imports_organize.
+    Facade: imports_organize.
     ``eval.py`` intentionally mixes stdlib (sys) and local imports in a
     non-standard order.  After the refactor the imports must be grouped
     and sorted (stdlib first, then local).

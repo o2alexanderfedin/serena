@@ -10,7 +10,7 @@ The installer is cross-platform (macOS, Linux, Windows all use the same
 dotnet-absent guard instead of per-platform branching.
 
 The class attributes test at the bottom asserts the stable API contract
-that ``ScalpelInstallLspServersTool`` relies on when it walks the installer
+that ``InstallLspServersTool`` relies on when it walks the installer
 registry.
 """
 

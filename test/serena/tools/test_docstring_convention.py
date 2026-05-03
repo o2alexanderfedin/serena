@@ -4,11 +4,12 @@ convention introduced in spec § 5.
 Spec source:
     docs/superpowers/specs/2026-04-29-lsp-feature-coverage-spec.md § 5.2
 
-Convention (spec § 5.2.1):
+Convention (spec § 5.2.1, updated v2.0 spec § 5):
 
-  * Every ``Scalpel*Tool`` class registered under ``serena.tools`` MUST open
-    its docstring with the literal token ``PREFERRED:`` followed by a
-    routing-intent summary — except ``ScalpelApplyCapabilityTool``, which
+  * Every Scalpel facade/primitive class registered under
+    ``serena.tools.scalpel_facades`` or ``serena.tools.scalpel_primitives``
+    MUST open its docstring with the literal token ``PREFERRED:`` followed
+    by a routing-intent summary — except ``ApplyCapabilityTool``, which
     MUST open with ``FALLBACK:`` so the long-tail dispatcher's role is
     machine-checkable and asymmetric to the named facades.
 
@@ -19,6 +20,11 @@ Convention (spec § 5.2.1):
     fallback; Scalpel = LSP-preferred.
 
 A contributor who forgets the opener fails this test — the v1.5 contract.
+
+v2.0 note (spec 2026-05-03 § 5.1): the ``scalpel_`` class-name prefix was
+dropped. Discovery now filters by source module rather than class-name
+prefix, since the routing convention itself is module-of-origin (Scalpel
+facades vs Serena upstream), not name-of-class.
 """
 
 from __future__ import annotations
@@ -41,23 +47,32 @@ from serena.tools.symbol_tools import (
 _PREFERRED_RE = re.compile(r"^\s*PREFERRED:\s+\S")
 _FALLBACK_RE = re.compile(r"^\s*FALLBACK:\s+\S")
 
-# Spec § 5.2.1: the dispatcher is the single asymmetric exception.
-_FALLBACK_TOOL_NAME = "ScalpelApplyCapabilityTool"
+# v2.0: the dispatcher is the single asymmetric exception.
+_FALLBACK_TOOL_NAME = "ApplyCapabilityTool"
+
+# v2.0 (spec 2026-05-03 § 5.1): module-of-origin filter replaces class-prefix.
+_SCALPEL_MODULES = (
+    "serena.tools.scalpel_facades",
+    "serena.tools.scalpel_primitives",
+)
 
 
 def _scalpel_tool_classes() -> list[type]:
-    """All registered tool classes whose Python class name starts with
-    ``Scalpel``.
+    """All registered tool classes that originate in a Scalpel module.
 
     Mirrors the discovery the dispatcher / catalog do — pulled from the
     live ``ToolRegistry`` rather than via direct imports so a future
-    ``Scalpel*Tool`` is auto-included.
+    Scalpel facade is auto-included.
+
+    v2.0: filter by module of origin instead of class-name prefix; the
+    ``scalpel_`` class prefix was dropped as part of the v2.0 wire-name
+    cleanup.
     """
     registry = ToolRegistry()
     return [
         cls
         for cls in registry.get_all_tool_classes()
-        if cls.__name__.startswith("Scalpel")
+        if cls.__module__ in _SCALPEL_MODULES
     ]
 
 
@@ -78,8 +93,8 @@ def _docstring_first_line(cls: type) -> str:
 def test_scalpel_tools_open_with_preferred_or_fallback() -> None:
     classes = _scalpel_tool_classes()
     assert classes, (
-        "ToolRegistry returned zero Scalpel*Tool classes — the discovery "
-        "predicate or import wiring is broken."
+        "ToolRegistry returned zero Scalpel facade/primitive classes — "
+        "the discovery predicate or import wiring is broken."
     )
 
     failures: list[str] = []
@@ -132,5 +147,5 @@ def test_serena_upstream_tools_do_not_use_routing_openers() -> None:
         assert not _FALLBACK_RE.match(doc), (
             f"{cls.__name__} (Serena upstream) must NOT open with "
             f"'FALLBACK: ' — that token is reserved for "
-            f"ScalpelApplyCapabilityTool (spec § 5.2.1).  Got: {doc!r}"
+            f"ApplyCapabilityTool (spec § 5.2.1).  Got: {doc!r}"
         )

@@ -34,18 +34,18 @@ from serena.refactoring.capabilities import (
 # v1.5 P2 (spec § 4.2) added three jdtls rows for the Java facades.
 EXPECTED_ENTRIES: dict[tuple[str, str], str] = {
     # Phase 1 (rust-analyzer + pylsp-rope + ruff):
-    ("rust-analyzer", "refactor.extract"): "scalpel_extract",
-    ("rust-analyzer", "refactor.inline"): "scalpel_inline",
-    ("rust-analyzer", "refactor.rewrite"): "scalpel_change_visibility",
-    ("rust-analyzer", "source.organizeImports"): "scalpel_imports_organize",
-    ("pylsp-rope", "refactor.extract"): "scalpel_extract",
-    ("pylsp-rope", "refactor.inline"): "scalpel_inline",
-    ("ruff", "source.fixAll"): "scalpel_fix_lints",
-    ("ruff", "source.organizeImports"): "scalpel_imports_organize",
+    ("rust-analyzer", "refactor.extract"): "extract",
+    ("rust-analyzer", "refactor.inline"): "inline",
+    ("rust-analyzer", "refactor.rewrite"): "change_visibility",
+    ("rust-analyzer", "source.organizeImports"): "imports_organize",
+    ("pylsp-rope", "refactor.extract"): "extract",
+    ("pylsp-rope", "refactor.inline"): "inline",
+    ("ruff", "source.fixAll"): "fix_lints",
+    ("ruff", "source.organizeImports"): "imports_organize",
     # Phase 2 (jdtls / Java):
-    ("jdtls", "refactor.extract"): "scalpel_extract",
-    ("jdtls", "source.generate.constructor"): "scalpel_generate_constructor",
-    ("jdtls", "source.generate.overrideMethods"): "scalpel_override_methods",
+    ("jdtls", "refactor.extract"): "extract",
+    ("jdtls", "source.generate.constructor"): "generate_constructor",
+    ("jdtls", "source.generate.overrideMethods"): "override_methods",
 }
 
 
@@ -108,8 +108,8 @@ def test_lookup_is_tuple_keyed_not_kind_only() -> None:
     """
     rust_extract = KIND_TO_FACADE.get(("rust-analyzer", "refactor.extract"))
     py_extract = KIND_TO_FACADE.get(("pylsp-rope", "refactor.extract"))
-    assert rust_extract == "scalpel_extract"
-    assert py_extract == "scalpel_extract"
+    assert rust_extract == "extract"
+    assert py_extract == "extract"
     # Wrong-tuple lookup must miss, even with a valid kind half:
-    assert KIND_TO_FACADE.get(("rust-analyzer", "refactor.inline")) == "scalpel_inline"
+    assert KIND_TO_FACADE.get(("rust-analyzer", "refactor.inline")) == "inline"
     assert KIND_TO_FACADE.get(("vtsls", "refactor.extract")) is None  # vtsls unrouted

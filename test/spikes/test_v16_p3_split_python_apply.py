@@ -1,4 +1,4 @@
-"""v1.6 PR 4 / Plan 3 — Fix scalpel_split_file._split_python apply-to-disk.
+"""v1.6 PR 4 / Plan 3 — Fix split_file._split_python apply-to-disk.
 
 RED tests:
 1. ``test_split_python_writes_to_disk`` — ``_build_python_rope_bridge`` is
@@ -27,7 +27,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from serena.refactoring.checkpoints import CheckpointStore
-from serena.tools.scalpel_facades import ScalpelSplitFileTool
+from serena.tools.scalpel_facades import SplitFileTool
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
 
@@ -40,8 +40,8 @@ def _isolate_runtime() -> Iterator[None]:
     ScalpelRuntime.reset_for_testing()
 
 
-def _make_tool(project_root: Path) -> ScalpelSplitFileTool:
-    tool = ScalpelSplitFileTool.__new__(ScalpelSplitFileTool)
+def _make_tool(project_root: Path) -> SplitFileTool:
+    tool = SplitFileTool.__new__(SplitFileTool)
     tool.get_project_root = lambda: str(project_root)  # type: ignore[method-assign]
     return tool
 

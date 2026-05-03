@@ -1,11 +1,11 @@
 """Stage 3 T3 — Rust ergonomic facades wave C.
 
 Per scope-report §4.2:
-- ScalpelGenerateTraitImplScaffoldTool (row G) — ``generate_trait_impl``.
-- ScalpelGenerateMemberTool (row G tail) — generate getter/setter/method stubs.
-- ScalpelExpandMacroTool (§4.3 row 30; primitive at MVP) — first-class facade
+- GenerateTraitImplScaffoldTool (row G) — ``generate_trait_impl``.
+- GenerateMemberTool (row G tail) — generate getter/setter/method stubs.
+- ExpandMacroTool (§4.3 row 30; primitive at MVP) — first-class facade
   over rust-analyzer's ``expandMacro`` extension.
-- ScalpelVerifyAfterRefactorTool (§4.7 #7) — composite of runnables +
+- VerifyAfterRefactorTool (§4.7 #7) — composite of runnables +
   relatedTests + runFlycheck. Returns a structured verification report.
 """
 
@@ -21,10 +21,10 @@ import pytest
 
 from serena.tools.facade_support import get_apply_source
 from serena.tools.scalpel_facades import (
-    ScalpelExpandMacroTool,
-    ScalpelGenerateMemberTool,
-    ScalpelGenerateTraitImplScaffoldTool,
-    ScalpelVerifyAfterRefactorTool,
+    ExpandMacroTool,
+    GenerateMemberTool,
+    GenerateTraitImplScaffoldTool,
+    VerifyAfterRefactorTool,
 )
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
@@ -65,7 +65,7 @@ def _fake_coord(actions_by_kind: dict[str, list]):
     return coord
 
 
-# ---------- ScalpelGenerateTraitImplScaffoldTool ---------------------------
+# ---------- GenerateTraitImplScaffoldTool ---------------------------
 
 
 def test_generate_trait_impl_scaffold_dispatches(tmp_path: Path):
@@ -74,7 +74,7 @@ def test_generate_trait_impl_scaffold_dispatches(tmp_path: Path):
     # the default fake_action title "x".
     src = tmp_path / "lib.rs"
     src.write_text("struct S;\n")
-    tool = _make_tool(ScalpelGenerateTraitImplScaffoldTool, tmp_path)
+    tool = _make_tool(GenerateTraitImplScaffoldTool, tmp_path)
     coord = _fake_coord({
         "refactor.rewrite.generate_trait_impl": [_fake_action(
             "refactor.rewrite.generate_trait_impl"
@@ -92,7 +92,7 @@ def test_generate_trait_impl_scaffold_dispatches(tmp_path: Path):
 def test_generate_trait_impl_scaffold_no_action(tmp_path: Path):
     src = tmp_path / "lib.rs"
     src.write_text("\n")
-    tool = _make_tool(ScalpelGenerateTraitImplScaffoldTool, tmp_path)
+    tool = _make_tool(GenerateTraitImplScaffoldTool, tmp_path)
     coord = _fake_coord({})
     with patch("serena.tools.scalpel_facades.coordinator_for_facade", return_value=coord):
         out = tool.apply(
@@ -103,13 +103,13 @@ def test_generate_trait_impl_scaffold_no_action(tmp_path: Path):
     assert payload["failure"]["code"] == "SYMBOL_NOT_FOUND"
 
 
-# ---------- ScalpelGenerateMemberTool --------------------------------------
+# ---------- GenerateMemberTool --------------------------------------
 
 
 def test_generate_member_dispatches_for_getter(tmp_path: Path):
     src = tmp_path / "lib.rs"
     src.write_text("struct S { x: i32 }\n")
-    tool = _make_tool(ScalpelGenerateMemberTool, tmp_path)
+    tool = _make_tool(GenerateMemberTool, tmp_path)
     coord = _fake_coord({
         "refactor.rewrite.generate_getter": [_fake_action(
             "refactor.rewrite.generate_getter"
@@ -127,7 +127,7 @@ def test_generate_member_dispatches_for_getter(tmp_path: Path):
 def test_generate_member_unknown_kind_returns_invalid_argument(tmp_path: Path):
     src = tmp_path / "lib.rs"
     src.write_text("\n")
-    tool = _make_tool(ScalpelGenerateMemberTool, tmp_path)
+    tool = _make_tool(GenerateMemberTool, tmp_path)
     out = tool.apply(
         file=str(src), position={"line": 0, "character": 0},
         member_kind="bogus", language="rust",
@@ -138,7 +138,7 @@ def test_generate_member_unknown_kind_returns_invalid_argument(tmp_path: Path):
 def test_generate_member_no_action(tmp_path: Path):
     src = tmp_path / "lib.rs"
     src.write_text("\n")
-    tool = _make_tool(ScalpelGenerateMemberTool, tmp_path)
+    tool = _make_tool(GenerateMemberTool, tmp_path)
     coord = _fake_coord({})
     with patch("serena.tools.scalpel_facades.coordinator_for_facade", return_value=coord):
         out = tool.apply(
@@ -149,13 +149,13 @@ def test_generate_member_no_action(tmp_path: Path):
     assert payload["failure"]["code"] == "SYMBOL_NOT_FOUND"
 
 
-# ---------- ScalpelExpandMacroTool -----------------------------------------
+# ---------- ExpandMacroTool -----------------------------------------
 
 
 def test_expand_macro_returns_expanded_text(tmp_path: Path):
     src = tmp_path / "lib.rs"
     src.write_text('println!("hi");\n')
-    tool = _make_tool(ScalpelExpandMacroTool, tmp_path)
+    tool = _make_tool(ExpandMacroTool, tmp_path)
     coord = MagicMock()
 
     async def _expand(**kwargs):
@@ -178,7 +178,7 @@ def test_expand_macro_returns_expanded_text(tmp_path: Path):
 def test_expand_macro_returns_no_op_when_coord_returns_none(tmp_path: Path):
     src = tmp_path / "lib.rs"
     src.write_text("// no macro\n")
-    tool = _make_tool(ScalpelExpandMacroTool, tmp_path)
+    tool = _make_tool(ExpandMacroTool, tmp_path)
     coord = MagicMock()
 
     async def _expand(**kwargs):
@@ -195,13 +195,13 @@ def test_expand_macro_returns_no_op_when_coord_returns_none(tmp_path: Path):
     assert payload["no_op"] is True
 
 
-# ---------- ScalpelVerifyAfterRefactorTool ---------------------------------
+# ---------- VerifyAfterRefactorTool ---------------------------------
 
 
 def test_verify_after_refactor_aggregates_runnables_and_flycheck(tmp_path: Path):
     src = tmp_path / "lib.rs"
     src.write_text("\n")
-    tool = _make_tool(ScalpelVerifyAfterRefactorTool, tmp_path)
+    tool = _make_tool(VerifyAfterRefactorTool, tmp_path)
     coord = MagicMock()
 
     async def _runnables(**kwargs):
@@ -227,7 +227,7 @@ def test_verify_after_refactor_aggregates_runnables_and_flycheck(tmp_path: Path)
 
 
 def test_verify_after_refactor_workspace_boundary_blocked(tmp_path: Path):
-    tool = _make_tool(ScalpelVerifyAfterRefactorTool, tmp_path)
+    tool = _make_tool(VerifyAfterRefactorTool, tmp_path)
     out = tool.apply(
         file=str(tmp_path.parent / "elsewhere.rs"), language="rust",
     )
@@ -240,20 +240,20 @@ def test_verify_after_refactor_workspace_boundary_blocked(tmp_path: Path):
 def test_all_four_tools_reexported_from_serena_tools():
     import serena.tools as tools_module
     for name in (
-        "ScalpelGenerateTraitImplScaffoldTool",
-        "ScalpelGenerateMemberTool",
-        "ScalpelExpandMacroTool",
-        "ScalpelVerifyAfterRefactorTool",
+        "GenerateTraitImplScaffoldTool",
+        "GenerateMemberTool",
+        "ExpandMacroTool",
+        "VerifyAfterRefactorTool",
     ):
         assert hasattr(tools_module, name)
 
 
 def test_apply_methods_invoke_workspace_boundary_guard():
     for cls in (
-        ScalpelGenerateTraitImplScaffoldTool,
-        ScalpelGenerateMemberTool,
-        ScalpelExpandMacroTool,
-        ScalpelVerifyAfterRefactorTool,
+        GenerateTraitImplScaffoldTool,
+        GenerateMemberTool,
+        ExpandMacroTool,
+        VerifyAfterRefactorTool,
     ):
         src = get_apply_source(cls)
         assert "workspace_boundary_guard(" in src, (
@@ -263,10 +263,10 @@ def test_apply_methods_invoke_workspace_boundary_guard():
 
 def test_tool_names_match_scope_report_naming():
     expected = {
-        ScalpelGenerateTraitImplScaffoldTool: "scalpel_generate_trait_impl_scaffold",
-        ScalpelGenerateMemberTool: "scalpel_generate_member",
-        ScalpelExpandMacroTool: "scalpel_expand_macro",
-        ScalpelVerifyAfterRefactorTool: "scalpel_verify_after_refactor",
+        GenerateTraitImplScaffoldTool: "generate_trait_impl_scaffold",
+        GenerateMemberTool: "generate_member",
+        ExpandMacroTool: "expand_macro",
+        VerifyAfterRefactorTool: "verify_after_refactor",
     }
     for cls, name in expected.items():
         assert cls.get_name_from_cls() == name

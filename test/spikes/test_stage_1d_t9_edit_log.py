@@ -34,7 +34,7 @@ def test_append_creates_dot_serena_dir_and_writes_jsonl(tmp_path: Path) -> None:
     edit = _edit("file:///x.py", version=1, edit_count=3)
     asyncio.run(log.append(
         checkpoint_id="ckpt_py_001",
-        tool="scalpel_apply_capability",
+        tool="apply_capability",
         server="pylsp-rope",
         edit=edit,
     ))
@@ -46,7 +46,7 @@ def test_append_creates_dot_serena_dir_and_writes_jsonl(tmp_path: Path) -> None:
     # §11.5 schema fields:
     assert set(parsed.keys()) >= {"ts", "checkpoint_id", "tool", "server", "kind", "uri", "edit_count", "version"}
     assert parsed["checkpoint_id"] == "ckpt_py_001"
-    assert parsed["tool"] == "scalpel_apply_capability"
+    assert parsed["tool"] == "apply_capability"
     assert parsed["server"] == "pylsp-rope"
     assert parsed["kind"] == "TextDocumentEdit"
     assert parsed["uri"] == "file:///x.py"
@@ -60,7 +60,7 @@ def test_append_three_edits_produces_three_lines(tmp_path: Path) -> None:
         for i in range(3):
             await log.append(
                 checkpoint_id=f"ckpt_{i}",
-                tool="scalpel_split_file",
+                tool="split_file",
                 server="ruff",
                 edit=_edit(f"file:///f{i}.py", version=i + 1),
             )
@@ -95,7 +95,7 @@ def test_concurrent_append_does_not_interleave_bytes(tmp_path: Path) -> None:
         await asyncio.gather(*[
             log.append(
                 checkpoint_id=f"ckpt_{i}",
-                tool="scalpel_apply_capability",
+                tool="apply_capability",
                 server="pylsp-rope" if i % 2 == 0 else "ruff",
                 edit=_edit(f"file:///f{i}.py", version=i),
             )
@@ -114,7 +114,7 @@ def test_replay_log_yields_records_in_append_order(tmp_path: Path) -> None:
         for i in range(4):
             await log.append(
                 checkpoint_id=f"ckpt_{i}",
-                tool="scalpel_apply_capability",
+                tool="apply_capability",
                 server="pylsp-rope",
                 edit=_edit(f"file:///f{i}.py", version=i),
             )

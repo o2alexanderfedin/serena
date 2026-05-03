@@ -10,9 +10,13 @@ $summary
 
 ## When to use
 
-Invoke `scalpel_${facade}` (language: **$language**) when the user says any of:
+Invoke `${facade}` (language: **$language**) when the user says any of:
 
 $trigger_list
+
+> v2.0 wire-name cleanup: the legacy alias `scalpel_${facade}` continues to
+> work through v2.x and is removed in v2.1. Prefer the unprefixed name in
+> new prompts.
 
 ## How it works
 
@@ -23,5 +27,5 @@ $primitive_list
 ## Tool call
 
 ```json
-{"tool": "scalpel_${facade}", "arguments": {"path": "<file>", "language": "$language"}}
+{"tool": "${facade}", "arguments": {"path": "<file>", "language": "$language"}}
 ```

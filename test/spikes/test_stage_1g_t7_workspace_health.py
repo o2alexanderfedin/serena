@@ -1,4 +1,4 @@
-"""T7 — ScalpelWorkspaceHealthTool: per-language ServerHealth aggregate."""
+"""T7 — WorkspaceHealthTool: per-language ServerHealth aggregate."""
 
 from __future__ import annotations
 
@@ -20,19 +20,19 @@ def _reset_runtime() -> Iterator[None]:
 
 
 def _build_tool(project_root: Path):  # type: ignore[no-untyped-def]
-    from serena.tools.scalpel_primitives import ScalpelWorkspaceHealthTool
+    from serena.tools.scalpel_primitives import WorkspaceHealthTool
 
     agent = MagicMock(name="SerenaAgent")
     agent.get_active_project_or_raise.return_value = MagicMock(
         project_root=str(project_root),
     )
-    return ScalpelWorkspaceHealthTool(agent=agent)
+    return WorkspaceHealthTool(agent=agent)
 
 
 def test_tool_name_is_scalpel_workspace_health() -> None:
-    from serena.tools.scalpel_primitives import ScalpelWorkspaceHealthTool
+    from serena.tools.scalpel_primitives import WorkspaceHealthTool
 
-    assert ScalpelWorkspaceHealthTool.get_name_from_cls() == "scalpel_workspace_health"
+    assert WorkspaceHealthTool.get_name_from_cls() == "workspace_health"
 
 
 def test_apply_returns_workspace_health_shape(tmp_path: Path) -> None:

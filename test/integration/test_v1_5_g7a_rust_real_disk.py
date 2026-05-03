@@ -20,16 +20,16 @@ Discipline:
     against any LSP whose actions resolve to a real ``WorkspaceEdit``.
 
 Facades covered (10):
-  1. ScalpelChangeVisibilityTool
-  2. ScalpelChangeReturnTypeTool
-  3. ScalpelConvertModuleLayoutTool
-  4. ScalpelTidyStructureTool
-  5. ScalpelChangeTypeShapeTool
-  6. ScalpelCompleteMatchArmsTool
-  7. ScalpelExtractLifetimeTool
-  8. ScalpelExpandGlobImportsTool
-  9. ScalpelGenerateTraitImplScaffoldTool
-  10. ScalpelGenerateMemberTool
+  1. ChangeVisibilityTool
+  2. ChangeReturnTypeTool
+  3. ConvertModuleLayoutTool
+  4. TidyStructureTool
+  5. ChangeTypeShapeTool
+  6. CompleteMatchArmsTool
+  7. ExtractLifetimeTool
+  8. ExpandGlobImportsTool
+  9. GenerateTraitImplScaffoldTool
+  10. GenerateMemberTool
 
 Authored-by: AI Hive®.
 """
@@ -44,16 +44,16 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from serena.tools.scalpel_facades import (
-    ScalpelChangeReturnTypeTool,
-    ScalpelChangeTypeShapeTool,
-    ScalpelChangeVisibilityTool,
-    ScalpelCompleteMatchArmsTool,
-    ScalpelConvertModuleLayoutTool,
-    ScalpelExpandGlobImportsTool,
-    ScalpelExtractLifetimeTool,
-    ScalpelGenerateMemberTool,
-    ScalpelGenerateTraitImplScaffoldTool,
-    ScalpelTidyStructureTool,
+    ChangeReturnTypeTool,
+    ChangeTypeShapeTool,
+    ChangeVisibilityTool,
+    CompleteMatchArmsTool,
+    ConvertModuleLayoutTool,
+    ExpandGlobImportsTool,
+    ExtractLifetimeTool,
+    GenerateMemberTool,
+    GenerateTraitImplScaffoldTool,
+    TidyStructureTool,
 )
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
@@ -131,7 +131,7 @@ def _insert_edit(uri: str, line: int, ch: int, text: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# 1. ScalpelChangeVisibilityTool
+# 1. ChangeVisibilityTool
 # ---------------------------------------------------------------------------
 
 
@@ -147,7 +147,7 @@ def test_g7a_change_visibility_real_disk_pub_crate(tmp_path: Path) -> None:
         )],
         edit_for={"ra:vis": _insert_edit(src.as_uri(), 0, 0, "pub(crate) ")},
     )
-    tool = _make_tool(ScalpelChangeVisibilityTool, tmp_path)
+    tool = _make_tool(ChangeVisibilityTool, tmp_path)
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=coord,
@@ -167,7 +167,7 @@ def test_g7a_change_visibility_real_disk_pub_crate(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 2. ScalpelChangeReturnTypeTool
+# 2. ChangeReturnTypeTool
 # ---------------------------------------------------------------------------
 
 
@@ -185,7 +185,7 @@ def test_g7a_change_return_type_real_disk_to_result(tmp_path: Path) -> None:
             src.as_uri(), 0, 17, 20, "Result<i32, Error>",
         )},
     )
-    tool = _make_tool(ScalpelChangeReturnTypeTool, tmp_path)
+    tool = _make_tool(ChangeReturnTypeTool, tmp_path)
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=coord,
@@ -205,7 +205,7 @@ def test_g7a_change_return_type_real_disk_to_result(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 3. ScalpelConvertModuleLayoutTool
+# 3. ConvertModuleLayoutTool
 # ---------------------------------------------------------------------------
 
 
@@ -224,7 +224,7 @@ def test_g7a_convert_module_layout_real_disk_inline_to_file(tmp_path: Path) -> N
             src.as_uri(), 0, 0, len("mod inner { fn x() {} }"), "mod inner;",
         )},
     )
-    tool = _make_tool(ScalpelConvertModuleLayoutTool, tmp_path)
+    tool = _make_tool(ConvertModuleLayoutTool, tmp_path)
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=coord,
@@ -244,7 +244,7 @@ def test_g7a_convert_module_layout_real_disk_inline_to_file(tmp_path: Path) -> N
 
 
 # ---------------------------------------------------------------------------
-# 4. ScalpelTidyStructureTool — file scope (uses compute_file_range now)
+# 4. TidyStructureTool — file scope (uses compute_file_range now)
 # ---------------------------------------------------------------------------
 
 
@@ -288,7 +288,7 @@ def test_g7a_tidy_structure_real_disk_file_scope(tmp_path: Path) -> None:
     }
     coord = _make_coord(actions=actions, edit_for=edit_for)
 
-    tool = _make_tool(ScalpelTidyStructureTool, tmp_path)
+    tool = _make_tool(TidyStructureTool, tmp_path)
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=coord,
@@ -310,7 +310,7 @@ def test_g7a_tidy_structure_real_disk_file_scope(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 5. ScalpelChangeTypeShapeTool
+# 5. ChangeTypeShapeTool
 # ---------------------------------------------------------------------------
 
 
@@ -329,7 +329,7 @@ def test_g7a_change_type_shape_real_disk_named_struct(tmp_path: Path) -> None:
             "struct Foo { field0: i32 }",
         )},
     )
-    tool = _make_tool(ScalpelChangeTypeShapeTool, tmp_path)
+    tool = _make_tool(ChangeTypeShapeTool, tmp_path)
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=coord,
@@ -349,7 +349,7 @@ def test_g7a_change_type_shape_real_disk_named_struct(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 6. ScalpelCompleteMatchArmsTool
+# 6. CompleteMatchArmsTool
 # ---------------------------------------------------------------------------
 
 
@@ -372,7 +372,7 @@ def test_g7a_complete_match_arms_real_disk(tmp_path: Path) -> None:
             "\n        E::A => todo!(),\n        E::B => todo!(),\n    ",
         )},
     )
-    tool = _make_tool(ScalpelCompleteMatchArmsTool, tmp_path)
+    tool = _make_tool(CompleteMatchArmsTool, tmp_path)
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=coord,
@@ -392,7 +392,7 @@ def test_g7a_complete_match_arms_real_disk(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 7. ScalpelExtractLifetimeTool
+# 7. ExtractLifetimeTool
 # ---------------------------------------------------------------------------
 
 
@@ -411,7 +411,7 @@ def test_g7a_extract_lifetime_real_disk(tmp_path: Path) -> None:
             "fn f<'a>(x: &'a i32) -> &'a i32 { x }",
         )},
     )
-    tool = _make_tool(ScalpelExtractLifetimeTool, tmp_path)
+    tool = _make_tool(ExtractLifetimeTool, tmp_path)
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=coord,
@@ -432,7 +432,7 @@ def test_g7a_extract_lifetime_real_disk(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 8. ScalpelExpandGlobImportsTool
+# 8. ExpandGlobImportsTool
 # ---------------------------------------------------------------------------
 
 
@@ -451,7 +451,7 @@ def test_g7a_expand_glob_imports_real_disk(tmp_path: Path) -> None:
             "use foo::{a, b, c};",
         )},
     )
-    tool = _make_tool(ScalpelExpandGlobImportsTool, tmp_path)
+    tool = _make_tool(ExpandGlobImportsTool, tmp_path)
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=coord,
@@ -470,7 +470,7 @@ def test_g7a_expand_glob_imports_real_disk(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 9. ScalpelGenerateTraitImplScaffoldTool
+# 9. GenerateTraitImplScaffoldTool
 # ---------------------------------------------------------------------------
 
 
@@ -489,7 +489,7 @@ def test_g7a_generate_trait_impl_scaffold_real_disk(tmp_path: Path) -> None:
             "\nimpl Display for Foo {\n    fn fmt(&self, f: &mut Formatter<'_>) -> Result {\n        todo!()\n    }\n}\n",
         )},
     )
-    tool = _make_tool(ScalpelGenerateTraitImplScaffoldTool, tmp_path)
+    tool = _make_tool(GenerateTraitImplScaffoldTool, tmp_path)
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=coord,
@@ -509,7 +509,7 @@ def test_g7a_generate_trait_impl_scaffold_real_disk(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 10. ScalpelGenerateMemberTool — getter
+# 10. GenerateMemberTool — getter
 # ---------------------------------------------------------------------------
 
 
@@ -531,7 +531,7 @@ def test_g7a_generate_member_real_disk_getter(tmp_path: Path) -> None:
             "\n    pub fn name(&self) -> &String {\n        &self.name\n    }\n",
         )},
     )
-    tool = _make_tool(ScalpelGenerateMemberTool, tmp_path)
+    tool = _make_tool(GenerateMemberTool, tmp_path)
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=coord,

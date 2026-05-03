@@ -1,7 +1,7 @@
 """v1.1 Stream 5 / Leaf 06 Tasks 2-4 — confirmation-mode tool tests.
 
-Covers the ``ScalpelDryRunComposeTool`` extension (``confirmation_mode='manual'``,
-Task 2), the ``ScalpelConfirmAnnotationsTool`` apply-only-accepted-groups
+Covers the ``DryRunComposeTool`` extension (``confirmation_mode='manual'``,
+Task 2), the ``ConfirmAnnotationsTool`` apply-only-accepted-groups
 workflow (Task 3), and the docstring-cite + MCP auto-registration lint
 gates (Task 4). Bypasses the full ``Tool.apply_ex`` lifecycle and calls
 ``apply`` directly, matching the pattern in
@@ -20,8 +20,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from serena.tools.scalpel_primitives import (
-    ScalpelConfirmAnnotationsTool,
-    ScalpelDryRunComposeTool,
+    ConfirmAnnotationsTool,
+    DryRunComposeTool,
 )
 from serena.tools.scalpel_runtime import ScalpelRuntime
 from serena.tools.tools_base import Tool
@@ -44,19 +44,19 @@ def _reset_runtime(
     ScalpelRuntime.reset_for_testing()
 
 
-def _build_dry_run_tool(tmp_path: Path) -> ScalpelDryRunComposeTool:
+def _build_dry_run_tool(tmp_path: Path) -> DryRunComposeTool:
     agent = MagicMock(name="SerenaAgent")
     agent.get_project_root.return_value = str(tmp_path)
-    tool = ScalpelDryRunComposeTool(agent=agent)
+    tool = DryRunComposeTool(agent=agent)
     # ``Tool.get_project_root`` is implemented on the agent; pin it via the mock.
     object.__setattr__(tool, "get_project_root", lambda: str(tmp_path))
     return tool
 
 
-def _build_confirm_tool(tmp_path: Path) -> ScalpelConfirmAnnotationsTool:
+def _build_confirm_tool(tmp_path: Path) -> ConfirmAnnotationsTool:
     agent = MagicMock(name="SerenaAgent")
     agent.get_project_root.return_value = str(tmp_path)
-    tool = ScalpelConfirmAnnotationsTool(agent=agent)
+    tool = ConfirmAnnotationsTool(agent=agent)
     object.__setattr__(tool, "get_project_root", lambda: str(tmp_path))
     return tool
 
@@ -107,7 +107,7 @@ def _make_workspace_edit_with_two_groups(file_a: Path, file_b: Path) -> dict[str
 
 
 # ---------------------------------------------------------------------------
-# Task 2 — ScalpelDryRunComposeTool with confirmation_mode='manual'
+# Task 2 — DryRunComposeTool with confirmation_mode='manual'
 # ---------------------------------------------------------------------------
 
 
@@ -156,7 +156,7 @@ def test_dry_run_compose_manual_mode_no_annotations_still_persists(
 
 
 # ---------------------------------------------------------------------------
-# Task 3 — ScalpelConfirmAnnotationsTool
+# Task 3 — ConfirmAnnotationsTool
 # ---------------------------------------------------------------------------
 
 
@@ -234,12 +234,12 @@ def test_pending_tx_persists_across_runtime_resets(tmp_path: Path) -> None:
 
 def test_confirm_tool_class_docstring_cites_q4_line_211() -> None:
     """R2: cite §6.3 line 211 specifically; the surrounding paragraph rejects D."""
-    doc = ScalpelConfirmAnnotationsTool.__doc__ or ""
+    doc = ConfirmAnnotationsTool.__doc__ or ""
     pattern = re.compile(
         r"q4-changeannotations-auto-accept\.md\s+§6\.3\s+line\s+211",
     )
     assert pattern.search(doc), (
-        "ScalpelConfirmAnnotationsTool docstring must cite "
+        "ConfirmAnnotationsTool docstring must cite "
         "'q4-changeannotations-auto-accept.md §6.3 line 211' verbatim "
         "(R2 — line 211 carries the v1.1 endorsement; the paragraph rejects D)."
     )
@@ -248,18 +248,18 @@ def test_confirm_tool_class_docstring_cites_q4_line_211() -> None:
 def test_confirm_tool_appears_in_iter_subclasses() -> None:
     """Auto-registration via ``iter_subclasses(Tool)`` (Stage 1G mechanism)."""
     discovered = {cls.get_name_from_cls() for cls in iter_subclasses(Tool)}
-    assert "scalpel_confirm_annotations" in discovered
+    assert "confirm_annotations" in discovered
 
 
 def test_confirm_tool_class_name_resolves_to_snake_cased_form() -> None:
     assert (
-        ScalpelConfirmAnnotationsTool.get_name_from_cls()
-        == "scalpel_confirm_annotations"
+        ConfirmAnnotationsTool.get_name_from_cls()
+        == "confirm_annotations"
     )
 
 
 def test_confirm_tool_exported_from_tools_package() -> None:
     from serena import tools as tools_pkg
 
-    assert hasattr(tools_pkg, "ScalpelConfirmAnnotationsTool")
-    assert tools_pkg.ScalpelConfirmAnnotationsTool is ScalpelConfirmAnnotationsTool
+    assert hasattr(tools_pkg, "ConfirmAnnotationsTool")
+    assert tools_pkg.ConfirmAnnotationsTool is ConfirmAnnotationsTool

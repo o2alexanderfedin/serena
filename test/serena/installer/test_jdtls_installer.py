@@ -9,7 +9,7 @@ The platform-branch tests exercise both Darwin and Linux branches by
 monkeypatching :func:`platform.system` so the suite passes on any host OS.
 
 The class attributes test at the bottom asserts the stable API contract
-that ``ScalpelInstallLspServersTool`` relies on when it walks the installer
+that ``InstallLspServersTool`` relies on when it walks the installer
 registry.
 """
 

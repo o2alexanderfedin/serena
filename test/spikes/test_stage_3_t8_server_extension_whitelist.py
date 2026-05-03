@@ -3,7 +3,7 @@
 Per scope-report §4.3: the rust-analyzer adapter advertises 36 custom
 extension methods. Each must fall into exactly one bucket:
   - first-class facaded (8 enumerated facades)
-  - reachable via ``scalpel_apply_capability`` (27 typed pass-through)
+  - reachable via ``apply_capability`` (27 typed pass-through)
   - explicit-block (1: ``experimental/onEnter``)
 
 The whitelist below is frozen — adding a rust-analyzer release that
@@ -16,15 +16,15 @@ from __future__ import annotations
 
 # Per scope-report §4.3 row 1, 10, 21, 5, 30, 6, 31, 21 (subset overlap).
 RA_FIRST_CLASS_FACADES: frozenset[str] = frozenset({
-    "experimental/parentModule",       # row 1: scalpel_workspace_health
-    "experimental/serverStatus",       # row 10: scalpel_workspace_health
+    "experimental/parentModule",       # row 1: workspace_health
+    "experimental/serverStatus",       # row 10: workspace_health
     "experimental/ssr",                # row 5: scalpel_rust_ssr (deferred)
-    "rust-analyzer/runFlycheck",       # row 21: scalpel_workspace_health + Stage 3 verify
-    "rust-analyzer/expandMacro",       # row 30: Stage 3 scalpel_expand_macro
-    "experimental/runnables",          # row 6: Stage 3 scalpel_verify_after_refactor
-    "rust-analyzer/relatedTests",      # row 31: Stage 3 scalpel_verify_after_refactor
-    "rust-analyzer/reloadWorkspace",   # row 19: scalpel_workspace_health
-    "rust-analyzer/rebuildProcMacros", # row 20: scalpel_workspace_health
+    "rust-analyzer/runFlycheck",       # row 21: workspace_health + Stage 3 verify
+    "rust-analyzer/expandMacro",       # row 30: Stage 3 expand_macro
+    "experimental/runnables",          # row 6: Stage 3 verify_after_refactor
+    "rust-analyzer/relatedTests",      # row 31: Stage 3 verify_after_refactor
+    "rust-analyzer/reloadWorkspace",   # row 19: workspace_health
+    "rust-analyzer/rebuildProcMacros", # row 20: workspace_health
     "rust-analyzer/viewItemTree",      # row 28: internal (plan_file_split)
 })
 
@@ -113,10 +113,10 @@ def test_stage_3_facades_have_extensions_in_first_class_bucket():
     """The Stage 3 facades that wrap rust-analyzer custom extensions must
     have their underlying LSP method in RA_FIRST_CLASS_FACADES."""
     expected = {
-        "rust-analyzer/expandMacro",       # scalpel_expand_macro
-        "experimental/runnables",          # scalpel_verify_after_refactor
-        "rust-analyzer/runFlycheck",       # scalpel_verify_after_refactor
-        "rust-analyzer/relatedTests",      # scalpel_verify_after_refactor
+        "rust-analyzer/expandMacro",       # expand_macro
+        "experimental/runnables",          # verify_after_refactor
+        "rust-analyzer/runFlycheck",       # verify_after_refactor
+        "rust-analyzer/relatedTests",      # verify_after_refactor
     }
     missing = expected - RA_FIRST_CLASS_FACADES
     assert not missing, (
@@ -129,15 +129,15 @@ def test_pylsp_rope_facaded_commands_are_complete():
     deferred ones."""
     PYLSP_ROPE_FACADED_AT_MVP_OR_STAGE_3 = frozenset({
         # MVP (Stage 2A facades)
-        "pylsp_rope.refactor.extract.method",     # scalpel_extract(function)
-        "pylsp_rope.refactor.extract.variable",   # scalpel_extract(variable)
-        "pylsp_rope.refactor.inline",             # scalpel_inline
+        "pylsp_rope.refactor.extract.method",     # extract(function)
+        "pylsp_rope.refactor.extract.variable",   # extract(variable)
+        "pylsp_rope.refactor.inline",             # inline
         # Stage 3 (this commit)
-        "pylsp_rope.refactor.local_to_field",            # scalpel_local_to_field
-        "pylsp_rope.refactor.method_to_method_object",   # scalpel_convert_to_method_object
-        "pylsp_rope.refactor.use_function",              # scalpel_use_function
-        "pylsp_rope.refactor.introduce_parameter",       # scalpel_introduce_parameter
-        "pylsp_rope.quickfix.generate",                  # scalpel_generate_from_undefined
+        "pylsp_rope.refactor.local_to_field",            # local_to_field
+        "pylsp_rope.refactor.method_to_method_object",   # convert_to_method_object
+        "pylsp_rope.refactor.use_function",              # use_function
+        "pylsp_rope.refactor.introduce_parameter",       # introduce_parameter
+        "pylsp_rope.quickfix.generate",                  # generate_from_undefined
     })
     # 8 of 9 facaded; the 9th (`pylsp_rope.refactor.extract.method` already
     # covered) — count check.
@@ -146,13 +146,13 @@ def test_pylsp_rope_facaded_commands_are_complete():
 
 def test_basedpyright_pyright_ignore_quickfix_is_facaded():
     """§4.4.2 row 3: # pyright: ignore quickfix is Stage 3 facaded
-    via scalpel_ignore_diagnostic(tool='pyright')."""
-    from serena.tools.scalpel_facades import ScalpelIgnoreDiagnosticTool
-    assert ScalpelIgnoreDiagnosticTool.get_name_from_cls() == "scalpel_ignore_diagnostic"
+    via ignore_diagnostic(tool='pyright')."""
+    from serena.tools.scalpel_facades import IgnoreDiagnosticTool
+    assert IgnoreDiagnosticTool.get_name_from_cls() == "ignore_diagnostic"
 
 
 def test_ruff_source_fixall_is_facaded():
     """§4.4.3 row 1: source.fixAll.ruff is Stage 3 facaded
-    via scalpel_fix_lints (closes E13-py dedup gap)."""
-    from serena.tools.scalpel_facades import ScalpelFixLintsTool
-    assert ScalpelFixLintsTool.get_name_from_cls() == "scalpel_fix_lints"
+    via fix_lints (closes E13-py dedup gap)."""
+    from serena.tools.scalpel_facades import FixLintsTool
+    assert FixLintsTool.get_name_from_cls() == "fix_lints"

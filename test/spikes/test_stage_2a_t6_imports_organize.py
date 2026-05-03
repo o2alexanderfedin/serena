@@ -1,4 +1,4 @@
-"""Stage 2A T7 — ScalpelImportsOrganizeTool tests."""
+"""Stage 2A T7 — ImportsOrganizeTool tests."""
 from __future__ import annotations
 
 import json
@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from serena.tools.scalpel_facades import ScalpelImportsOrganizeTool
+from serena.tools.scalpel_facades import ImportsOrganizeTool
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
 
@@ -18,8 +18,8 @@ def reset_runtime():
     ScalpelRuntime.reset_for_testing()
 
 
-def _make_tool(project_root: Path) -> ScalpelImportsOrganizeTool:
-    tool = ScalpelImportsOrganizeTool.__new__(ScalpelImportsOrganizeTool)
+def _make_tool(project_root: Path) -> ImportsOrganizeTool:
+    tool = ImportsOrganizeTool.__new__(ImportsOrganizeTool)
     tool.get_project_root = lambda: str(project_root)  # type: ignore[method-assign]
     return tool
 

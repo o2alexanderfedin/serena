@@ -19,7 +19,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from serena.tools.scalpel_facades import ScalpelChangeVisibilityTool
+from serena.tools.scalpel_facades import ChangeVisibilityTool
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
 
@@ -37,8 +37,8 @@ def rust_workspace(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _make_tool(project_root: Path) -> ScalpelChangeVisibilityTool:
-    tool = ScalpelChangeVisibilityTool.__new__(ScalpelChangeVisibilityTool)
+def _make_tool(project_root: Path) -> ChangeVisibilityTool:
+    tool = ChangeVisibilityTool.__new__(ChangeVisibilityTool)
     tool.get_project_root = lambda: str(project_root)  # type: ignore[method-assign]
     return tool
 

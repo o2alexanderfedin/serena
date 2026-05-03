@@ -1,10 +1,10 @@
 """Stage 3 T1 — Rust ergonomic facades wave A.
 
 Per scope-report §4.2:
-- ScalpelConvertModuleLayoutTool (row B.1) — convert ``mod foo;`` <-> ``mod foo { ... }``.
-- ScalpelChangeVisibilityTool (row E) — toggle pub/pub(crate)/pub(super)/private.
-- ScalpelTidyStructureTool (row F composite) — reorder_impl_items + sort_items + reorder_fields.
-- ScalpelChangeTypeShapeTool (row H composite) — ``convert_*_to_*`` family.
+- ConvertModuleLayoutTool (row B.1) — convert ``mod foo;`` <-> ``mod foo { ... }``.
+- ChangeVisibilityTool (row E) — toggle pub/pub(crate)/pub(super)/private.
+- TidyStructureTool (row F composite) — reorder_impl_items + sort_items + reorder_fields.
+- ChangeTypeShapeTool (row H composite) — ``convert_*_to_*`` family.
 
 Each facade follows the Stage 2A dispatch pattern: workspace_boundary_guard,
 ``coordinator_for_facade``, ``merge_code_actions(only=[<kind>])``, return
@@ -22,10 +22,10 @@ import pytest
 
 from serena.tools.facade_support import get_apply_source
 from serena.tools.scalpel_facades import (
-    ScalpelChangeTypeShapeTool,
-    ScalpelChangeVisibilityTool,
-    ScalpelConvertModuleLayoutTool,
-    ScalpelTidyStructureTool,
+    ChangeTypeShapeTool,
+    ChangeVisibilityTool,
+    ConvertModuleLayoutTool,
+    TidyStructureTool,
 )
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
@@ -69,13 +69,13 @@ def _fake_coord(actions_by_only: dict[str, list]):
     return coord
 
 
-# ---------- ScalpelConvertModuleLayoutTool ---------------------------------
+# ---------- ConvertModuleLayoutTool ---------------------------------
 
 
 def test_convert_module_layout_dispatches_to_inline_kind(tmp_path: Path):
     src = tmp_path / "lib.rs"
     src.write_text("mod foo;\n")
-    tool = _make_tool(ScalpelConvertModuleLayoutTool, tmp_path)
+    tool = _make_tool(ConvertModuleLayoutTool, tmp_path)
     coord = _fake_coord({
         "refactor.rewrite.move_module_to_file": [_fake_action(
             "refactor.rewrite.move_module_to_file"
@@ -101,7 +101,7 @@ def test_convert_module_layout_no_action_returns_symbol_not_found(
 ):
     src = tmp_path / "lib.rs"
     src.write_text("// no module here\n")
-    tool = _make_tool(ScalpelConvertModuleLayoutTool, tmp_path)
+    tool = _make_tool(ConvertModuleLayoutTool, tmp_path)
     coord = _fake_coord({})
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
@@ -120,7 +120,7 @@ def test_convert_module_layout_no_action_returns_symbol_not_found(
 def test_convert_module_layout_dry_run_yields_preview_token(tmp_path: Path):
     src = tmp_path / "lib.rs"
     src.write_text("mod foo;\n")
-    tool = _make_tool(ScalpelConvertModuleLayoutTool, tmp_path)
+    tool = _make_tool(ConvertModuleLayoutTool, tmp_path)
     coord = _fake_coord({
         "refactor.rewrite.move_module_to_file": [_fake_action(
             "refactor.rewrite.move_module_to_file"
@@ -143,7 +143,7 @@ def test_convert_module_layout_dry_run_yields_preview_token(tmp_path: Path):
 
 
 def test_convert_module_layout_workspace_boundary_blocked(tmp_path: Path):
-    tool = _make_tool(ScalpelConvertModuleLayoutTool, tmp_path)
+    tool = _make_tool(ConvertModuleLayoutTool, tmp_path)
     out = tool.apply(
         file=str(tmp_path.parent / "elsewhere.rs"),
         position={"line": 0, "character": 0},
@@ -154,13 +154,13 @@ def test_convert_module_layout_workspace_boundary_blocked(tmp_path: Path):
     assert payload["failure"]["code"] == "WORKSPACE_BOUNDARY_VIOLATION"
 
 
-# ---------- ScalpelChangeVisibilityTool ------------------------------------
+# ---------- ChangeVisibilityTool ------------------------------------
 
 
 def test_change_visibility_dispatches(tmp_path: Path):
     src = tmp_path / "lib.rs"
     src.write_text("fn private_fn() {}\n")
-    tool = _make_tool(ScalpelChangeVisibilityTool, tmp_path)
+    tool = _make_tool(ChangeVisibilityTool, tmp_path)
     coord = _fake_coord({
         "refactor.rewrite.change_visibility": [_fake_action(
             "refactor.rewrite.change_visibility", title="Make pub"
@@ -184,7 +184,7 @@ def test_change_visibility_dispatches(tmp_path: Path):
 def test_change_visibility_no_action_returns_symbol_not_found(tmp_path: Path):
     src = tmp_path / "lib.rs"
     src.write_text("// nothing\n")
-    tool = _make_tool(ScalpelChangeVisibilityTool, tmp_path)
+    tool = _make_tool(ChangeVisibilityTool, tmp_path)
     coord = _fake_coord({})
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
@@ -203,7 +203,7 @@ def test_change_visibility_no_action_returns_symbol_not_found(tmp_path: Path):
 def test_change_visibility_dry_run(tmp_path: Path):
     src = tmp_path / "lib.rs"
     src.write_text("fn x() {}\n")
-    tool = _make_tool(ScalpelChangeVisibilityTool, tmp_path)
+    tool = _make_tool(ChangeVisibilityTool, tmp_path)
     coord = _fake_coord({
         "refactor.rewrite.change_visibility": [_fake_action(
             "refactor.rewrite.change_visibility"
@@ -225,13 +225,13 @@ def test_change_visibility_dry_run(tmp_path: Path):
     assert payload["preview_token"] is not None
 
 
-# ---------- ScalpelTidyStructureTool ---------------------------------------
+# ---------- TidyStructureTool ---------------------------------------
 
 
 def test_tidy_structure_calls_three_kinds_when_scope_file(tmp_path: Path):
     src = tmp_path / "lib.rs"
     src.write_text("struct S { b: i32, a: i32 }\n")
-    tool = _make_tool(ScalpelTidyStructureTool, tmp_path)
+    tool = _make_tool(TidyStructureTool, tmp_path)
     seen: list[list[str]] = []
     coord = MagicMock()
 
@@ -259,7 +259,7 @@ def test_tidy_structure_calls_three_kinds_when_scope_file(tmp_path: Path):
 def test_tidy_structure_no_actions_returns_no_op(tmp_path: Path):
     src = tmp_path / "lib.rs"
     src.write_text("// empty\n")
-    tool = _make_tool(ScalpelTidyStructureTool, tmp_path)
+    tool = _make_tool(TidyStructureTool, tmp_path)
     coord = _fake_coord({})
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
@@ -274,7 +274,7 @@ def test_tidy_structure_no_actions_returns_no_op(tmp_path: Path):
 def test_tidy_structure_dry_run(tmp_path: Path):
     src = tmp_path / "lib.rs"
     src.write_text("struct S { b: i32, a: i32 }\n")
-    tool = _make_tool(ScalpelTidyStructureTool, tmp_path)
+    tool = _make_tool(TidyStructureTool, tmp_path)
     coord = _fake_coord({
         "refactor.rewrite.reorder_fields": [_fake_action(
             "refactor.rewrite.reorder_fields"
@@ -292,13 +292,13 @@ def test_tidy_structure_dry_run(tmp_path: Path):
     assert payload["preview_token"] is not None
 
 
-# ---------- ScalpelChangeTypeShapeTool -------------------------------------
+# ---------- ChangeTypeShapeTool -------------------------------------
 
 
 def test_change_type_shape_dispatches(tmp_path: Path):
     src = tmp_path / "lib.rs"
     src.write_text("struct S(i32);\n")
-    tool = _make_tool(ScalpelChangeTypeShapeTool, tmp_path)
+    tool = _make_tool(ChangeTypeShapeTool, tmp_path)
     coord = _fake_coord({
         "refactor.rewrite.convert_tuple_struct_to_named_struct": [_fake_action(
             "refactor.rewrite.convert_tuple_struct_to_named_struct"
@@ -323,7 +323,7 @@ def test_change_type_shape_unknown_target_returns_invalid_argument(
 ):
     src = tmp_path / "lib.rs"
     src.write_text("\n")
-    tool = _make_tool(ScalpelChangeTypeShapeTool, tmp_path)
+    tool = _make_tool(ChangeTypeShapeTool, tmp_path)
     out = tool.apply(
         file=str(src),
         position={"line": 0, "character": 0},
@@ -337,7 +337,7 @@ def test_change_type_shape_unknown_target_returns_invalid_argument(
 def test_change_type_shape_no_action_returns_symbol_not_found(tmp_path: Path):
     src = tmp_path / "lib.rs"
     src.write_text("\n")
-    tool = _make_tool(ScalpelChangeTypeShapeTool, tmp_path)
+    tool = _make_tool(ChangeTypeShapeTool, tmp_path)
     coord = _fake_coord({})
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
@@ -359,10 +359,10 @@ def test_change_type_shape_no_action_returns_symbol_not_found(tmp_path: Path):
 def test_all_four_tools_reexported_from_serena_tools():
     import serena.tools as tools_module
     for name in (
-        "ScalpelConvertModuleLayoutTool",
-        "ScalpelChangeVisibilityTool",
-        "ScalpelTidyStructureTool",
-        "ScalpelChangeTypeShapeTool",
+        "ConvertModuleLayoutTool",
+        "ChangeVisibilityTool",
+        "TidyStructureTool",
+        "ChangeTypeShapeTool",
     ):
         assert hasattr(tools_module, name)
 
@@ -370,10 +370,10 @@ def test_all_four_tools_reexported_from_serena_tools():
 def test_apply_methods_invoke_workspace_boundary_guard():
     """v0.2.0-Stage3 — every new facade must call workspace_boundary_guard."""
     for cls in (
-        ScalpelConvertModuleLayoutTool,
-        ScalpelChangeVisibilityTool,
-        ScalpelTidyStructureTool,
-        ScalpelChangeTypeShapeTool,
+        ConvertModuleLayoutTool,
+        ChangeVisibilityTool,
+        TidyStructureTool,
+        ChangeTypeShapeTool,
     ):
         src = get_apply_source(cls)
         assert "workspace_boundary_guard(" in src, (
@@ -383,10 +383,10 @@ def test_apply_methods_invoke_workspace_boundary_guard():
 
 def test_tool_names_match_scope_report_naming():
     expected = {
-        ScalpelConvertModuleLayoutTool: "scalpel_convert_module_layout",
-        ScalpelChangeVisibilityTool: "scalpel_change_visibility",
-        ScalpelTidyStructureTool: "scalpel_tidy_structure",
-        ScalpelChangeTypeShapeTool: "scalpel_change_type_shape",
+        ConvertModuleLayoutTool: "convert_module_layout",
+        ChangeVisibilityTool: "change_visibility",
+        TidyStructureTool: "tidy_structure",
+        ChangeTypeShapeTool: "change_type_shape",
     }
     for cls, name in expected.items():
         assert cls.get_name_from_cls() == name
@@ -408,7 +408,7 @@ def test_change_visibility_real_disk_lands_pub_crate_on_disk(tmp_path: Path):
     src = tmp_path / "lib.rs"
     src.write_text("fn private_fn() {}\n", encoding="utf-8")
     before = src.read_text(encoding="utf-8")
-    tool = _make_tool(ScalpelChangeVisibilityTool, tmp_path)
+    tool = _make_tool(ChangeVisibilityTool, tmp_path)
 
     # Coord with a Change-Visibility action whose resolved edit lands
     # `pub(crate) ` on disk.

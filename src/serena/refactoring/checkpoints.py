@@ -147,7 +147,7 @@ class Checkpoint:
         # FIFO retention uses filesystem mtime (more authoritative across
         # sessions); this field is informational metadata.
         self.created_at_ns: int = time.time_ns()
-        # v1.7 P7 — once ``ScalpelRollbackTool`` has run the inverse-applier
+        # v1.7 P7 — once ``RollbackTool`` has run the inverse-applier
         # against this checkpoint, it sets ``reverted=True`` so subsequent
         # rollbacks short-circuit to ``no_op=True`` (idempotent contract).
         # The flag is in-memory only; cross-session idempotency is not

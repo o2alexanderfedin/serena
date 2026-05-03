@@ -20,7 +20,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from serena.tools.scalpel_facades import ScalpelIgnoreDiagnosticTool
+from serena.tools.scalpel_facades import IgnoreDiagnosticTool
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
 
@@ -39,7 +39,7 @@ def python_workspace(tmp_path: Path) -> Path:
 
 
 def _make_tool(project_root: Path) -> Any:
-    tool = ScalpelIgnoreDiagnosticTool.__new__(ScalpelIgnoreDiagnosticTool)
+    tool = IgnoreDiagnosticTool.__new__(IgnoreDiagnosticTool)
     tool.get_project_root = lambda: str(project_root)  # type: ignore[method-assign]
     return tool
 

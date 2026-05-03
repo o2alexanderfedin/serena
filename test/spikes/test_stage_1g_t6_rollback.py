@@ -1,4 +1,4 @@
-"""T6 — ScalpelRollbackTool + ScalpelTransactionRollbackTool: idempotent undo."""
+"""T6 — RollbackTool + TransactionRollbackTool: idempotent undo."""
 
 from __future__ import annotations
 
@@ -20,33 +20,33 @@ def _reset_runtime() -> Iterator[None]:
 
 
 def _build_single(project_root: Path):  # type: ignore[no-untyped-def]
-    from serena.tools.scalpel_primitives import ScalpelRollbackTool
+    from serena.tools.scalpel_primitives import RollbackTool
 
     agent = MagicMock(name="SerenaAgent")
     agent.get_active_project_or_raise.return_value = MagicMock(
         project_root=str(project_root),
     )
-    return ScalpelRollbackTool(agent=agent)
+    return RollbackTool(agent=agent)
 
 
 def _build_multi(project_root: Path):  # type: ignore[no-untyped-def]
-    from serena.tools.scalpel_primitives import ScalpelTransactionRollbackTool
+    from serena.tools.scalpel_primitives import TransactionRollbackTool
 
     agent = MagicMock(name="SerenaAgent")
     agent.get_active_project_or_raise.return_value = MagicMock(
         project_root=str(project_root),
     )
-    return ScalpelTransactionRollbackTool(agent=agent)
+    return TransactionRollbackTool(agent=agent)
 
 
 def test_tool_names() -> None:
     from serena.tools.scalpel_primitives import (
-        ScalpelRollbackTool,
-        ScalpelTransactionRollbackTool,
+        RollbackTool,
+        TransactionRollbackTool,
     )
 
-    assert ScalpelRollbackTool.get_name_from_cls() == "scalpel_rollback"
-    assert ScalpelTransactionRollbackTool.get_name_from_cls() == "scalpel_transaction_rollback"
+    assert RollbackTool.get_name_from_cls() == "rollback"
+    assert TransactionRollbackTool.get_name_from_cls() == "transaction_rollback"
 
 
 def test_single_rollback_unknown_id_returns_no_op(tmp_path: Path) -> None:
