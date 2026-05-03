@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "scalpel-python": {
+    "lsp": {
       "args": [
         "--from",
         "git+https://github.com/o2alexanderfedin/o2-scalpel-engine.git",
