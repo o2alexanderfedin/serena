@@ -1,4 +1,4 @@
-"""T4 — ScalpelApplyCapabilityTool: dispatch, dry-run, workspace boundary."""
+"""T4 — ApplyCapabilityTool: dispatch, dry-run, workspace boundary."""
 
 from __future__ import annotations
 
@@ -20,19 +20,19 @@ def _reset_runtime() -> Iterator[None]:
 
 
 def _build_tool(project_root: Path):  # type: ignore[no-untyped-def]
-    from serena.tools.scalpel_primitives import ScalpelApplyCapabilityTool
+    from serena.tools.scalpel_primitives import ApplyCapabilityTool
 
     agent = MagicMock(name="SerenaAgent")
     agent.get_active_project_or_raise.return_value = MagicMock(
         project_root=str(project_root),
     )
-    return ScalpelApplyCapabilityTool(agent=agent)
+    return ApplyCapabilityTool(agent=agent)
 
 
 def test_tool_name_is_scalpel_apply_capability() -> None:
-    from serena.tools.scalpel_primitives import ScalpelApplyCapabilityTool
+    from serena.tools.scalpel_primitives import ApplyCapabilityTool
 
-    assert ScalpelApplyCapabilityTool.get_name_from_cls() == "scalpel_apply_capability"
+    assert ApplyCapabilityTool.get_name_from_cls() == "apply_capability"
 
 
 def test_apply_unknown_capability_id_returns_failure(tmp_path: Path) -> None:

@@ -1,4 +1,4 @@
-"""v1.3-F — E2E scenario: ``scalpel_install_lsp_servers`` safety contract.
+"""v1.3-F — E2E scenario: ``install_lsp_servers`` safety contract.
 
 Tests the non-destructive safety contract for the LSP installer MCP tool:
 - dry_run=True (default) surfaces the planned command without subprocess
@@ -29,21 +29,21 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from serena.installer.installer import InstalledStatus, InstallResult
-from serena.tools.scalpel_primitives import ScalpelInstallLspServersTool
+from serena.tools.scalpel_primitives import InstallLspServersTool
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_tool(tmp_path: Path) -> ScalpelInstallLspServersTool:
-    """Return a ScalpelInstallLspServersTool bound to a tmp workspace root.
+def _make_tool(tmp_path: Path) -> InstallLspServersTool:
+    """Return a InstallLspServersTool bound to a tmp workspace root.
 
     Mirrors the ``_McpDriver._bind`` pattern used by the e2e conftest: create
     via ``__new__`` (bypassing Tool.__init__ agent requirement) and inject a
     ``get_project_root`` shim so the tool can resolve relative paths.
     """
-    tool = ScalpelInstallLspServersTool.__new__(ScalpelInstallLspServersTool)
+    tool = InstallLspServersTool.__new__(InstallLspServersTool)
     tool.get_project_root = lambda: str(tmp_path)  # type: ignore[method-assign]
     return tool
 
@@ -233,7 +233,7 @@ def test_session_start_hook_wiring_rust(tmp_path: Path) -> None:  # noqa: ARG001
 
     The hook fires ``verify-scalpel-rust.sh`` at session start. When that
     script returns exit 2 (LSP binary missing), Claude is expected to invoke
-    ``scalpel_install_lsp_servers`` to bootstrap rust-analyzer. This test
+    ``install_lsp_servers`` to bootstrap rust-analyzer. This test
     validates the wiring half (hooks.json structure) without spawning any
     subprocess — the shell script itself is validated separately.
 

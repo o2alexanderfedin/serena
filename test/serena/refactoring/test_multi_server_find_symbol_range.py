@@ -3,7 +3,7 @@
 Sibling to the v0.2.0-C ``find_symbol_position`` tests. Where
 ``find_symbol_position`` returns just the symbol's selection-range start,
 ``find_symbol_range`` returns the symbol's full body span (LSP ``range``),
-which ``scalpel_extract`` requires when only ``name_path`` is supplied.
+which ``extract`` requires when only ``name_path`` is supplied.
 """
 
 from __future__ import annotations

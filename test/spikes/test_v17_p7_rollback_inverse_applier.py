@@ -63,23 +63,23 @@ def _file_uri(path: Path) -> str:
 
 
 def _build_single_rollback(project_root: Path):  # type: ignore[no-untyped-def]
-    from serena.tools.scalpel_primitives import ScalpelRollbackTool
+    from serena.tools.scalpel_primitives import RollbackTool
 
     agent = MagicMock(name="SerenaAgent")
     agent.get_active_project_or_raise.return_value = MagicMock(
         project_root=str(project_root),
     )
-    return ScalpelRollbackTool(agent=agent)
+    return RollbackTool(agent=agent)
 
 
 def _build_txn_rollback(project_root: Path):  # type: ignore[no-untyped-def]
-    from serena.tools.scalpel_primitives import ScalpelTransactionRollbackTool
+    from serena.tools.scalpel_primitives import TransactionRollbackTool
 
     agent = MagicMock(name="SerenaAgent")
     agent.get_active_project_or_raise.return_value = MagicMock(
         project_root=str(project_root),
     )
-    return ScalpelTransactionRollbackTool(agent=agent)
+    return TransactionRollbackTool(agent=agent)
 
 
 # ---------------------------------------------------------------------------
@@ -181,7 +181,7 @@ def test_inverse_applier_skips_delete_op_with_warning(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 2. ScalpelRollbackTool integration — real inverse_apply_checkpoint
+# 2. RollbackTool integration — real inverse_apply_checkpoint
 # ---------------------------------------------------------------------------
 
 

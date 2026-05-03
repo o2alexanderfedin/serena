@@ -18,7 +18,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from serena.tools.scalpel_facades import ScalpelChangeVisibilityTool
+from serena.tools.scalpel_facades import ChangeVisibilityTool
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
 
@@ -68,7 +68,7 @@ def test_facade_writes_resolved_edit_to_disk(tmp_path: Path):
             }]
         }
     }
-    tool = _make_tool(ScalpelChangeVisibilityTool, tmp_path)
+    tool = _make_tool(ChangeVisibilityTool, tmp_path)
     coord = _make_coord_with_edit(
         action_id="ra:visibility:1",
         kind="refactor.rewrite.change_visibility",
@@ -97,7 +97,7 @@ def test_facade_falls_back_to_empty_checkpoint_when_coord_lacks_lookup(
     src = tmp_path / "lib.rs"
     src.write_text("fn private_fn() {}\n")
     pre = src.read_text(encoding="utf-8")
-    tool = _make_tool(ScalpelChangeVisibilityTool, tmp_path)
+    tool = _make_tool(ChangeVisibilityTool, tmp_path)
     coord = MagicMock()
     # v1.5 G4-4 — title must substring-match target_visibility="pub".
     winner = MagicMock(
@@ -131,7 +131,7 @@ def test_facade_falls_back_when_get_action_edit_returns_none(tmp_path: Path):
     src = tmp_path / "lib.rs"
     src.write_text("fn x() {}\n")
     pre = src.read_text(encoding="utf-8")
-    tool = _make_tool(ScalpelChangeVisibilityTool, tmp_path)
+    tool = _make_tool(ChangeVisibilityTool, tmp_path)
     coord = MagicMock()
     # v1.5 G4-4 — title must substring-match target_visibility="pub".
     winner = MagicMock(
@@ -177,7 +177,7 @@ def test_facade_writes_multi_file_edit(tmp_path: Path):
             }],
         }
     }
-    tool = _make_tool(ScalpelChangeVisibilityTool, tmp_path)
+    tool = _make_tool(ChangeVisibilityTool, tmp_path)
     coord = _make_coord_with_edit(
         action_id="ra:multi:1",
         kind="refactor.rewrite.change_visibility",

@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from serena.tools.scalpel_facades import ScalpelExtractLifetimeTool
+from serena.tools.scalpel_facades import ExtractLifetimeTool
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
 
@@ -35,8 +35,8 @@ def rust_workspace(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _make_tool(project_root: Path) -> ScalpelExtractLifetimeTool:
-    tool = ScalpelExtractLifetimeTool.__new__(ScalpelExtractLifetimeTool)
+def _make_tool(project_root: Path) -> ExtractLifetimeTool:
+    tool = ExtractLifetimeTool.__new__(ExtractLifetimeTool)
     tool.get_project_root = lambda: str(project_root)  # type: ignore[method-assign]
     return tool
 

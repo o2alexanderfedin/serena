@@ -1,7 +1,7 @@
 """v1.1.1 Leaf 02 — markdown facade smoke test.
 
 One end-to-end test that boots a real marksman against a tmp_path
-workspace and exercises ``scalpel_rename_heading`` through the
+workspace and exercises ``rename_heading`` through the
 ``ScalpelRuntime`` -> ``coordinator_for_facade`` -> marksman path.
 Skips cleanly when ``marksman`` is not on PATH (production wiring
 expects Leaf 03's installer to provision it; the test suite stays
@@ -31,7 +31,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from serena.tools.scalpel_facades import ScalpelRenameHeadingTool
+from serena.tools.scalpel_facades import RenameHeadingTool
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
 
@@ -66,7 +66,7 @@ def test_rename_heading_smoke_against_real_marksman(tmp_path: Path) -> None:
 
     agent = MagicMock(name="SerenaAgent")
     agent.get_project_root.return_value = str(tmp_path)
-    tool = ScalpelRenameHeadingTool(agent=agent)
+    tool = RenameHeadingTool(agent=agent)
     object.__setattr__(tool, "get_project_root", lambda: str(tmp_path))
 
     payload = json.loads(

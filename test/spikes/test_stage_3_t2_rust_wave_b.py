@@ -1,10 +1,10 @@
 """Stage 3 T2 — Rust ergonomic facades wave B.
 
 Per scope-report §4.2:
-- ScalpelChangeReturnTypeTool (row H tail) — function return-type rewriter.
-- ScalpelCompleteMatchArmsTool (row I) — ``add_missing_match_arms``.
-- ScalpelExtractLifetimeTool (row H) — lifetime-introduction assist.
-- ScalpelExpandGlobImportsTool (row D) — ``expand_glob_imports``.
+- ChangeReturnTypeTool (row H tail) — function return-type rewriter.
+- CompleteMatchArmsTool (row I) — ``add_missing_match_arms``.
+- ExtractLifetimeTool (row H) — lifetime-introduction assist.
+- ExpandGlobImportsTool (row D) — ``expand_glob_imports``.
 
 Same dispatch pattern as Wave A: workspace_boundary_guard,
 ``coordinator_for_facade``, ``merge_code_actions(only=[<kind>])``, with
@@ -21,10 +21,10 @@ import pytest
 
 from serena.tools.facade_support import get_apply_source
 from serena.tools.scalpel_facades import (
-    ScalpelChangeReturnTypeTool,
-    ScalpelCompleteMatchArmsTool,
-    ScalpelExpandGlobImportsTool,
-    ScalpelExtractLifetimeTool,
+    ChangeReturnTypeTool,
+    CompleteMatchArmsTool,
+    ExpandGlobImportsTool,
+    ExtractLifetimeTool,
 )
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
@@ -71,7 +71,7 @@ def _exercise_dispatch(cls, kwargs: dict, kind: str | None, tmp_path: Path) -> d
     return json.loads(out)
 
 
-# ---------- ScalpelChangeReturnTypeTool ------------------------------------
+# ---------- ChangeReturnTypeTool ------------------------------------
 
 
 def test_change_return_type_dispatches(tmp_path: Path):
@@ -79,7 +79,7 @@ def test_change_return_type_dispatches(tmp_path: Path):
     # dispatcher's title_match. The default fake_action title is "x"; we
     # use it as the caller's request so the title-substring match succeeds.
     payload = _exercise_dispatch(
-        ScalpelChangeReturnTypeTool,
+        ChangeReturnTypeTool,
         kwargs={"position": {"line": 0, "character": 6}, "new_return_type": "x"},
         kind="refactor.rewrite.change_return_type",
         tmp_path=tmp_path,
@@ -89,7 +89,7 @@ def test_change_return_type_dispatches(tmp_path: Path):
 
 def test_change_return_type_no_action(tmp_path: Path):
     payload = _exercise_dispatch(
-        ScalpelChangeReturnTypeTool,
+        ChangeReturnTypeTool,
         kwargs={"position": {"line": 0, "character": 0}, "new_return_type": "x"},
         kind=None,
         tmp_path=tmp_path,
@@ -100,7 +100,7 @@ def test_change_return_type_no_action(tmp_path: Path):
 def test_change_return_type_dry_run(tmp_path: Path):
     src = tmp_path / "lib.rs"
     src.write_text("fn x() -> i32 { 0 }\n")
-    tool = _make_tool(ScalpelChangeReturnTypeTool, tmp_path)
+    tool = _make_tool(ChangeReturnTypeTool, tmp_path)
     coord = _fake_coord_with("refactor.rewrite.change_return_type")
     with patch("serena.tools.scalpel_facades.coordinator_for_facade", return_value=coord):
         out = tool.apply(
@@ -111,12 +111,12 @@ def test_change_return_type_dry_run(tmp_path: Path):
     assert payload["preview_token"] is not None
 
 
-# ---------- ScalpelCompleteMatchArmsTool -----------------------------------
+# ---------- CompleteMatchArmsTool -----------------------------------
 
 
 def test_complete_match_arms_dispatches(tmp_path: Path):
     payload = _exercise_dispatch(
-        ScalpelCompleteMatchArmsTool,
+        CompleteMatchArmsTool,
         kwargs={"position": {"line": 0, "character": 0}},
         kind="quickfix.add_missing_match_arms",
         tmp_path=tmp_path,
@@ -126,7 +126,7 @@ def test_complete_match_arms_dispatches(tmp_path: Path):
 
 def test_complete_match_arms_no_action(tmp_path: Path):
     payload = _exercise_dispatch(
-        ScalpelCompleteMatchArmsTool,
+        CompleteMatchArmsTool,
         kwargs={"position": {"line": 0, "character": 0}},
         kind=None,
         tmp_path=tmp_path,
@@ -134,7 +134,7 @@ def test_complete_match_arms_no_action(tmp_path: Path):
     assert payload["failure"]["code"] == "SYMBOL_NOT_FOUND"
 
 
-# ---------- ScalpelExtractLifetimeTool -------------------------------------
+# ---------- ExtractLifetimeTool -------------------------------------
 
 
 def test_extract_lifetime_dispatches(tmp_path: Path):
@@ -142,7 +142,7 @@ def test_extract_lifetime_dispatches(tmp_path: Path):
     # dispatcher's title_match. The default fake_action title is "x"; we
     # use that as the lifetime token so the substring match succeeds.
     payload = _exercise_dispatch(
-        ScalpelExtractLifetimeTool,
+        ExtractLifetimeTool,
         kwargs={"position": {"line": 0, "character": 0}, "lifetime_name": "x"},
         kind="refactor.extract.extract_lifetime",
         tmp_path=tmp_path,
@@ -152,7 +152,7 @@ def test_extract_lifetime_dispatches(tmp_path: Path):
 
 def test_extract_lifetime_no_action(tmp_path: Path):
     payload = _exercise_dispatch(
-        ScalpelExtractLifetimeTool,
+        ExtractLifetimeTool,
         kwargs={"position": {"line": 0, "character": 0}, "lifetime_name": "x"},
         kind=None,
         tmp_path=tmp_path,
@@ -160,12 +160,12 @@ def test_extract_lifetime_no_action(tmp_path: Path):
     assert payload["failure"]["code"] == "SYMBOL_NOT_FOUND"
 
 
-# ---------- ScalpelExpandGlobImportsTool -----------------------------------
+# ---------- ExpandGlobImportsTool -----------------------------------
 
 
 def test_expand_glob_imports_dispatches(tmp_path: Path):
     payload = _exercise_dispatch(
-        ScalpelExpandGlobImportsTool,
+        ExpandGlobImportsTool,
         kwargs={"position": {"line": 0, "character": 0}},
         kind="refactor.rewrite.expand_glob_imports",
         tmp_path=tmp_path,
@@ -175,7 +175,7 @@ def test_expand_glob_imports_dispatches(tmp_path: Path):
 
 def test_expand_glob_imports_no_action(tmp_path: Path):
     payload = _exercise_dispatch(
-        ScalpelExpandGlobImportsTool,
+        ExpandGlobImportsTool,
         kwargs={"position": {"line": 0, "character": 0}},
         kind=None,
         tmp_path=tmp_path,
@@ -189,20 +189,20 @@ def test_expand_glob_imports_no_action(tmp_path: Path):
 def test_all_four_tools_reexported_from_serena_tools():
     import serena.tools as tools_module
     for name in (
-        "ScalpelChangeReturnTypeTool",
-        "ScalpelCompleteMatchArmsTool",
-        "ScalpelExtractLifetimeTool",
-        "ScalpelExpandGlobImportsTool",
+        "ChangeReturnTypeTool",
+        "CompleteMatchArmsTool",
+        "ExtractLifetimeTool",
+        "ExpandGlobImportsTool",
     ):
         assert hasattr(tools_module, name)
 
 
 def test_apply_methods_invoke_workspace_boundary_guard():
     for cls in (
-        ScalpelChangeReturnTypeTool,
-        ScalpelCompleteMatchArmsTool,
-        ScalpelExtractLifetimeTool,
-        ScalpelExpandGlobImportsTool,
+        ChangeReturnTypeTool,
+        CompleteMatchArmsTool,
+        ExtractLifetimeTool,
+        ExpandGlobImportsTool,
     ):
         src = get_apply_source(cls)
         assert "workspace_boundary_guard(" in src, (
@@ -212,17 +212,17 @@ def test_apply_methods_invoke_workspace_boundary_guard():
 
 def test_tool_names_match_scope_report_naming():
     expected = {
-        ScalpelChangeReturnTypeTool: "scalpel_change_return_type",
-        ScalpelCompleteMatchArmsTool: "scalpel_complete_match_arms",
-        ScalpelExtractLifetimeTool: "scalpel_extract_lifetime",
-        ScalpelExpandGlobImportsTool: "scalpel_expand_glob_imports",
+        ChangeReturnTypeTool: "change_return_type",
+        CompleteMatchArmsTool: "complete_match_arms",
+        ExtractLifetimeTool: "extract_lifetime",
+        ExpandGlobImportsTool: "expand_glob_imports",
     }
     for cls, name in expected.items():
         assert cls.get_name_from_cls() == name
 
 
 def test_workspace_boundary_blocks_outside_root(tmp_path: Path):
-    tool = _make_tool(ScalpelChangeReturnTypeTool, tmp_path)
+    tool = _make_tool(ChangeReturnTypeTool, tmp_path)
     out = tool.apply(
         file=str(tmp_path.parent / "elsewhere.rs"),
         position={"line": 0, "character": 0},

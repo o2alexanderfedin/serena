@@ -9,12 +9,12 @@ from serena.tools.tools_base import Tool
 
 
 SCALPEL_2A_TOOLS = [
-    "ScalpelSplitFileTool",
-    "ScalpelExtractTool",
-    "ScalpelInlineTool",
-    "ScalpelRenameTool",
-    "ScalpelImportsOrganizeTool",
-    "ScalpelTransactionCommitTool",
+    "SplitFileTool",
+    "ExtractTool",
+    "InlineTool",
+    "RenameTool",
+    "ImportsOrganizeTool",
+    "TransactionCommitTool",
 ]
 
 
@@ -27,12 +27,12 @@ def test_2a_tool_is_reexported_from_serena_tools(name):
 
 
 _EXPECTED_SCALPEL_NAMES = {
-    "ScalpelSplitFileTool": "scalpel_split_file",
-    "ScalpelExtractTool": "scalpel_extract",
-    "ScalpelInlineTool": "scalpel_inline",
-    "ScalpelRenameTool": "scalpel_rename",
-    "ScalpelImportsOrganizeTool": "scalpel_imports_organize",
-    "ScalpelTransactionCommitTool": "scalpel_transaction_commit",
+    "SplitFileTool": "split_file",
+    "ExtractTool": "extract",
+    "InlineTool": "inline",
+    "RenameTool": "rename",
+    "ImportsOrganizeTool": "imports_organize",
+    "TransactionCommitTool": "transaction_commit",
 }
 
 
@@ -55,7 +55,7 @@ def test_2a_apply_docstring_under_30_words(cls_name):
 
 
 @pytest.mark.parametrize("cls_name", [
-    n for n in SCALPEL_2A_TOOLS if n != "ScalpelTransactionCommitTool"
+    n for n in SCALPEL_2A_TOOLS if n != "TransactionCommitTool"
 ])
 def test_2a_apply_invokes_workspace_boundary_guard(cls_name):
     cls = getattr(tools_module, cls_name)

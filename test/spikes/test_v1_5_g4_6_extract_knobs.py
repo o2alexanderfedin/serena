@@ -1,4 +1,4 @@
-"""v1.5 G4-6 — scalpel_extract honors new_name / visibility / similar / global_scope (HI-7).
+"""v1.5 G4-6 — extract honors new_name / visibility / similar / global_scope (HI-7).
 
 Acid tests:
   * Rust: `new_name` post-processes the WorkspaceEdit replacing rust-analyzer's
@@ -21,7 +21,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from serena.tools.scalpel_facades import ScalpelExtractTool
+from serena.tools.scalpel_facades import ExtractTool
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
 
@@ -53,7 +53,7 @@ def python_workspace(tmp_path: Path) -> Path:
 
 
 def _make_tool(project_root: Path) -> Any:
-    tool = ScalpelExtractTool.__new__(ScalpelExtractTool)
+    tool = ExtractTool.__new__(ExtractTool)
     tool.get_project_root = lambda: str(project_root)  # type: ignore[method-assign]
     return tool
 

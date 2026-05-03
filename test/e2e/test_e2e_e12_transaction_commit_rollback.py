@@ -44,7 +44,7 @@ def test_e12_transaction_commit_then_rollback_round_trip(
     # 1. Compose a 3-step transaction in dry-run mode (returns transaction_id).
     compose_json = mcp_driver_python.dry_run_compose(steps=[
         {
-            "tool": "scalpel_split_file",
+            "tool": "split_file",
             "args": {
                 "file": str(src),
                 "groups": {"ast": ["Num"], "errors": ["CalcError"]},
@@ -53,7 +53,7 @@ def test_e12_transaction_commit_then_rollback_round_trip(
             },
         },
         {
-            "tool": "scalpel_extract",
+            "tool": "extract",
             "args": {
                 "file": str(src),
                 "name_path": "evaluate",
@@ -63,7 +63,7 @@ def test_e12_transaction_commit_then_rollback_round_trip(
             },
         },
         {
-            "tool": "scalpel_rename",
+            "tool": "rename",
             "args": {
                 "file": str(src),
                 "name_path": "parse",
@@ -143,7 +143,7 @@ def test_e12_inline_round_trip_with_checkpoint_replay(
         )
     extract = json.loads(extract_json)
     # v0.2.0 followup-I4 (strip-the-skip per L05): demand applied=True
-    # unconditionally now that `scalpel_extract` resolves `name_path` to
+    # unconditionally now that `extract` resolves `name_path` to
     # a range via `find_symbol_range` (the prior `del ... name_path` bug
     # is fixed in the same I4-followup commit). The try/except above
     # still legitimately guards the LSP-init gap.

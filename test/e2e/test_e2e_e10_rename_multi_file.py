@@ -1,7 +1,7 @@
 """E2E scenarios E10 + E10-py + E13-py.
 
 Maps to scope-report S15.1:
-- E10 — `scalpel_rename` regression (Rust + Python).
+- E10 — `rename` regression (Rust + Python).
 - E10-py — `__all__` preservation (Python).
 - E13-py — Multi-server merge: only one organize-imports action surfaces.
 """

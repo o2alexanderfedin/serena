@@ -1,4 +1,4 @@
-"""v1.5 G8 — LO-1: scalpel_rename also_in_strings honest warning.
+"""v1.5 G8 — LO-1: rename also_in_strings honest warning.
 
 textDocument/rename cannot rewrite string literals. When the caller
 passes also_in_strings=True, the response should carry a warning that
@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from serena.tools.scalpel_facades import ScalpelRenameTool
+from serena.tools.scalpel_facades import RenameTool
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
 
@@ -34,8 +34,8 @@ def rust_workspace(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _make_tool(project_root: Path) -> ScalpelRenameTool:
-    tool = ScalpelRenameTool.__new__(ScalpelRenameTool)
+def _make_tool(project_root: Path) -> RenameTool:
+    tool = RenameTool.__new__(RenameTool)
     tool.get_project_root = lambda: str(project_root)  # type: ignore[method-assign]
     return tool
 

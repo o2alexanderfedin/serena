@@ -6,7 +6,7 @@ RED tests:
    ``serena.tools.facade_support``.
 2. ``test_no_lazy_import_in_dispatch_via_coordinator`` — AST-scan
    ``scalpel_primitives._dispatch_via_coordinator`` (and the related
-   ``ScalpelConfirmAnnotationsTool.apply``) and assert no
+   ``ConfirmAnnotationsTool.apply``) and assert no
    ``from .scalpel_facades import`` lazy-import remains in the body.
 3. ``test_existing_apply_call_sites_still_work`` — sanity: the existing
    Stage 2A T1 ``test_stage_2a_t1_facade_support.py`` smoke still imports
@@ -95,20 +95,20 @@ def test_no_lazy_import_in_dispatch_via_coordinator() -> None:
 
 
 def test_no_lazy_import_in_confirm_annotations_apply() -> None:
-    """``ScalpelConfirmAnnotationsTool.apply`` must not lazy-import either.
+    """``ConfirmAnnotationsTool.apply`` must not lazy-import either.
 
     Plan 0 explicitly cites ``_dispatch_via_coordinator`` in its RED test
     list, but the actual surviving lazy import in trunk is in
-    ``ScalpelConfirmAnnotationsTool.apply`` (see
+    ``ConfirmAnnotationsTool.apply`` (see
     ``scalpel_primitives.py:618``). We extend the RED contract here so
     the cycle is *actually* broken — not just nominally on the named
     function.
     """
     fn = _function_def_in_module(
-        _module_path(), "ScalpelConfirmAnnotationsTool.apply"
+        _module_path(), "ConfirmAnnotationsTool.apply"
     )
     assert not _has_lazy_import_from_scalpel_facades(fn), (
-        "ScalpelConfirmAnnotationsTool.apply still contains a lazy "
+        "ConfirmAnnotationsTool.apply still contains a lazy "
         "`from .scalpel_facades import ...` — Plan 0 requires it lifted "
         "via facade_support so primitives don't depend on facades."
     )

@@ -29,16 +29,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from serena.tools.scalpel_facades import (
-    ScalpelChangeTypeShapeTool,
-    ScalpelConvertToMethodObjectTool,
-    ScalpelExtractTool,
-    ScalpelFixLintsTool,
-    ScalpelImportsOrganizeTool,
-    ScalpelInlineTool,
-    ScalpelRenameHeadingTool,
-    ScalpelRenameTool,
-    ScalpelSplitFileTool,
-    ScalpelTidyStructureTool,
+    ChangeTypeShapeTool,
+    ConvertToMethodObjectTool,
+    ExtractTool,
+    FixLintsTool,
+    ImportsOrganizeTool,
+    InlineTool,
+    RenameHeadingTool,
+    RenameTool,
+    SplitFileTool,
+    TidyStructureTool,
     _capability_not_available_envelope,
 )
 from serena.tools.scalpel_runtime import ScalpelRuntime
@@ -139,7 +139,7 @@ class TestDispatchSingleKindFacadeNegativeGate:
             "serena.tools.scalpel_facades.coordinator_for_facade",
             return_value=coord,
         ):
-            tool = _make_tool(ScalpelChangeTypeShapeTool, tmp_path)
+            tool = _make_tool(ChangeTypeShapeTool, tmp_path)
             out = tool.apply(
                 file=str(src),
                 position={"line": 0, "character": 4},
@@ -164,7 +164,7 @@ class TestDispatchSingleKindFacadeNegativeGate:
             "serena.tools.scalpel_facades.coordinator_for_facade",
             return_value=coord,
         ):
-            tool = _make_tool(ScalpelChangeTypeShapeTool, tmp_path)
+            tool = _make_tool(ChangeTypeShapeTool, tmp_path)
             tool.apply(
                 file=str(src),
                 position={"line": 0, "character": 4},
@@ -188,7 +188,7 @@ class TestDispatchSingleKindFacadeNegativeGate:
             "serena.tools.scalpel_facades.coordinator_for_facade",
             return_value=coord,
         ):
-            tool = _make_tool(ScalpelChangeTypeShapeTool, tmp_path)
+            tool = _make_tool(ChangeTypeShapeTool, tmp_path)
             out = tool.apply(
                 file=str(src),
                 position={"line": 0, "character": 4},
@@ -222,7 +222,7 @@ class TestPythonDispatchSingleKindNegativeGate:
             "serena.tools.scalpel_facades.coordinator_for_facade",
             return_value=coord,
         ):
-            tool = _make_tool(ScalpelConvertToMethodObjectTool, tmp_path)
+            tool = _make_tool(ConvertToMethodObjectTool, tmp_path)
             out = tool.apply(
                 file=str(src),
                 position={"line": 1, "character": 8},
@@ -245,7 +245,7 @@ class TestPythonDispatchSingleKindNegativeGate:
             "serena.tools.scalpel_facades.coordinator_for_facade",
             return_value=coord,
         ):
-            tool = _make_tool(ScalpelConvertToMethodObjectTool, tmp_path)
+            tool = _make_tool(ConvertToMethodObjectTool, tmp_path)
             tool.apply(
                 file=str(src),
                 position={"line": 1, "character": 8},
@@ -263,7 +263,7 @@ class TestPythonDispatchSingleKindNegativeGate:
             "serena.tools.scalpel_facades.coordinator_for_facade",
             return_value=coord,
         ):
-            tool = _make_tool(ScalpelConvertToMethodObjectTool, tmp_path)
+            tool = _make_tool(ConvertToMethodObjectTool, tmp_path)
             out = tool.apply(
                 file=str(src),
                 position={"line": 1, "character": 8},
@@ -283,7 +283,7 @@ class TestPythonDispatchSingleKindNegativeGate:
 
 
 class TestBespokeSplitFileRustGate:
-    """ScalpelSplitFileTool Rust arm: supports_kind=False → CAPABILITY_NOT_AVAILABLE."""
+    """SplitFileTool Rust arm: supports_kind=False → CAPABILITY_NOT_AVAILABLE."""
 
     def test_negative_gate_returns_skip_envelope(self, tmp_path: Path) -> None:
         src = tmp_path / "main.rs"
@@ -294,7 +294,7 @@ class TestBespokeSplitFileRustGate:
             "serena.tools.scalpel_facades.coordinator_for_facade",
             return_value=coord,
         ):
-            tool = _make_tool(ScalpelSplitFileTool, tmp_path)
+            tool = _make_tool(SplitFileTool, tmp_path)
             out = tool.apply(
                 file=str(src),
                 groups={"new_mod": ["foo"]},
@@ -309,7 +309,7 @@ class TestBespokeSplitFileRustGate:
 
 
 class TestBespokeExtractGate:
-    """ScalpelExtractTool: supports_kind=False → CAPABILITY_NOT_AVAILABLE."""
+    """ExtractTool: supports_kind=False → CAPABILITY_NOT_AVAILABLE."""
 
     def test_negative_gate_returns_skip_envelope(self, tmp_path: Path) -> None:
         src = tmp_path / "main.rs"
@@ -325,7 +325,7 @@ class TestBespokeExtractGate:
             "serena.tools.scalpel_facades.coordinator_for_facade",
             return_value=coord,
         ):
-            tool = _make_tool(ScalpelExtractTool, tmp_path)
+            tool = _make_tool(ExtractTool, tmp_path)
             out = tool.apply(
                 file=str(src),
                 name_path="add",
@@ -341,7 +341,7 @@ class TestBespokeExtractGate:
 
 
 class TestBespokeInlineGate:
-    """ScalpelInlineTool: supports_kind=False → CAPABILITY_NOT_AVAILABLE."""
+    """InlineTool: supports_kind=False → CAPABILITY_NOT_AVAILABLE."""
 
     def test_negative_gate_returns_skip_envelope(self, tmp_path: Path) -> None:
         src = tmp_path / "main.rs"
@@ -352,7 +352,7 @@ class TestBespokeInlineGate:
             "serena.tools.scalpel_facades.coordinator_for_facade",
             return_value=coord,
         ):
-            tool = _make_tool(ScalpelInlineTool, tmp_path)
+            tool = _make_tool(InlineTool, tmp_path)
             out = tool.apply(
                 file=str(src),
                 target="variable",
@@ -369,7 +369,7 @@ class TestBespokeInlineGate:
 
 
 class TestBespokeRenameGate:
-    """ScalpelRenameTool: supports_method=False → CAPABILITY_NOT_AVAILABLE."""
+    """RenameTool: supports_method=False → CAPABILITY_NOT_AVAILABLE."""
 
     def test_negative_gate_returns_skip_envelope(self, tmp_path: Path) -> None:
         src = tmp_path / "main.rs"
@@ -390,11 +390,11 @@ class TestBespokeRenameGate:
             "serena.tools.scalpel_facades.coordinator_for_facade",
             return_value=coord,
         ), patch.object(
-            ScalpelRenameTool,
+            RenameTool,
             "_resolve_symbol_position",
             return_value={"line": 0, "character": 3},
         ):
-            tool = _make_tool(ScalpelRenameTool, tmp_path)
+            tool = _make_tool(RenameTool, tmp_path)
             out = tool.apply(
                 file=str(src),
                 name_path="old_name",
@@ -410,7 +410,7 @@ class TestBespokeRenameGate:
 
 
 class TestBespokeImportsOrganizeGate:
-    """ScalpelImportsOrganizeTool: supports_kind=False → CAPABILITY_NOT_AVAILABLE."""
+    """ImportsOrganizeTool: supports_kind=False → CAPABILITY_NOT_AVAILABLE."""
 
     def test_negative_gate_returns_skip_envelope(self, tmp_path: Path) -> None:
         src = tmp_path / "mod.py"
@@ -421,7 +421,7 @@ class TestBespokeImportsOrganizeGate:
             "serena.tools.scalpel_facades.coordinator_for_facade",
             return_value=coord,
         ):
-            tool = _make_tool(ScalpelImportsOrganizeTool, tmp_path)
+            tool = _make_tool(ImportsOrganizeTool, tmp_path)
             out = tool.apply(
                 files=[str(src)],
                 language="python",
@@ -435,7 +435,7 @@ class TestBespokeImportsOrganizeGate:
 
 
 class TestBespokeTidyStructureGate:
-    """ScalpelTidyStructureTool: supports_kind=False → no merge_code_actions calls."""
+    """TidyStructureTool: supports_kind=False → no merge_code_actions calls."""
 
     def test_negative_gate_skips_all_kinds(self, tmp_path: Path) -> None:
         src = tmp_path / "main.rs"
@@ -446,7 +446,7 @@ class TestBespokeTidyStructureGate:
             "serena.tools.scalpel_facades.coordinator_for_facade",
             return_value=coord,
         ):
-            tool = _make_tool(ScalpelTidyStructureTool, tmp_path)
+            tool = _make_tool(TidyStructureTool, tmp_path)
             out = tool.apply(
                 file=str(src),
                 position={"line": 0, "character": 7},
@@ -461,7 +461,7 @@ class TestBespokeTidyStructureGate:
 
 
 class TestBespokeFixLintsGate:
-    """ScalpelFixLintsTool: supports_kind=False → CAPABILITY_NOT_AVAILABLE."""
+    """FixLintsTool: supports_kind=False → CAPABILITY_NOT_AVAILABLE."""
 
     def test_negative_gate_returns_skip_envelope(self, tmp_path: Path) -> None:
         src = tmp_path / "lint_me.py"
@@ -472,7 +472,7 @@ class TestBespokeFixLintsGate:
             "serena.tools.scalpel_facades.coordinator_for_facade",
             return_value=coord,
         ):
-            tool = _make_tool(ScalpelFixLintsTool, tmp_path)
+            tool = _make_tool(FixLintsTool, tmp_path)
             out = tool.apply(file=str(src))
 
         payload = json.loads(out)
@@ -483,7 +483,7 @@ class TestBespokeFixLintsGate:
 
 
 class TestBespokeRenameHeadingGate:
-    """ScalpelRenameHeadingTool: supports_method=False → CAPABILITY_NOT_AVAILABLE."""
+    """RenameHeadingTool: supports_method=False → CAPABILITY_NOT_AVAILABLE."""
 
     def test_negative_gate_returns_skip_envelope(self, tmp_path: Path) -> None:
         src = tmp_path / "doc.md"
@@ -494,7 +494,7 @@ class TestBespokeRenameHeadingGate:
             "serena.tools.scalpel_facades.coordinator_for_facade",
             return_value=coord,
         ):
-            tool = _make_tool(ScalpelRenameHeadingTool, tmp_path)
+            tool = _make_tool(RenameHeadingTool, tmp_path)
             out = tool.apply(
                 file=str(src),
                 heading="My Heading",

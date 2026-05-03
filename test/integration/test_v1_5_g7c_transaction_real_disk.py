@@ -5,17 +5,17 @@ Spec § Test discipline gaps (lines 157-174). G7-C completes the
 zero-coverage sweep for the 3 cross-cutting facades that are too
 broad for G7-A or G7-B:
 
-  * ScalpelTransactionCommitTool — multi-step composite. Acid test:
+  * TransactionCommitTool — multi-step composite. Acid test:
     each per-step RefactorResult reports a real on-disk effect.
-  * ScalpelExpandMacroTool — informational LSP query. Acid test:
+  * ExpandMacroTool — informational LSP query. Acid test:
     the returned ``language_findings`` contain the expansion AND
     dry_run=True is a true no-side-effect preview (G2 contract).
-  * ScalpelVerifyAfterRefactorTool — composite query. Acid test:
+  * VerifyAfterRefactorTool — composite query. Acid test:
     runnable+flycheck stats are surfaced AND dry_run=True is a true
     no-side-effect preview (G2 contract).
 
 For ``transaction_commit``, the test composes a 2-step transaction
-that routes through scalpel_change_visibility (which is one of the
+that routes through change_visibility (which is one of the
 17 facades the v0.3.0 applier wires to disk). After commit, both
 files are read post-apply and content asserted — proves the
 transaction's per-step result envelope honestly maps to on-disk
@@ -37,9 +37,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from serena.tools.scalpel_facades import (
-    ScalpelExpandMacroTool,
-    ScalpelTransactionCommitTool,
-    ScalpelVerifyAfterRefactorTool,
+    ExpandMacroTool,
+    TransactionCommitTool,
+    VerifyAfterRefactorTool,
 )
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
@@ -91,7 +91,7 @@ def _replace_edit(uri: str, sl: int, sc: int, el: int, ec: int, new_text: str) -
 
 
 # ---------------------------------------------------------------------------
-# 1. ScalpelTransactionCommitTool — 2-step composite, both real-disk.
+# 1. TransactionCommitTool — 2-step composite, both real-disk.
 # ---------------------------------------------------------------------------
 
 
@@ -124,7 +124,7 @@ def _coord_with_visibility_edit() -> MagicMock:
 
 
 def _direct_change_visibility_dispatcher(project_root: Path):
-    """A drop-in replacement for ``_FACADE_DISPATCH['scalpel_change_visibility']``
+    """A drop-in replacement for ``_FACADE_DISPATCH['change_visibility']``
     that constructs the tool with a real ``get_project_root`` shim
     (the production dispatcher uses ``cast(Any, None)`` as the agent
     so the freshly-constructed tool's ``self.agent`` is None).
@@ -134,10 +134,10 @@ def _direct_change_visibility_dispatcher(project_root: Path):
     must be able to resolve its project root for the workspace
     boundary guard.
     """
-    from serena.tools.scalpel_facades import ScalpelChangeVisibilityTool
+    from serena.tools.scalpel_facades import ChangeVisibilityTool
 
     def _dispatch(**kw: Any) -> str:
-        tool = ScalpelChangeVisibilityTool.__new__(ScalpelChangeVisibilityTool)
+        tool = ChangeVisibilityTool.__new__(ChangeVisibilityTool)
         tool.get_project_root = lambda: str(project_root)  # type: ignore[attr-defined]
         return tool.apply(**kw)
 
@@ -145,7 +145,7 @@ def _direct_change_visibility_dispatcher(project_root: Path):
 
 
 def test_g7c_transaction_commit_two_step_real_disk(tmp_path: Path) -> None:
-    """Compose two scalpel_change_visibility steps targeting two
+    """Compose two change_visibility steps targeting two
     sibling files; commit; read both files post-apply; assert each
     file received its expected mutation.
 
@@ -164,7 +164,7 @@ def test_g7c_transaction_commit_two_step_real_disk(tmp_path: Path) -> None:
     txn_store = runtime.transaction_store()
     raw_id = txn_store.begin()
     txn_store.add_step(raw_id, {
-        "tool": "scalpel_change_visibility",
+        "tool": "change_visibility",
         "args": {
             "file": str(src_a),
             "position": {"line": 0, "character": 3},
@@ -173,7 +173,7 @@ def test_g7c_transaction_commit_two_step_real_disk(tmp_path: Path) -> None:
         },
     })
     txn_store.add_step(raw_id, {
-        "tool": "scalpel_change_visibility",
+        "tool": "change_visibility",
         "args": {
             "file": str(src_b),
             "position": {"line": 0, "character": 3},
@@ -183,13 +183,13 @@ def test_g7c_transaction_commit_two_step_real_disk(tmp_path: Path) -> None:
     })
 
     coord = _coord_with_visibility_edit()
-    tool = _make_tool(ScalpelTransactionCommitTool, tmp_path)
+    tool = _make_tool(TransactionCommitTool, tmp_path)
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=coord,
     ), patch.dict(
         "serena.tools.scalpel_facades._FACADE_DISPATCH",
-        {"scalpel_change_visibility": _direct_change_visibility_dispatcher(tmp_path)},
+        {"change_visibility": _direct_change_visibility_dispatcher(tmp_path)},
         clear=False,
     ):
         out = tool.apply(transaction_id=f"txn_{raw_id}")
@@ -222,7 +222,7 @@ def test_g7c_transaction_commit_first_failure_aborts_remaining_steps(
     txn_store = runtime.transaction_store()
     raw_id = txn_store.begin()
     txn_store.add_step(raw_id, {
-        "tool": "scalpel_change_visibility",
+        "tool": "change_visibility",
         "args": {
             "file": str(src_a),
             "position": {"line": 0, "character": 3},
@@ -231,7 +231,7 @@ def test_g7c_transaction_commit_first_failure_aborts_remaining_steps(
         },
     })
     txn_store.add_step(raw_id, {
-        "tool": "scalpel_change_visibility",
+        "tool": "change_visibility",
         "args": {
             "file": str(src_b),
             "position": {"line": 0, "character": 3},
@@ -250,13 +250,13 @@ def test_g7c_transaction_commit_first_failure_aborts_remaining_steps(
     coord.merge_code_actions = _merge
     coord.get_action_edit = lambda _aid: None
 
-    tool = _make_tool(ScalpelTransactionCommitTool, tmp_path)
+    tool = _make_tool(TransactionCommitTool, tmp_path)
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=coord,
     ), patch.dict(
         "serena.tools.scalpel_facades._FACADE_DISPATCH",
-        {"scalpel_change_visibility": _direct_change_visibility_dispatcher(tmp_path)},
+        {"change_visibility": _direct_change_visibility_dispatcher(tmp_path)},
         clear=False,
     ):
         out = tool.apply(transaction_id=f"txn_{raw_id}")
@@ -269,7 +269,7 @@ def test_g7c_transaction_commit_first_failure_aborts_remaining_steps(
 
 
 # ---------------------------------------------------------------------------
-# 2. ScalpelExpandMacroTool — informational LSP query
+# 2. ExpandMacroTool — informational LSP query
 # ---------------------------------------------------------------------------
 
 
@@ -285,7 +285,7 @@ def test_g7c_expand_macro_returns_expansion_text(tmp_path: Path) -> None:
         return {"name": "println!", "expansion": "<expanded text>"}
 
     coord.expand_macro = _expand
-    tool = _make_tool(ScalpelExpandMacroTool, tmp_path)
+    tool = _make_tool(ExpandMacroTool, tmp_path)
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=coord,
@@ -318,7 +318,7 @@ def test_g7c_expand_macro_dry_run_is_no_side_effect_preview(tmp_path: Path) -> N
         return {"name": "x", "expansion": "y"}
 
     coord.expand_macro = _expand
-    tool = _make_tool(ScalpelExpandMacroTool, tmp_path)
+    tool = _make_tool(ExpandMacroTool, tmp_path)
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=coord,
@@ -340,7 +340,7 @@ def test_g7c_expand_macro_dry_run_is_no_side_effect_preview(tmp_path: Path) -> N
 
 
 # ---------------------------------------------------------------------------
-# 3. ScalpelVerifyAfterRefactorTool — composite query
+# 3. VerifyAfterRefactorTool — composite query
 # ---------------------------------------------------------------------------
 
 
@@ -361,7 +361,7 @@ def test_g7c_verify_after_refactor_summary_surface(tmp_path: Path) -> None:
     coord.fetch_runnables = _runnables
     coord.run_flycheck = _flycheck
 
-    tool = _make_tool(ScalpelVerifyAfterRefactorTool, tmp_path)
+    tool = _make_tool(VerifyAfterRefactorTool, tmp_path)
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=coord,
@@ -401,7 +401,7 @@ def test_g7c_verify_after_refactor_dry_run_is_no_side_effect_preview(
     coord.fetch_runnables = _runnables
     coord.run_flycheck = _flycheck
 
-    tool = _make_tool(ScalpelVerifyAfterRefactorTool, tmp_path)
+    tool = _make_tool(VerifyAfterRefactorTool, tmp_path)
     with patch(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=coord,

@@ -8,12 +8,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from serena.tools.scalpel_facades import (
-    ScalpelExtractTool,
-    ScalpelImportsOrganizeTool,
-    ScalpelInlineTool,
-    ScalpelRenameTool,
-    ScalpelSplitFileTool,
-    ScalpelTransactionCommitTool,  # noqa: F401 — imported for completeness
+    ExtractTool,
+    ImportsOrganizeTool,
+    InlineTool,
+    RenameTool,
+    SplitFileTool,
+    TransactionCommitTool,  # noqa: F401 — imported for completeness
 )
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
@@ -52,22 +52,22 @@ def _make(cls, project_root):
 
 
 @pytest.mark.parametrize("cls,kwargs", [
-    (ScalpelExtractTool, dict(target="function",
+    (ExtractTool, dict(target="function",
                               range={"start": {"line": 0, "character": 0},
                                      "end": {"line": 0, "character": 1}},
                               language="python")),
-    (ScalpelInlineTool, dict(target="call",
+    (InlineTool, dict(target="call",
                              position={"line": 0, "character": 0},
                              scope="single_call_site",
                              language="python")),
-    (ScalpelRenameTool, dict(name_path="x", new_name="y", language="python")),
-    (ScalpelImportsOrganizeTool, dict(language="python")),
-    (ScalpelSplitFileTool, dict(groups={"a": ["x"]}, language="python")),
+    (RenameTool, dict(name_path="x", new_name="y", language="python")),
+    (ImportsOrganizeTool, dict(language="python")),
+    (SplitFileTool, dict(groups={"a": ["x"]}, language="python")),
 ])
 def test_wb2_out_of_workspace_rejected(cls, kwargs, tmp_path):
     tool = _make(cls, tmp_path)
     outside = tmp_path.parent / "elsewhere.py"
-    if cls is ScalpelImportsOrganizeTool:
+    if cls is ImportsOrganizeTool:
         out = tool.apply(files=[str(outside)], **kwargs)
     else:
         out = tool.apply(file=str(outside), **kwargs)
@@ -77,15 +77,15 @@ def test_wb2_out_of_workspace_rejected(cls, kwargs, tmp_path):
 
 
 @pytest.mark.parametrize("cls,kwargs", [
-    (ScalpelExtractTool, dict(target="function",
+    (ExtractTool, dict(target="function",
                               range={"start": {"line": 0, "character": 0},
                                      "end": {"line": 0, "character": 1}},
                               language="python")),
-    (ScalpelInlineTool, dict(target="call",
+    (InlineTool, dict(target="call",
                              position={"line": 0, "character": 0},
                              scope="single_call_site",
                              language="python")),
-    (ScalpelImportsOrganizeTool, dict(language="python")),
+    (ImportsOrganizeTool, dict(language="python")),
 ])
 def test_wb3_extra_paths_opt_in_allows_out_of_workspace(
     cls, kwargs, tmp_path, monkeypatch, fake_coord_always_succeeds,
@@ -100,7 +100,7 @@ def test_wb3_extra_paths_opt_in_allows_out_of_workspace(
         "serena.tools.scalpel_facades.coordinator_for_facade",
         return_value=fake_coord_always_succeeds,
     ):
-        if cls is ScalpelImportsOrganizeTool:
+        if cls is ImportsOrganizeTool:
             out = tool.apply(files=[str(target)], **kwargs)
         else:
             out = tool.apply(file=str(target), **kwargs)
@@ -110,11 +110,11 @@ def test_wb3_extra_paths_opt_in_allows_out_of_workspace(
 
 
 @pytest.mark.parametrize("cls,kwargs", [
-    (ScalpelExtractTool, dict(target="function",
+    (ExtractTool, dict(target="function",
                               range={"start": {"line": 0, "character": 0},
                                      "end": {"line": 0, "character": 1}},
                               language="python")),
-    (ScalpelInlineTool, dict(target="call",
+    (InlineTool, dict(target="call",
                              position={"line": 0, "character": 0},
                              scope="single_call_site",
                              language="python")),
@@ -140,7 +140,7 @@ def test_wb5_symlink_through_workspace_to_outside_rejected(tmp_path):
     outside.write_text("x = 1\n")
     link = tmp_path / "link.py"
     link.symlink_to(outside)
-    tool = _make(ScalpelExtractTool, tmp_path)
+    tool = _make(ExtractTool, tmp_path)
     out = tool.apply(
         file=str(link),
         range={"start": {"line": 0, "character": 0},
@@ -155,7 +155,7 @@ def test_wb6_dotdot_path_resolves_outside_and_rejected(tmp_path):
     outside = tmp_path.parent / "outside.py"
     outside.write_text("x = 1\n")
     sneaky = tmp_path / ".." / "outside.py"
-    tool = _make(ScalpelExtractTool, tmp_path)
+    tool = _make(ExtractTool, tmp_path)
     out = tool.apply(
         file=str(sneaky),
         range={"start": {"line": 0, "character": 0},

@@ -12,7 +12,7 @@ that we explicitly refuse to auto-execute — the installer raises
 instructions to the user.  These tests verify that behaviour.
 
 The class attributes test at the bottom asserts the stable API contract
-that ``ScalpelInstallLspServersTool`` relies on when it walks the installer
+that ``InstallLspServersTool`` relies on when it walks the installer
 registry.
 """
 

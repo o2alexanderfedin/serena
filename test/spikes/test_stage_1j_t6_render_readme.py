@@ -26,7 +26,7 @@ def test_readme_install_section(fake_strategy_rust) -> None:
 
 def test_readme_lists_all_facades(fake_strategy_rust) -> None:
     out = _render_readme(fake_strategy_rust)
-    assert "scalpel_split_file" in out
+    assert "split_file" in out
     assert "scalpel_rename_symbol" in out
 
 

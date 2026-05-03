@@ -1,6 +1,6 @@
-"""Stage 1H smoke 3 — ``scalpel_workspace_health`` reports per-language health.
+"""Stage 1H smoke 3 — ``workspace_health`` reports per-language health.
 
-Proves the Stage 1G ``ScalpelWorkspaceHealthTool`` wires correctly
+Proves the Stage 1G ``WorkspaceHealthTool`` wires correctly
 against the Stage 1F ``CapabilityCatalog`` and the Stage 1C
 ``LspPool`` — without requiring real LSP processes to be spawned
 (the catalog is static, and the pool's ``stats()`` returns the

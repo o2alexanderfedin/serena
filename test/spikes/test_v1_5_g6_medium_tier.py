@@ -15,11 +15,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from serena.tools.scalpel_facades import (
-    ScalpelAutoImportSpecializedTool,
-    ScalpelGenerateConstructorTool,
-    ScalpelIntroduceParameterTool,
-    ScalpelOverrideMethodsTool,
-    ScalpelTidyStructureTool,
+    AutoImportSpecializedTool,
+    GenerateConstructorTool,
+    IntroduceParameterTool,
+    OverrideMethodsTool,
+    TidyStructureTool,
     _java_generate_dispatch,
 )
 from serena.tools.scalpel_runtime import ScalpelRuntime
@@ -46,7 +46,7 @@ def test_me_1_tidy_structure_scope_impl_dispatches_only_reorder_impl_items(tmp_p
     (not sort_items or reorder_fields)."""
     src = tmp_path / "lib.rs"
     src.write_text("impl Foo {}\n")
-    tool = _make(ScalpelTidyStructureTool, tmp_path)
+    tool = _make(TidyStructureTool, tmp_path)
     fake_coord = MagicMock()
     fake_coord.supports_kind.return_value = True
     captured: list[str] = []
@@ -71,7 +71,7 @@ def test_me_1_tidy_structure_scope_type_dispatches_only_reorder_fields(tmp_path)
     """scope='type' must dispatch ONLY refactor.rewrite.reorder_fields."""
     src = tmp_path / "lib.rs"
     src.write_text("struct Foo { a: i32, b: i32 }\n")
-    tool = _make(ScalpelTidyStructureTool, tmp_path)
+    tool = _make(TidyStructureTool, tmp_path)
     fake_coord = MagicMock()
     fake_coord.supports_kind.return_value = True
     captured: list[str] = []
@@ -97,7 +97,7 @@ def test_me_1_tidy_structure_scope_file_dispatches_all_three_kinds(tmp_path):
     pre-G6 behavior for back-compat."""
     src = tmp_path / "lib.rs"
     src.write_text("// hi\n")
-    tool = _make(ScalpelTidyStructureTool, tmp_path)
+    tool = _make(TidyStructureTool, tmp_path)
     fake_coord = MagicMock()
     fake_coord.supports_kind.return_value = True
     captured: list[str] = []
@@ -127,7 +127,7 @@ def test_me_2_auto_import_specialized_threads_symbol_name_as_title_match(tmp_pat
     the caller's symbol_name=<pkg> selects the right one."""
     src = tmp_path / "calc.py"
     src.write_text("x = compute()\n")
-    tool = _make(ScalpelAutoImportSpecializedTool, tmp_path)
+    tool = _make(AutoImportSpecializedTool, tmp_path)
     fake_coord = MagicMock()
     fake_coord.supports_kind.return_value = True
 
@@ -181,7 +181,7 @@ def test_me_2_auto_import_specialized_input_not_honored_when_symbol_name_missing
     """No candidate's title matches caller's symbol_name → INPUT_NOT_HONORED."""
     src = tmp_path / "calc.py"
     src.write_text("x = compute()\n")
-    tool = _make(ScalpelAutoImportSpecializedTool, tmp_path)
+    tool = _make(AutoImportSpecializedTool, tmp_path)
     fake_coord = MagicMock()
     fake_coord.supports_kind.return_value = True
 
@@ -219,7 +219,7 @@ def test_me_3_introduce_parameter_substitutes_caller_name(tmp_path):
     the WorkspaceEdit to substitute the caller's parameter_name."""
     src = tmp_path / "calc.py"
     src.write_text("def f():\n    return 42\n")
-    tool = _make(ScalpelIntroduceParameterTool, tmp_path)
+    tool = _make(IntroduceParameterTool, tmp_path)
     fake_coord = MagicMock()
     fake_coord.supports_kind.return_value = True
     a = MagicMock(
@@ -267,7 +267,7 @@ def test_me_4_generate_constructor_input_not_honored_when_include_fields_set(tmp
     fields."""
     src = tmp_path / "Foo.java"
     src.write_text("class Foo { String name; int age; }\n")
-    tool = _make(ScalpelGenerateConstructorTool, tmp_path)
+    tool = _make(GenerateConstructorTool, tmp_path)
     out = tool.apply(
         file=str(src), class_name_path="Foo",
         include_fields=["name"], language="java",
@@ -282,7 +282,7 @@ def test_me_4_generate_constructor_no_include_fields_preserves_default(tmp_path)
     """include_fields=None preserves today's behavior (jdtls default)."""
     src = tmp_path / "Foo.java"
     src.write_text("class Foo { String name; }\n")
-    tool = _make(ScalpelGenerateConstructorTool, tmp_path)
+    tool = _make(GenerateConstructorTool, tmp_path)
     fake_coord = MagicMock()
     fake_coord.supports_kind.return_value = True
 
@@ -316,7 +316,7 @@ def test_me_4_override_methods_input_not_honored_when_method_names_set(tmp_path)
     """method_names=['toString'] surfaces INPUT_NOT_HONORED in v1.5 P2."""
     src = tmp_path / "Bar.java"
     src.write_text("class Bar extends Object {}\n")
-    tool = _make(ScalpelOverrideMethodsTool, tmp_path)
+    tool = _make(OverrideMethodsTool, tmp_path)
     out = tool.apply(
         file=str(src), class_name_path="Bar",
         method_names=["toString"], language="java",

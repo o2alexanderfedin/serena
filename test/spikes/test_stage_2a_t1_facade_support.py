@@ -27,11 +27,11 @@ def reset_runtime():
 
 def test_facade_to_capability_id_table_covers_five_facades():
     expected = {
-        "scalpel_split_file",
-        "scalpel_extract",
-        "scalpel_inline",
-        "scalpel_rename",
-        "scalpel_imports_organize",
+        "split_file",
+        "extract",
+        "inline",
+        "rename",
+        "imports_organize",
     }
     assert set(FACADE_TO_CAPABILITY_ID) == expected
 
@@ -85,7 +85,7 @@ def test_resolve_capability_for_facade_returns_record(monkeypatch):
         source_server="rust-analyzer",
         params_schema={},
         extension_allow_list=frozenset({".rs"}),
-        preferred_facade="scalpel_extract",
+        preferred_facade="extract",
     )
 
     class _FakeCatalog:
@@ -93,7 +93,7 @@ def test_resolve_capability_for_facade_returns_record(monkeypatch):
 
     runtime = ScalpelRuntime.instance()
     monkeypatch.setattr(runtime, "catalog", lambda: _FakeCatalog())
-    rec = resolve_capability_for_facade("scalpel_extract", language="rust")
+    rec = resolve_capability_for_facade("extract", language="rust")
     assert rec is not None
     assert rec.id == "rust.refactor.extract.function"
 
@@ -104,20 +104,20 @@ def test_resolve_capability_for_facade_returns_none_for_unknown(monkeypatch):
 
     runtime = ScalpelRuntime.instance()
     monkeypatch.setattr(runtime, "catalog", lambda: _EmptyCatalog())
-    rec = resolve_capability_for_facade("scalpel_extract", language="rust")
+    rec = resolve_capability_for_facade("extract", language="rust")
     assert rec is None
 
 
 def test_build_failure_result_shape():
     result = build_failure_result(
         code=ErrorCode.SYMBOL_NOT_FOUND,
-        stage="scalpel_extract",
+        stage="extract",
         reason="symbol foo not found",
     )
     assert result.applied is False
     assert result.failure is not None
     assert result.failure.code == ErrorCode.SYMBOL_NOT_FOUND
-    assert result.failure.stage == "scalpel_extract"
+    assert result.failure.stage == "extract"
 
 
 def test_apply_workspace_edit_via_editor_invokes_editor():

@@ -1,4 +1,4 @@
-"""v1.1 Stream 5 / Leaf 07 Task 1 — `scalpel_convert_to_async` facade tests.
+"""v1.1 Stream 5 / Leaf 07 Task 1 — `convert_to_async` facade tests.
 
 Bypasses the full ``Tool.apply_ex`` lifecycle and constructs the facade
 directly with a ``MagicMock(SerenaAgent)``, mirroring Leaf 06's
@@ -18,7 +18,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from serena.tools.scalpel_facades import ScalpelConvertToAsyncTool
+from serena.tools.scalpel_facades import ConvertToAsyncTool
 from serena.tools.scalpel_runtime import ScalpelRuntime
 from serena.tools.tools_base import Tool
 from serena.util.inspection import iter_subclasses
@@ -34,10 +34,10 @@ def _reset_runtime(
     ScalpelRuntime.reset_for_testing()
 
 
-def _build_tool(tmp_path: Path) -> ScalpelConvertToAsyncTool:
+def _build_tool(tmp_path: Path) -> ConvertToAsyncTool:
     agent = MagicMock(name="SerenaAgent")
     agent.get_project_root.return_value = str(tmp_path)
-    tool = ScalpelConvertToAsyncTool(agent=agent)
+    tool = ConvertToAsyncTool(agent=agent)
     object.__setattr__(tool, "get_project_root", lambda: str(tmp_path))
     return tool
 
@@ -127,11 +127,11 @@ def test_convert_to_async_unknown_symbol_returns_failure(tmp_path: Path) -> None
 def test_convert_to_async_tool_appears_in_iter_subclasses() -> None:
     """Auto-registration via ``iter_subclasses(Tool)`` (Stage 1G mechanism)."""
     discovered = {cls.get_name_from_cls() for cls in iter_subclasses(Tool)}
-    assert "scalpel_convert_to_async" in discovered
+    assert "convert_to_async" in discovered
 
 
 def test_convert_to_async_tool_class_name_is_snake_cased() -> None:
     assert (
-        ScalpelConvertToAsyncTool.get_name_from_cls()
-        == "scalpel_convert_to_async"
+        ConvertToAsyncTool.get_name_from_cls()
+        == "convert_to_async"
     )

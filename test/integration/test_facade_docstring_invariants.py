@@ -11,8 +11,8 @@ Three families of assertions on the Scalpel* tool docstrings:
    ``generate_constructor.include_fields``,
    ``override_methods.method_names``, and ``rename.also_in_strings``.
 
-2. **2 rollback success-contract tests**: ``ScalpelRollbackTool`` and
-   ``ScalpelTransactionRollbackTool`` docstrings each MUST contain the
+2. **2 rollback success-contract tests**: ``RollbackTool`` and
+   ``TransactionRollbackTool`` docstrings each MUST contain the
    phrase ``Restores edits to disk`` and the word ``snapshot`` so the LLM
    caller knows rollback writes pre-edit content back to disk (v1.7 P7
    landed the on-disk inverse-applier — replaced the v1.6 ``WARNING:``
@@ -48,26 +48,26 @@ from serena.tools import scalpel_facades, scalpel_primitives
 # (class_obj_path, dropped_param_name) — explicit list per Plan 5.
 _INFORMATIONAL_TAGS: tuple[tuple[str, str], ...] = (
     # 12 informational-cluster facades:
-    ("scalpel_facades.ScalpelChangeVisibilityTool", "target_visibility"),
-    ("scalpel_facades.ScalpelChangeReturnTypeTool", "new_return_type"),
-    ("scalpel_facades.ScalpelExtractLifetimeTool", "lifetime_name"),
-    ("scalpel_facades.ScalpelGenerateTraitImplScaffoldTool", "trait_name"),
-    ("scalpel_facades.ScalpelIntroduceParameterTool", "parameter_name"),
-    ("scalpel_facades.ScalpelGenerateFromUndefinedTool", "target_kind"),
-    ("scalpel_facades.ScalpelAutoImportSpecializedTool", "symbol_name"),
-    ("scalpel_facades.ScalpelIgnoreDiagnosticTool", "rule"),
-    ("scalpel_facades.ScalpelExtractTool", "new_name"),
-    ("scalpel_facades.ScalpelInlineTool", "name_path"),
-    ("scalpel_facades.ScalpelImportsOrganizeTool", "add_missing"),
-    ("scalpel_facades.ScalpelTidyStructureTool", "scope"),
+    ("scalpel_facades.ChangeVisibilityTool", "target_visibility"),
+    ("scalpel_facades.ChangeReturnTypeTool", "new_return_type"),
+    ("scalpel_facades.ExtractLifetimeTool", "lifetime_name"),
+    ("scalpel_facades.GenerateTraitImplScaffoldTool", "trait_name"),
+    ("scalpel_facades.IntroduceParameterTool", "parameter_name"),
+    ("scalpel_facades.GenerateFromUndefinedTool", "target_kind"),
+    ("scalpel_facades.AutoImportSpecializedTool", "symbol_name"),
+    ("scalpel_facades.IgnoreDiagnosticTool", "rule"),
+    ("scalpel_facades.ExtractTool", "new_name"),
+    ("scalpel_facades.InlineTool", "name_path"),
+    ("scalpel_facades.ImportsOrganizeTool", "add_missing"),
+    ("scalpel_facades.TidyStructureTool", "scope"),
     # 8 additional docstring tags:
-    ("scalpel_facades.ScalpelSplitFileTool", "groups"),
-    ("scalpel_facades.ScalpelExpandMacroTool", "dry_run"),
-    ("scalpel_facades.ScalpelVerifyAfterRefactorTool", "dry_run"),
-    ("scalpel_primitives.ScalpelApplyCapabilityTool", "params"),
-    ("scalpel_facades.ScalpelGenerateConstructorTool", "include_fields"),
-    ("scalpel_facades.ScalpelOverrideMethodsTool", "method_names"),
-    ("scalpel_facades.ScalpelRenameTool", "also_in_strings"),
+    ("scalpel_facades.SplitFileTool", "groups"),
+    ("scalpel_facades.ExpandMacroTool", "dry_run"),
+    ("scalpel_facades.VerifyAfterRefactorTool", "dry_run"),
+    ("scalpel_primitives.ApplyCapabilityTool", "params"),
+    ("scalpel_facades.GenerateConstructorTool", "include_fields"),
+    ("scalpel_facades.OverrideMethodsTool", "method_names"),
+    ("scalpel_facades.RenameTool", "also_in_strings"),
 )
 
 
@@ -114,8 +114,8 @@ def test_facade_informational_tag(qualified: str, param: str) -> None:
 # ---------------------------------------------------------------------------
 
 _ROLLBACK_TOOLS: tuple[type, ...] = (
-    scalpel_primitives.ScalpelRollbackTool,
-    scalpel_primitives.ScalpelTransactionRollbackTool,
+    scalpel_primitives.RollbackTool,
+    scalpel_primitives.TransactionRollbackTool,
 )
 
 
@@ -150,7 +150,7 @@ def test_rollback_success_contract_phrasing_present(cls: type) -> None:
 # informational tag for these.
 _TECHNICAL_PARAM_NAMES: frozenset[str] = frozenset({
     "preview_token", "language", "dry_run",
-    # ``ScalpelSplitFileTool`` deletes 5 layout/policy params alongside
+    # ``SplitFileTool`` deletes 5 layout/policy params alongside
     # ``groups``; the v1.6 doc-tag focuses on the headline ``groups``
     # symbol-list ablation. The 5 layout/policy params are documented
     # via the docstring's ``v1.6 informational`` block but their names
@@ -158,8 +158,8 @@ _TECHNICAL_PARAM_NAMES: frozenset[str] = frozenset({
     "parent_layout", "keep_in_original", "reexport_policy",
     "explicit_reexports", "allow_partial",
     # Primitives — already in-source comment-tagged as reserved/escape-hatch
-    # technical parameters (``ScalpelCapabilitiesListTool.applies_to_symbol_kind``,
-    # ``ScalpelExecuteCommandTool.allow_out_of_workspace``). Not user-facing
+    # technical parameters (``CapabilitiesListTool.applies_to_symbol_kind``,
+    # ``ExecuteCommandTool.allow_out_of_workspace``). Not user-facing
     # contract knobs.
     "applies_to_symbol_kind", "allow_out_of_workspace",
 })

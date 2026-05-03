@@ -1,4 +1,4 @@
-"""v1.1.1 Leaf 03 C3 — ``ScalpelInstallLspServersTool`` tests.
+"""v1.1.1 Leaf 03 C3 — ``InstallLspServersTool`` tests.
 
 The tool is the LLM-facing surface for the installer infrastructure.
 Default: ``dry_run=True`` + ``allow_install=False`` — surfaces what
@@ -19,11 +19,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from serena.tools.scalpel_primitives import ScalpelInstallLspServersTool
+from serena.tools.scalpel_primitives import InstallLspServersTool
 
 
-def _make_tool() -> ScalpelInstallLspServersTool:
-    return ScalpelInstallLspServersTool(agent=MagicMock(name="SerenaAgent"))
+def _make_tool() -> InstallLspServersTool:
+    return InstallLspServersTool(agent=MagicMock(name="SerenaAgent"))
 
 
 def test_default_apply_returns_dry_run_for_all_known_languages(
@@ -218,38 +218,38 @@ def test_tool_auto_registered_via_iter_subclasses() -> None:
     from serena.util.inspection import iter_subclasses
 
     discovered = {cls.get_name_from_cls() for cls in iter_subclasses(Tool)}
-    assert "scalpel_install_lsp_servers" in discovered
+    assert "install_lsp_servers" in discovered
 
 
 def test_tool_class_name_matches_snake_cased_form() -> None:
     assert (
-        ScalpelInstallLspServersTool.get_name_from_cls()
-        == "scalpel_install_lsp_servers"
+        InstallLspServersTool.get_name_from_cls()
+        == "install_lsp_servers"
     )
 
 
 def test_tool_apply_docstring_under_thirty_words() -> None:
     """§5.4 router-signage rule shared by every Stage 1G primitive."""
-    doc = ScalpelInstallLspServersTool.apply.__doc__ or ""
+    doc = InstallLspServersTool.apply.__doc__ or ""
     head = doc.split(":param", 1)[0].split(":return", 1)[0]
     word_count = len(re.findall(r"\b\w+\b", head))
     assert word_count <= 30, (
-        f"ScalpelInstallLspServersTool.apply docstring head exceeds 30 words "
+        f"InstallLspServersTool.apply docstring head exceeds 30 words "
         f"({word_count}): {head!r}"
     )
 
 
 def test_tool_class_docstring_present() -> None:
-    assert ScalpelInstallLspServersTool.__doc__
-    assert ScalpelInstallLspServersTool.__doc__.strip()
+    assert InstallLspServersTool.__doc__
+    assert InstallLspServersTool.__doc__.strip()
 
 
 def test_tool_exported_from_tools_package() -> None:
-    """``from serena.tools import ScalpelInstallLspServersTool`` works."""
+    """``from serena.tools import InstallLspServersTool`` works."""
     from serena import tools as tools_pkg
 
-    assert hasattr(tools_pkg, "ScalpelInstallLspServersTool")
-    assert tools_pkg.ScalpelInstallLspServersTool is ScalpelInstallLspServersTool
+    assert hasattr(tools_pkg, "InstallLspServersTool")
+    assert tools_pkg.InstallLspServersTool is InstallLspServersTool
 
 
 def test_make_mcp_tool_succeeds() -> None:
@@ -258,9 +258,9 @@ def test_make_mcp_tool_succeeds() -> None:
 
     agent = MagicMock(name="SerenaAgent")
     agent.get_context.return_value = MagicMock(tool_description_overrides={})
-    tool = ScalpelInstallLspServersTool(agent=agent)
+    tool = InstallLspServersTool(agent=agent)
     mcp_tool = SerenaMCPFactory.make_mcp_tool(tool, openai_tool_compatible=False)
-    assert mcp_tool.name == "scalpel_install_lsp_servers"
+    assert mcp_tool.name == "install_lsp_servers"
     assert mcp_tool.description
 
 

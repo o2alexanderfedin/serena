@@ -1,6 +1,6 @@
 """Instrumentation harness for the E1-py flake (Leaf 05 / followup-05).
 
-Original Stage 2B observation: ``ScalpelSplitFileTool.apply`` against the
+Original Stage 2B observation: ``SplitFileTool.apply`` against the
 calcpy fixture occasionally returned ``applied=False`` with a stale
 ``failure`` payload. The original test guarded against the flake with
 ``pytest.skip``; Leaf 05 replaces that with a hard assertion. This

@@ -279,9 +279,9 @@ def test_dry_run_one_step_unknown_tool_returns_failure(tmp_path: Path) -> None:
 
 
 def test_dry_run_compose_5min_ttl_unchanged() -> None:
-    from serena.tools.scalpel_primitives import ScalpelDryRunComposeTool
+    from serena.tools.scalpel_primitives import DryRunComposeTool
 
-    assert ScalpelDryRunComposeTool.PREVIEW_TTL_SECONDS == 300
+    assert DryRunComposeTool.PREVIEW_TTL_SECONDS == 300
 
 
 # ---------------------------------------------------------------------------

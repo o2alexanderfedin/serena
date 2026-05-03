@@ -147,14 +147,14 @@ def test_installer_registry_includes_java() -> None:
 
 
 # ---------------------------------------------------------------------------
-# v1.5 Phase 2 — extended allow list for scalpel_extract Java arm + new
+# v1.5 Phase 2 — extended allow list for extract Java arm + new
 # constructor / overrideMethods facades.
 # ---------------------------------------------------------------------------
 
 
 def test_java_allow_list_includes_extract_function_and_constant() -> None:
     """v1.5 P2 — `refactor.extract.function` and `refactor.extract.constant`
-    must be in the allow list so the existing ``ScalpelExtractTool`` can
+    must be in the allow list so the existing ``ExtractTool`` can
     dispatch ``target="function"`` and ``target="constant"`` against jdtls
     via LSP §3.18.1 prefix matching against ``refactor.extract.method``.
     """
@@ -169,46 +169,46 @@ def test_java_allow_list_includes_extract_function_and_constant() -> None:
 
 def test_kind_to_facade_jdtls_extract_family() -> None:
     """v1.5 P2 — KIND_TO_FACADE must route ``("jdtls", "refactor.extract")``
-    to ``"scalpel_extract"`` (family-level catalog routing-hint, mirroring
+    to ``"extract"`` (family-level catalog routing-hint, mirroring
     the rust-analyzer + pylsp-rope rows shipped in P1).
     """
     from serena.refactoring.capabilities import KIND_TO_FACADE
 
-    assert KIND_TO_FACADE.get(("jdtls", "refactor.extract")) == "scalpel_extract"
+    assert KIND_TO_FACADE.get(("jdtls", "refactor.extract")) == "extract"
 
 
 def test_kind_to_facade_jdtls_generate_constructor() -> None:
     """v1.5 P2 — KIND_TO_FACADE must route the jdtls source.generate.constructor
-    family entry to the new ``scalpel_generate_constructor`` facade.
+    family entry to the new ``generate_constructor`` facade.
     """
     from serena.refactoring.capabilities import KIND_TO_FACADE
 
     assert (
         KIND_TO_FACADE.get(("jdtls", "source.generate.constructor"))
-        == "scalpel_generate_constructor"
+        == "generate_constructor"
     )
 
 
 def test_kind_to_facade_jdtls_override_methods() -> None:
     """v1.5 P2 — KIND_TO_FACADE must route the jdtls
     source.generate.overrideMethods family entry to the new
-    ``scalpel_override_methods`` facade.
+    ``override_methods`` facade.
     """
     from serena.refactoring.capabilities import KIND_TO_FACADE
 
     assert (
         KIND_TO_FACADE.get(("jdtls", "source.generate.overrideMethods"))
-        == "scalpel_override_methods"
+        == "override_methods"
     )
 
 
 # ---------------------------------------------------------------------------
-# v1.5 Phase 2 — ScalpelExtractTool Java arm dispatch + invalid-combo gate.
+# v1.5 Phase 2 — ExtractTool Java arm dispatch + invalid-combo gate.
 # ---------------------------------------------------------------------------
 
 
 def test_extract_java_arm_dispatches_against_jdtls(tmp_path: Path) -> None:
-    """v1.5 P2 — ``ScalpelExtractTool(language="java", target="function")``
+    """v1.5 P2 — ``ExtractTool(language="java", target="function")``
     routes to the jdtls coordinator and dispatches a
     ``refactor.extract.function`` codeAction (jdtls's
     ``refactor.extract.method`` matches via LSP §3.18.1 prefix rule).
@@ -216,13 +216,13 @@ def test_extract_java_arm_dispatches_against_jdtls(tmp_path: Path) -> None:
     import json
     from unittest.mock import patch
 
-    from serena.tools.scalpel_facades import ScalpelExtractTool
+    from serena.tools.scalpel_facades import ExtractTool
     from serena.tools.scalpel_runtime import ScalpelRuntime
 
     ScalpelRuntime.reset_for_testing()
     target = tmp_path / "Foo.java"
     target.write_text("class Foo { void bar() { int x = 1 + 2; } }\n")
-    tool = ScalpelExtractTool.__new__(ScalpelExtractTool)
+    tool = ExtractTool.__new__(ExtractTool)
     tool.get_project_root = lambda: str(tmp_path)  # type: ignore[method-assign]
 
     fake_coord = MagicMock()
@@ -274,13 +274,13 @@ def test_extract_java_arm_invalid_target_module_returns_capability_not_available
     import json
     from unittest.mock import patch
 
-    from serena.tools.scalpel_facades import ScalpelExtractTool
+    from serena.tools.scalpel_facades import ExtractTool
     from serena.tools.scalpel_runtime import ScalpelRuntime
 
     ScalpelRuntime.reset_for_testing()
     target = tmp_path / "Foo.java"
     target.write_text("class Foo {}\n")
-    tool = ScalpelExtractTool.__new__(ScalpelExtractTool)
+    tool = ExtractTool.__new__(ExtractTool)
     tool.get_project_root = lambda: str(tmp_path)  # type: ignore[method-assign]
 
     fake_coord = MagicMock()
@@ -317,13 +317,13 @@ def test_extract_java_arm_invalid_target_type_alias_returns_capability_not_avail
     import json
     from unittest.mock import patch
 
-    from serena.tools.scalpel_facades import ScalpelExtractTool
+    from serena.tools.scalpel_facades import ExtractTool
     from serena.tools.scalpel_runtime import ScalpelRuntime
 
     ScalpelRuntime.reset_for_testing()
     target = tmp_path / "Foo.java"
     target.write_text("class Foo {}\n")
-    tool = ScalpelExtractTool.__new__(ScalpelExtractTool)
+    tool = ExtractTool.__new__(ExtractTool)
     tool.get_project_root = lambda: str(tmp_path)  # type: ignore[method-assign]
 
     fake_coord = MagicMock()

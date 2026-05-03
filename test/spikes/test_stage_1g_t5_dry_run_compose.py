@@ -1,4 +1,4 @@
-"""T5 — ScalpelDryRunComposeTool: shadow workspace, per-step delta, TTL."""
+"""T5 — DryRunComposeTool: shadow workspace, per-step delta, TTL."""
 
 from __future__ import annotations
 
@@ -21,19 +21,19 @@ def _reset_runtime() -> Iterator[None]:
 
 
 def _build_tool(project_root: Path):  # type: ignore[no-untyped-def]
-    from serena.tools.scalpel_primitives import ScalpelDryRunComposeTool
+    from serena.tools.scalpel_primitives import DryRunComposeTool
 
     agent = MagicMock(name="SerenaAgent")
     agent.get_active_project_or_raise.return_value = MagicMock(
         project_root=str(project_root),
     )
-    return ScalpelDryRunComposeTool(agent=agent)
+    return DryRunComposeTool(agent=agent)
 
 
 def test_tool_name_is_scalpel_dry_run_compose() -> None:
-    from serena.tools.scalpel_primitives import ScalpelDryRunComposeTool
+    from serena.tools.scalpel_primitives import DryRunComposeTool
 
-    assert ScalpelDryRunComposeTool.get_name_from_cls() == "scalpel_dry_run_compose"
+    assert DryRunComposeTool.get_name_from_cls() == "dry_run_compose"
 
 
 def test_apply_returns_transaction_id_and_5min_ttl(tmp_path: Path) -> None:
@@ -49,14 +49,14 @@ def test_apply_returns_transaction_id_and_5min_ttl(tmp_path: Path) -> None:
 def test_apply_records_per_step_preview(tmp_path: Path) -> None:
     tool = _build_tool(tmp_path)
     steps_payload = [
-        {"tool": "scalpel_apply_capability",
+        {"tool": "apply_capability",
          "args": {"capability_id": "x.unknown", "file": "a.py",
                   "range_or_name_path": "x"}},
     ]
     raw = tool.apply(steps=steps_payload)
     payload = json.loads(raw)
     assert len(payload["per_step"]) == 1
-    assert payload["per_step"][0]["tool"] == "scalpel_apply_capability"
+    assert payload["per_step"][0]["tool"] == "apply_capability"
     assert payload["per_step"][0]["step_index"] == 0
 
 

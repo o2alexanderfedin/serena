@@ -1,4 +1,4 @@
-"""v1.9.1 Item B — per-symbol move semantics for ``scalpel_split_file`` (Python).
+"""v1.9.1 Item B — per-symbol move semantics for ``split_file`` (Python).
 
 In v1.6, ``groups[group_name] = [symbol_a, symbol_b, ...]`` was tagged
 informational: the rope bridge moved the WHOLE source module. Item B
@@ -33,7 +33,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from serena.refactoring.checkpoints import CheckpointStore
-from serena.tools.scalpel_facades import ScalpelSplitFileTool
+from serena.tools.scalpel_facades import SplitFileTool
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
 
@@ -46,8 +46,8 @@ def _isolate_runtime() -> Iterator[None]:
     ScalpelRuntime.reset_for_testing()
 
 
-def _make_tool(project_root: Path) -> ScalpelSplitFileTool:
-    tool = ScalpelSplitFileTool.__new__(ScalpelSplitFileTool)
+def _make_tool(project_root: Path) -> SplitFileTool:
+    tool = SplitFileTool.__new__(SplitFileTool)
     tool.get_project_root = lambda: str(project_root)  # type: ignore[method-assign]
     return tool
 

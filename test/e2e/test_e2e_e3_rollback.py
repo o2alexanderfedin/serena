@@ -1,6 +1,6 @@
 """E2E scenario E3 — rollback after intentional break.
 
-Maps to scope-report S15.1 row E3: "`scalpel_rollback(checkpoint_id)` restores
+Maps to scope-report S15.1 row E3: "`rollback(checkpoint_id)` restores
 byte-identical pre-refactor tree".
 """
 
@@ -57,7 +57,7 @@ def test_e3_rollback_restores_python_tree(
         )
     apply_payload = json.loads(apply_json)
     # v0.2.0 followup-I4 (strip-the-skip per L05): demand applied=True
-    # unconditionally; the underlying `scalpel_extract` arg-validation bug
+    # unconditionally; the underlying `extract` arg-validation bug
     # (`del ... name_path`) is now fixed and the facade resolves
     # name_path → range via `find_symbol_range`. The try/except above
     # still legitimately guards the LSP-init gap.

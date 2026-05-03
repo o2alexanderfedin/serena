@@ -1,4 +1,4 @@
-"""v1.1 Stream 5 / Leaf 07 Task 2 — `scalpel_annotate_return_type` tests.
+"""v1.1 Stream 5 / Leaf 07 Task 2 — `annotate_return_type` tests.
 
 The helper queries basedpyright via ``textDocument/inlayHint``. On the
 host CI (no booted basedpyright) we inject a stub
@@ -18,7 +18,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from serena.tools import scalpel_facades as facades_mod
-from serena.tools.scalpel_facades import ScalpelAnnotateReturnTypeTool
+from serena.tools.scalpel_facades import AnnotateReturnTypeTool
 from serena.tools.scalpel_runtime import ScalpelRuntime
 from serena.tools.tools_base import Tool
 from serena.util.inspection import iter_subclasses
@@ -34,10 +34,10 @@ def _reset_runtime(
     ScalpelRuntime.reset_for_testing()
 
 
-def _build_tool(tmp_path: Path) -> ScalpelAnnotateReturnTypeTool:
+def _build_tool(tmp_path: Path) -> AnnotateReturnTypeTool:
     agent = MagicMock(name="SerenaAgent")
     agent.get_project_root.return_value = str(tmp_path)
-    tool = ScalpelAnnotateReturnTypeTool(agent=agent)
+    tool = AnnotateReturnTypeTool(agent=agent)
     object.__setattr__(tool, "get_project_root", lambda: str(tmp_path))
     return tool
 
@@ -168,11 +168,11 @@ def test_annotate_return_type_skips_when_no_inferable_type(
 
 def test_annotate_return_type_tool_appears_in_iter_subclasses() -> None:
     discovered = {cls.get_name_from_cls() for cls in iter_subclasses(Tool)}
-    assert "scalpel_annotate_return_type" in discovered
+    assert "annotate_return_type" in discovered
 
 
 def test_annotate_return_type_tool_class_name_is_snake_cased() -> None:
     assert (
-        ScalpelAnnotateReturnTypeTool.get_name_from_cls()
-        == "scalpel_annotate_return_type"
+        AnnotateReturnTypeTool.get_name_from_cls()
+        == "annotate_return_type"
     )

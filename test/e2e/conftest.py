@@ -24,46 +24,46 @@ from serena.refactoring import STRATEGY_REGISTRY as _STRATEGY_REGISTRY_WARMUP  #
 del _STRATEGY_REGISTRY_WARMUP  # silence Pyright while preserving import side-effect
 from serena.tools.scalpel_facades import (
     # Stage 2A MVP facades
-    ScalpelExtractTool,
-    ScalpelImportsOrganizeTool,
-    ScalpelInlineTool,
-    ScalpelRenameTool,
-    ScalpelSplitFileTool,
-    ScalpelTransactionCommitTool,
+    ExtractTool,
+    ImportsOrganizeTool,
+    InlineTool,
+    RenameTool,
+    SplitFileTool,
+    TransactionCommitTool,
     # Stage 3 Rust facades (waves A-C)
-    ScalpelChangeReturnTypeTool,
-    ScalpelChangeTypeShapeTool,
-    ScalpelChangeVisibilityTool,
-    ScalpelCompleteMatchArmsTool,
-    ScalpelConvertModuleLayoutTool,
-    ScalpelExpandGlobImportsTool,
-    ScalpelExpandMacroTool,
-    ScalpelExtractLifetimeTool,
-    ScalpelGenerateMemberTool,
-    ScalpelGenerateTraitImplScaffoldTool,
-    ScalpelTidyStructureTool,
-    ScalpelVerifyAfterRefactorTool,
+    ChangeReturnTypeTool,
+    ChangeTypeShapeTool,
+    ChangeVisibilityTool,
+    CompleteMatchArmsTool,
+    ConvertModuleLayoutTool,
+    ExpandGlobImportsTool,
+    ExpandMacroTool,
+    ExtractLifetimeTool,
+    GenerateMemberTool,
+    GenerateTraitImplScaffoldTool,
+    TidyStructureTool,
+    VerifyAfterRefactorTool,
     # Stage 3 Python facades (waves A-B)
-    ScalpelAutoImportSpecializedTool,
-    ScalpelConvertToMethodObjectTool,
-    ScalpelFixLintsTool,
-    ScalpelGenerateFromUndefinedTool,
-    ScalpelIgnoreDiagnosticTool,
-    ScalpelIntroduceParameterTool,
-    ScalpelLocalToFieldTool,
-    ScalpelUseFunctionTool,
+    AutoImportSpecializedTool,
+    ConvertToMethodObjectTool,
+    FixLintsTool,
+    GenerateFromUndefinedTool,
+    IgnoreDiagnosticTool,
+    IntroduceParameterTool,
+    LocalToFieldTool,
+    UseFunctionTool,
     # v1.1.1 Markdown facades
-    ScalpelExtractSectionTool,
-    ScalpelOrganizeLinksTool,
-    ScalpelRenameHeadingTool,
-    ScalpelSplitDocTool,
+    ExtractSectionTool,
+    OrganizeLinksTool,
+    RenameHeadingTool,
+    SplitDocTool,
 )
 from serena.tools.scalpel_primitives import (
-    ScalpelCapabilitiesListTool,
-    ScalpelDryRunComposeTool,
-    ScalpelRollbackTool,
-    ScalpelTransactionRollbackTool,
-    ScalpelWorkspaceHealthTool,
+    CapabilitiesListTool,
+    DryRunComposeTool,
+    RollbackTool,
+    TransactionRollbackTool,
+    WorkspaceHealthTool,
 )
 from serena.tools.scalpel_runtime import ScalpelRuntime
 
@@ -209,119 +209,119 @@ class _McpDriver:
         return tool
 
     def split_file(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelSplitFileTool).apply(**kwargs)
+        return self._bind(SplitFileTool).apply(**kwargs)
 
     def extract(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelExtractTool).apply(**kwargs)
+        return self._bind(ExtractTool).apply(**kwargs)
 
     def inline(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelInlineTool).apply(**kwargs)
+        return self._bind(InlineTool).apply(**kwargs)
 
     def rename(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelRenameTool).apply(**kwargs)
+        return self._bind(RenameTool).apply(**kwargs)
 
     def imports_organize(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelImportsOrganizeTool).apply(**kwargs)
+        return self._bind(ImportsOrganizeTool).apply(**kwargs)
 
     def transaction_commit(self, transaction_id: str) -> str:
-        return self._bind(ScalpelTransactionCommitTool).apply(
+        return self._bind(TransactionCommitTool).apply(
             transaction_id=transaction_id
         )
 
     def dry_run_compose(self, steps: list[dict[str, Any]]) -> str:
-        return self._bind(ScalpelDryRunComposeTool).apply(steps=steps)
+        return self._bind(DryRunComposeTool).apply(steps=steps)
 
     def rollback(self, checkpoint_id: str) -> str:
-        return self._bind(ScalpelRollbackTool).apply(checkpoint_id=checkpoint_id)
+        return self._bind(RollbackTool).apply(checkpoint_id=checkpoint_id)
 
     def transaction_rollback(self, transaction_id: str) -> str:
-        return self._bind(ScalpelTransactionRollbackTool).apply(
+        return self._bind(TransactionRollbackTool).apply(
             transaction_id=transaction_id
         )
 
     def workspace_health(self) -> str:
-        return self._bind(ScalpelWorkspaceHealthTool).apply()
+        return self._bind(WorkspaceHealthTool).apply()
 
     def capabilities_list(self, language: str) -> str:
-        return self._bind(ScalpelCapabilitiesListTool).apply(language=language)
+        return self._bind(CapabilitiesListTool).apply(language=language)
 
     # --- Stage 3 Rust facades (waves A-C) ---
 
     def convert_module_layout(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelConvertModuleLayoutTool).apply(**kwargs)
+        return self._bind(ConvertModuleLayoutTool).apply(**kwargs)
 
     def change_visibility(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelChangeVisibilityTool).apply(**kwargs)
+        return self._bind(ChangeVisibilityTool).apply(**kwargs)
 
     def tidy_structure(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelTidyStructureTool).apply(**kwargs)
+        return self._bind(TidyStructureTool).apply(**kwargs)
 
     def change_type_shape(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelChangeTypeShapeTool).apply(**kwargs)
+        return self._bind(ChangeTypeShapeTool).apply(**kwargs)
 
     def change_return_type(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelChangeReturnTypeTool).apply(**kwargs)
+        return self._bind(ChangeReturnTypeTool).apply(**kwargs)
 
     def complete_match_arms(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelCompleteMatchArmsTool).apply(**kwargs)
+        return self._bind(CompleteMatchArmsTool).apply(**kwargs)
 
     def extract_lifetime(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelExtractLifetimeTool).apply(**kwargs)
+        return self._bind(ExtractLifetimeTool).apply(**kwargs)
 
     def expand_glob_imports(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelExpandGlobImportsTool).apply(**kwargs)
+        return self._bind(ExpandGlobImportsTool).apply(**kwargs)
 
     def generate_trait_impl_scaffold(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelGenerateTraitImplScaffoldTool).apply(**kwargs)
+        return self._bind(GenerateTraitImplScaffoldTool).apply(**kwargs)
 
     def generate_member(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelGenerateMemberTool).apply(**kwargs)
+        return self._bind(GenerateMemberTool).apply(**kwargs)
 
     def expand_macro(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelExpandMacroTool).apply(**kwargs)
+        return self._bind(ExpandMacroTool).apply(**kwargs)
 
     def verify_after_refactor(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelVerifyAfterRefactorTool).apply(**kwargs)
+        return self._bind(VerifyAfterRefactorTool).apply(**kwargs)
 
     # --- Stage 3 Python facades (waves A-B) ---
 
     def convert_to_method_object(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelConvertToMethodObjectTool).apply(**kwargs)
+        return self._bind(ConvertToMethodObjectTool).apply(**kwargs)
 
     def local_to_field(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelLocalToFieldTool).apply(**kwargs)
+        return self._bind(LocalToFieldTool).apply(**kwargs)
 
     def use_function(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelUseFunctionTool).apply(**kwargs)
+        return self._bind(UseFunctionTool).apply(**kwargs)
 
     def introduce_parameter(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelIntroduceParameterTool).apply(**kwargs)
+        return self._bind(IntroduceParameterTool).apply(**kwargs)
 
     def generate_from_undefined(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelGenerateFromUndefinedTool).apply(**kwargs)
+        return self._bind(GenerateFromUndefinedTool).apply(**kwargs)
 
     def auto_import_specialized(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelAutoImportSpecializedTool).apply(**kwargs)
+        return self._bind(AutoImportSpecializedTool).apply(**kwargs)
 
     def fix_lints(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelFixLintsTool).apply(**kwargs)
+        return self._bind(FixLintsTool).apply(**kwargs)
 
     def ignore_diagnostic(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelIgnoreDiagnosticTool).apply(**kwargs)
+        return self._bind(IgnoreDiagnosticTool).apply(**kwargs)
 
     # --- v1.1.1 Markdown facades ---
 
     def rename_heading(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelRenameHeadingTool).apply(**kwargs)
+        return self._bind(RenameHeadingTool).apply(**kwargs)
 
     def split_doc(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelSplitDocTool).apply(**kwargs)
+        return self._bind(SplitDocTool).apply(**kwargs)
 
     def extract_section(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelExtractSectionTool).apply(**kwargs)
+        return self._bind(ExtractSectionTool).apply(**kwargs)
 
     def organize_links(self, **kwargs: Any) -> str:
-        return self._bind(ScalpelOrganizeLinksTool).apply(**kwargs)
+        return self._bind(OrganizeLinksTool).apply(**kwargs)
 
 
 @pytest.fixture

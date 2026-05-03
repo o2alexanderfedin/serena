@@ -125,8 +125,8 @@ def test_apply_capability_args_extra_forbid() -> None:
 def test_compose_step_payload_shape() -> None:
     from serena.tools.scalpel_schemas import ComposeStep
 
-    step = ComposeStep(tool="scalpel_split_file", args={"file": "a.py", "groups": {}})
-    assert step.tool == "scalpel_split_file"
+    step = ComposeStep(tool="split_file", args={"file": "a.py", "groups": {}})
+    assert step.tool == "split_file"
     assert step.args == {"file": "a.py", "groups": {}}
 
 
