@@ -336,23 +336,23 @@ def build_capability_catalog(
 # routing-hint table — those subfamilies have no catalog row to populate.
 KIND_TO_FACADE: dict[tuple[ProvenanceLiteral, str], str] = {
     # rust-analyzer (family-level)
-    ("rust-analyzer", "refactor.extract"): "scalpel_extract",
-    ("rust-analyzer", "refactor.inline"): "scalpel_inline",
-    ("rust-analyzer", "refactor.rewrite"): "scalpel_change_visibility",
-    ("rust-analyzer", "source.organizeImports"): "scalpel_imports_organize",
+    ("rust-analyzer", "refactor.extract"): "extract",
+    ("rust-analyzer", "refactor.inline"): "inline",
+    ("rust-analyzer", "refactor.rewrite"): "change_visibility",
+    ("rust-analyzer", "source.organizeImports"): "imports_organize",
     # pylsp-rope (Python)
-    ("pylsp-rope", "refactor.extract"): "scalpel_extract",
-    ("pylsp-rope", "refactor.inline"): "scalpel_inline",
+    ("pylsp-rope", "refactor.extract"): "extract",
+    ("pylsp-rope", "refactor.inline"): "inline",
     # ruff (Python)
-    ("ruff", "source.fixAll"): "scalpel_fix_lints",
-    ("ruff", "source.organizeImports"): "scalpel_imports_organize",
+    ("ruff", "source.fixAll"): "fix_lints",
+    ("ruff", "source.organizeImports"): "imports_organize",
     # v1.5 P2 — jdtls (Java)
     # Spec: docs/superpowers/specs/2026-04-29-lsp-feature-coverage-spec.md § 4.2
     # Catalog stores both the family-level ``refactor.extract`` entry and
     # the per-action child kinds (``.method`` / ``.variable``); the family
     # row is what the LLM-routing hint targets — children are resolved at
-    # dispatch via ``ScalpelExtractTool``'s ``_EXTRACT_TARGET_TO_KIND`` map.
-    ("jdtls", "refactor.extract"): "scalpel_extract",
-    ("jdtls", "source.generate.constructor"): "scalpel_generate_constructor",
-    ("jdtls", "source.generate.overrideMethods"): "scalpel_override_methods",
+    # dispatch via ``ExtractTool``'s ``_EXTRACT_TARGET_TO_KIND`` map.
+    ("jdtls", "refactor.extract"): "extract",
+    ("jdtls", "source.generate.constructor"): "generate_constructor",
+    ("jdtls", "source.generate.overrideMethods"): "override_methods",
 }

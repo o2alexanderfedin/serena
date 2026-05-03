@@ -273,7 +273,7 @@ class CapabilityFullDescriptor(_Frozen):
 
 
 class ApplyCapabilityArgs(_Frozen):
-    """Validated input for ScalpelApplyCapabilityTool.apply."""
+    """Validated input for ApplyCapabilityTool.apply."""
 
     capability_id: str
     file: str
@@ -285,7 +285,7 @@ class ApplyCapabilityArgs(_Frozen):
 
 
 class ExecuteCommandArgs(_Frozen):
-    """Validated input for ScalpelExecuteCommandTool.apply."""
+    """Validated input for ExecuteCommandTool.apply."""
 
     command: str
     arguments: tuple[Any, ...] = ()

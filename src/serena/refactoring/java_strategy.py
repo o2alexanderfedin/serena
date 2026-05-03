@@ -86,7 +86,7 @@ _JAVA_CODE_ACTION_KINDS: frozenset[str] = frozenset(
         # ``refactor.extract.constant`` requests onto the matching server-side
         # actions. The allow-list entries here are required so the catalog
         # carries them and ``MultiServerCoordinator.supports_kind`` returns
-        # True for the Java arm of ``ScalpelExtractTool``.
+        # True for the Java arm of ``ExtractTool``.
         "refactor.extract.function",
         "refactor.extract.constant",
         # inline refactors

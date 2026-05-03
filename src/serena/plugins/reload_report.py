@@ -2,7 +2,7 @@
 
 Surfaces the diff between the previous and freshly-rescanned plugin trees
 returned by :meth:`serena.plugins.registry.PluginRegistry.reload`. The
-report is serialised to JSON by ``ScalpelReloadPluginsTool.apply`` and
+report is serialised to JSON by ``ReloadPluginsTool.apply`` and
 returned across the MCP boundary so the LLM can see exactly what changed
 without restarting the server (Q10: explicit-refresh model, no filesystem
 watcher).
