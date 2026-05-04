@@ -397,3 +397,40 @@ skip = '.git*,*.svg,*.lock,*.min.*'
 check-hidden = true
 ignore-regex = '\.\w+'
 ignore-words-list = 'paket'
+
+# ---------------------------------------------------------------------------
+# Coverage configuration — Phase A of the test coverage strategy.
+# Spec: docs/superpowers/specs/2026-05-03-test-coverage-strategy-design.md §5.2
+# Scope: instrument the 4 engine modules that all 3 doctrines (Maximalist,
+# Minimalist, YAGNI) converged on; exclude generated/inherited/wrapper code.
+# ---------------------------------------------------------------------------
+[tool.coverage.run]
+source = [
+  "serena.tools",
+  "serena.refactoring",
+  "serena.plugins",
+  "solidlsp",
+]
+branch = true
+parallel = true   # pytest-xdist compatibility — combine via `coverage combine`
+omit = [
+  "*/serena/generated/*",
+  "*/serena/jetbrains/*",
+  "*/serena/marketplace/*.py",
+  "*/serena/installer/_platform_*.py",
+  "*/interprompt/*",
+  "*/test/*",
+  "*/spikes/*",
+  "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "raise NotImplementedError",
+  "if TYPE_CHECKING:",
+  "if __name__ == .__main__.:",
+]
+show_missing = true
+skip_covered = false
+precision = 2
