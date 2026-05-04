@@ -161,3 +161,36 @@ def test_server_isolation(server_a: str, server_b: str, method_a: str, method_b:
         f"Isolation violated: server_a={server_a!r} method={method_a!r} "
         f"leaked into server_b={server_b!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Property 4: Monotonicity — registrations never silently un-register a method
+# ---------------------------------------------------------------------------
+
+
+@given(
+    methods=st.lists(method_st, min_size=1, max_size=5, unique=True),
+    server_id=st.text(min_size=1, max_size=12).filter(lambda s: s.strip()),
+)
+@settings(max_examples=20, suppress_health_check=[HealthCheck.too_slow])
+def test_registration_is_monotonic(methods: list[str], server_id: str) -> None:
+    """Once a method is registered for a server, sibling registrations don't un-register it."""
+    reg = DynamicCapabilityRegistry()
+
+    # Register each method with a unique registration_id under the same server_id.
+    for i, m in enumerate(methods):
+        reg.register(server_id, registration_id=f"reg-{i}", method=m, register_options=None)
+
+    # Snapshot the set of supported methods.
+    initial_supported = set(m for m in methods if reg.has(server_id, m))
+
+    # Now do additional sibling registrations on each method (with NEW registration_ids
+    # so they're not duplicates from idempotence's perspective). After each, every
+    # previously-supported method must STILL be supported.
+    for i, m in enumerate(methods):
+        reg.register(server_id, registration_id=f"sibling-{i}", method=m, register_options=None)
+        for prev_m in methods:
+            if prev_m in initial_supported:
+                assert reg.has(server_id, prev_m), (
+                    f"Method {prev_m!r} lost support after registering sibling for {m!r}"
+                )
