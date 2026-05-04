@@ -115,6 +115,12 @@ dev = [
   "pytest-cov==5.0.0",
   "vulture==2.14",
   "diff-cover==9.2.0",
+  # Phase B — test coverage strategy spec 2026-05-03 §6 Phase B.
+  # ``hypothesis`` powers property tests in test/property/ (B3, B4, B5).
+  # ``mutmut`` is added now but only activates as a Phase C nightly job
+  # (mutation testing scoped to serena.refactoring/).
+  "hypothesis==6.119.4",
+  "mutmut==3.0.5",
   # Transitive dev deps pinned for security (dependabot alerts).
   # Exact pins because uvx installs from git, ignoring the lock file.
   "tornado==6.5.5",
