@@ -234,9 +234,9 @@ class TestLanguageServerSymbols:
         # Create an example file path for a file that calls UserService.create_user
         examples_file_path = os.path.join("examples", "user_management.py")
 
-        # Find the line number where create_user is called
-        # This could vary, so we'll use a relative position that makes sense
-        defining_symbol = language_server.request_defining_symbol(examples_file_path, 46, 29)
+        # Find the line number where create_user is called.
+        # File line 48 (1-indexed) = 0-indexed line 47; col 29 lands inside `create_user`.
+        defining_symbol = language_server.request_defining_symbol(examples_file_path, 47, 29)
         assert defining_symbol is not None
         assert defining_symbol.get("name") == "create_user"
         # The defining symbol should be in the services.py file
