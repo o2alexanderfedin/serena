@@ -14,7 +14,11 @@ from sensai.util import logging
 from sensai.util.string import dict_string
 
 from serena.config.serena_config import LanguageBackend
-from serena.project import MemoriesManager, Project
+# ``MemoriesManager`` is used only as a string annotation at line 48
+# (forward-ref). It MUST stay as a runtime import — vulture flags it
+# as unused (90% confidence) but it is required for ``__annotations__``
+# resolution. See docs/coverage-strategy.md Phase A B6 disposition.
+from serena.project import MemoriesManager, Project  # noqa: F401  vulture: keep — string-annotation forward-ref
 from serena.prompt_factory import PromptFactory
 from serena.util.class_decorators import singleton
 from serena.util.inspection import iter_subclasses
