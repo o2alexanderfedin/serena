@@ -26,7 +26,11 @@ from serena.util.ls_diagnostics import DiagnosticsDiff, EditedFilePath, Publishe
 from solidlsp.ls_exceptions import SolidLSPException
 
 if TYPE_CHECKING:
-    from serena.agent import SerenaAgent
+    # ``SerenaAgent`` is used as string annotations in __init__ methods
+    # (forward-refs at lines 38, 152). Vulture flags it as unused (90%
+    # confidence) but type-checkers resolve the string refs via this
+    # TYPE_CHECKING import. See docs/coverage-strategy.md Phase A B6.
+    from serena.agent import SerenaAgent  # noqa: F401  vulture: keep — string-annotation forward-ref
     from serena.code_editor import CodeEditor, LanguageServerCodeEditor
     from serena.symbol import LanguageServerSymbolRetriever
 
