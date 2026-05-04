@@ -92,7 +92,7 @@ def _edit_st(content: str) -> st.SearchStrategy[tuple[int, int, int, int, str]]:
 )
 @given(_file_content_st, st.data())
 @settings(
-    max_examples=30,
+    max_examples=50,
     suppress_health_check=[HealthCheck.function_scoped_fixture],
 )
 def test_apply_workspace_edit_to_disk_is_idempotent(

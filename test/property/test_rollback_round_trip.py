@@ -53,7 +53,7 @@ replacement_st = st.text(
 
 
 @given(content=file_content_st, replacement=replacement_st)
-@settings(max_examples=30, suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(max_examples=50, suppress_health_check=[HealthCheck.function_scoped_fixture])
 def test_rollback_restores_file_content(content: str, replacement: str) -> None:
     """apply(edit) ; apply(inverse) restores file text to pre-apply state."""
     with tempfile.TemporaryDirectory(prefix="phase-b-pb8-") as td:

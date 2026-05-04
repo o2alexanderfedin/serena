@@ -86,6 +86,15 @@ def test_extract_facade_resolves_name_path(
     bp = python_coordinator.servers["basedpyright"]._inner
     ruff = python_coordinator.servers["ruff"]._inner
 
+    import unittest.mock as _mock
+
+    # Wrap find_symbol_range with a spy so we can assert the resolver was
+    # actually invoked (guards against dry_run short-circuiting upstream of
+    # the resolver call — that would defeat the purpose of this test).
+    original_find = python_coordinator.find_symbol_range
+    spy_find = _mock.MagicMock(wraps=original_find)
+    python_coordinator.find_symbol_range = spy_find  # type: ignore[method-assign]
+
     ScalpelRuntime.reset_for_testing()
     try:
         tool = _make_tool(ExtractTool, calcpy_workspace)
@@ -111,6 +120,16 @@ def test_extract_facade_resolves_name_path(
                         )
     finally:
         ScalpelRuntime.reset_for_testing()
+        python_coordinator.find_symbol_range = original_find  # type: ignore[method-assign]
+
+    # --- Resolver-invocation assertion: the find_symbol_range spy must have
+    #     been called at least once. Guards against dry_run short-circuiting
+    #     before name_path resolution (which would defeat the test's purpose). ---
+    assert spy_find.call_count >= 1, (
+        f"name_path resolver (MultiServerCoordinator.find_symbol_range) was not invoked. "
+        f"The dry_run path may have short-circuited before the resolver — "
+        f"this test then degenerates into a no-op. Result: {result_str!r}"
+    )
 
     # --- Primary regression assertion: resolver must have been called and
     #     must NOT have returned "symbol not found". ---
