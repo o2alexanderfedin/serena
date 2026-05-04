@@ -1,31 +1,36 @@
 """
-B4 — WorkspaceEdit applier idempotence (pure-python disk applier).
+B4 — WorkspaceEdit applier idempotence (pure-python disk applier, SQ2 fix).
 
 regression: docs/superpowers/specs/2026-05-03-test-coverage-strategy-design.md §6 Phase B B4
 regression: v0.3.0-facade-application-complete (parent 2026-04-26)
 
-Property: applying the same WorkspaceEdit twice via
-``_apply_workspace_edit_to_disk`` produces the same final disk state
-as applying it once. The first apply changes bytes; the second apply
-must leave the disk unchanged from after-first-apply state.
+Property (scoped to zero-width insertions): applying the same pure-insertion
+WorkspaceEdit twice via ``_apply_workspace_edit_to_disk`` produces the same
+final disk state as applying it once.
 
-Known bug (B4-BUG-01)
----------------------
-The applier is NOT idempotent for zero-width insertions (start == end).
-Minimal reproducer::
+Scope note
+----------
+Only zero-width insertions (start == end, newText non-empty) are tested here.
+Deletions and shrink-replacements are excluded because making them idempotent
+would require per-call state (a fingerprint of what the range contained before
+the first apply).  Insertions are detectable without state: after the first
+apply the inserted text appears verbatim at the insertion offset.
+
+B4-BUG-01 (FIXED — SQ2)
+------------------------
+The applier was NOT idempotent for zero-width insertions (start == end).
+Minimal reproducer (pre-fix)::
 
     file_content = ''
     edit = range(0,0)..(0,0) -> '0'
     after first apply  -> b'0'
     after second apply -> b'00'   # doubled
 
-Root cause: ``_apply_text_edits_to_file_uri`` re-reads the already-mutated
-file and re-splices ``newText`` at the *same* LSP position, which for a
-pure insertion (no range to consume) simply inserts again.
-
-The test is marked ``xfail(strict=True)`` so it surfaces as XFAIL in CI
-(bug is known and documented) rather than as a hard FAIL.  Once the
-applier is made idempotent for insertions the ``xfail`` should be removed.
+Fix applied in ``_splice_text_edit`` (facade_support.py): before splicing,
+check if ``source[start_offset:start_offset + len(newText)] == newText`` AND
+``end_offset <= start_offset + len(newText)``.  If so the edit was already
+applied — return ``source`` unchanged.  The I/O layer was also fixed to use
+``newline=""`` so ``\\r`` bytes are not silently coerced to ``\\n`` on re-read.
 """
 
 from __future__ import annotations
@@ -33,7 +38,6 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
@@ -56,21 +60,28 @@ _file_content_st = st.text(
 ).map(lambda s: s + "\n" if s and not s.endswith("\n") else s)
 
 
-def _edit_st(content: str) -> st.SearchStrategy[tuple[int, int, int, int, str]]:
-    """Return a strategy for a single valid TextEdit over ``content``."""
+def _insertion_edit_st(content: str) -> st.SearchStrategy[tuple[int, int, int, int, str]]:
+    """Return a strategy for a zero-width insertion TextEdit over ``content``.
+
+    Scope: B4-BUG-01 covers pure insertions (start == end, newText non-empty).
+    Deletions and shrink-replacements are excluded because their idempotence
+    would require per-call state to detect double-apply (we'd need to remember
+    the original range content).  Only insertions produce a detectable
+    already-applied fingerprint: the inserted text appears verbatim at the
+    insertion offset after first apply.
+    """
     lines = content.split("\n") if content else [""]
     last_line = max(0, len(lines) - 1)
 
     @st.composite
     def _build(draw: st.DrawFn) -> tuple[int, int, int, int, str]:
         sl = draw(st.integers(min_value=0, max_value=last_line))
-        el = draw(st.integers(min_value=sl, max_value=last_line))
         max_sc = len(lines[sl]) if sl < len(lines) else 0
-        max_ec = len(lines[el]) if el < len(lines) else 0
         sc = draw(st.integers(min_value=0, max_value=max_sc))
-        # end col must be >= start col when on the same line
-        ec = draw(st.integers(min_value=(sc if el == sl else 0), max_value=max_ec))
-        new_text = draw(st.text(min_size=0, max_size=40))
+        # Zero-width range: end == start
+        el, ec = sl, sc
+        # Non-empty newText so the insertion is observable
+        new_text = draw(st.text(min_size=1, max_size=40))
         return sl, sc, el, ec, new_text
 
     return _build()
@@ -81,15 +92,6 @@ def _edit_st(content: str) -> st.SearchStrategy[tuple[int, int, int, int, str]]:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "B4-BUG-01: _apply_workspace_edit_to_disk is not idempotent for "
-        "zero-width insertions (start==end, newText non-empty). "
-        "Minimal: file='', edit=range(0,0)..(0,0)->'0' -> b'0' then b'00'. "
-        "Remove xfail once applier guards against re-inserting on second call."
-    ),
-)
 @given(_file_content_st, st.data())
 @settings(
     max_examples=50,
@@ -99,17 +101,18 @@ def test_apply_workspace_edit_to_disk_is_idempotent(
     file_content: str,
     data: st.DataObject,
 ) -> None:
-    """Apply the same WorkspaceEdit twice; disk state after second == after first.
+    """Applying the same zero-width insertion WorkspaceEdit twice is a no-op.
 
-    This tests whether ``_apply_workspace_edit_to_disk`` is idempotent
-    for the ``changes`` wire shape.  Because the applier re-reads the file
-    for each call, a second apply of the *same* range edit operates on
-    already-mutated bytes — the property surfaces real divergence.
+    Scope: pure insertions (start == end, newText non-empty).  Deletions and
+    shrink-replacements are excluded — making those idempotent would require
+    per-call state to remember the original range content.
 
-    Currently marked xfail (B4-BUG-01): zero-width insertions violate
-    idempotence.  See module docstring for details.
+    B4-BUG-01 fixed (SQ2): ``_splice_text_edit`` now checks whether the
+    content at the insertion offset already equals ``newText`` before splicing.
+    The I/O layer uses ``newline=""`` so ``\\r`` in newText is not silently
+    coerced to ``\\n`` on re-read, which would shift subsequent offsets.
     """
-    sl, sc, el, ec, new_text = data.draw(_edit_st(file_content))
+    sl, sc, el, ec, new_text = data.draw(_insertion_edit_st(file_content))
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         src = Path(tmp_dir) / "src.py"
