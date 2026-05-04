@@ -114,11 +114,23 @@ class TestConvertFunctionToAsync:
         assert summary["unwrapped_call_sites"] == 1
         assert summary["await_call_sites"] == 0
 
-    def test_already_awaited_call_coverage_path(self, tmp_path: Path) -> None:
-        """_await_wrapped_calls is exercised. The set of ids is computed but
-        the current in-operator check (call object vs int set) never matches,
-        so even an already-awaited call increments await_call_sites when it's
-        inside an async def. This test documents actual behavior."""
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            "PC2-bug-A: _await_wrapped_calls returns set[int] (AST node ids) but the "
+            "callsite at python_async_conversion.py:109 compares ast.Call objects "
+            "against the set — the `in` check never matches, so even an "
+            "already-awaited call increments await_call_sites. "
+            "Correct behavior would be summary['await_call_sites'] == 0 here. "
+            "Once the source bug is fixed (compare by id, not object), this "
+            "test will XPASS and the xfail marker should be removed."
+        ),
+    )
+    def test_already_awaited_call_excluded_from_await_call_sites(
+        self, tmp_path: Path
+    ) -> None:
+        """A call already inside an Await expression should NOT count as a
+        call site needing await wrapping. The current bug double-counts it."""
         from serena.refactoring.python_async_conversion import convert_function_to_async
 
         src = (
@@ -137,9 +149,8 @@ class TestConvertFunctionToAsync:
             symbol="fetch",
             project_root=tmp_path,
         )
-        # The call `fetch()` inside the Await expression is inside an async def,
-        # so it DOES count as await_call_sites (double-wrap is a known limitation).
-        assert summary["await_call_sites"] == 1
+        # CORRECT behavior: the awaited fetch() call should be excluded.
+        assert summary["await_call_sites"] == 0
         assert summary["unwrapped_call_sites"] == 0
 
     def test_attribute_call_site_tracked(self, tmp_path: Path) -> None:
