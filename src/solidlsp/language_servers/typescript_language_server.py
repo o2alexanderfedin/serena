@@ -38,7 +38,7 @@ else:
     # Dummy pwd module for Windows
     class pwd:  # type: ignore
         @staticmethod
-        def getpwuid(uid: Any) -> Any:
+        def getpwuid(_uid: Any) -> Any:
             return type("obj", (), {"pw_name": os.environ.get("USERNAME", "unknown")})()
 
 
