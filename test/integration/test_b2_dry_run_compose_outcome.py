@@ -192,6 +192,16 @@ def test_dry_run_compose_auto_mode_returns_transaction_not_awaiting(
         f"per_step must be a list.\nEnvelope: {envelope}"
     )
 
+    # --- Dispatch-invocation assertion: the patched fake must have been
+    #     called at least once. Guards against auto mode bypassing step
+    #     dispatch entirely (which would let the envelope pass without
+    #     the step actually running). ---
+    assert fake.call_count >= 1, (
+        f"_FACADE_DISPATCH fake (_b23_fake_tool) was never invoked — auto mode "
+        f"bypassed step dispatch, defeating the purpose of the regression test. "
+        f"call_count={fake.call_count}"
+    )
+
 
 # ---------------------------------------------------------------------------
 # B2.3b — manual mode: MUST set awaiting_confirmation=True (counter-assertion)
