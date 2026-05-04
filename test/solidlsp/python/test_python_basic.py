@@ -86,26 +86,26 @@ class TestProjectBasics:
         """Test retrieve_content_around_line functionality with various scenarios."""
         file_path = os.path.join("test_repo", "models.py")
 
-        # Scenario 1: Just a single line (User class definition)
-        line_31 = project.retrieve_content_around_line(file_path, 31)
-        assert len(line_31.lines) == 1
-        assert "class User(BaseModel):" in line_31.lines[0].line_content
-        assert line_31.lines[0].line_number == 31
-        assert line_31.lines[0].match_type == LineType.MATCH
+        # Scenario 1: Just a single line (User class definition at file line 37, 0-indexed 36)
+        line_36 = project.retrieve_content_around_line(file_path, 36)
+        assert len(line_36.lines) == 1
+        assert "class User(BaseModel):" in line_36.lines[0].line_content
+        assert line_36.lines[0].line_number == 36
+        assert line_36.lines[0].match_type == LineType.MATCH
 
         # Scenario 2: Context above and below
-        with_context_around_user = project.retrieve_content_around_line(file_path, 31, 2, 2)
+        with_context_around_user = project.retrieve_content_around_line(file_path, 36, 2, 2)
         assert len(with_context_around_user.lines) == 5
         # Check line content
         assert "class User(BaseModel):" in with_context_around_user.matched_lines[0].line_content
         assert with_context_around_user.num_matched_lines == 1
         assert "    User model representing a system user." in with_context_around_user.lines[4].line_content
         # Check line numbers
-        assert with_context_around_user.lines[0].line_number == 29
-        assert with_context_around_user.lines[1].line_number == 30
-        assert with_context_around_user.lines[2].line_number == 31
-        assert with_context_around_user.lines[3].line_number == 32
-        assert with_context_around_user.lines[4].line_number == 33
+        assert with_context_around_user.lines[0].line_number == 34
+        assert with_context_around_user.lines[1].line_number == 35
+        assert with_context_around_user.lines[2].line_number == 36
+        assert with_context_around_user.lines[3].line_number == 37
+        assert with_context_around_user.lines[4].line_number == 38
         # Check match types
         assert with_context_around_user.lines[0].match_type == LineType.BEFORE_MATCH
         assert with_context_around_user.lines[1].match_type == LineType.BEFORE_MATCH
@@ -114,16 +114,16 @@ class TestProjectBasics:
         assert with_context_around_user.lines[4].match_type == LineType.AFTER_MATCH
 
         # Scenario 3a: Only context above
-        with_context_above = project.retrieve_content_around_line(file_path, 31, 3, 0)
+        with_context_above = project.retrieve_content_around_line(file_path, 36, 3, 0)
         assert len(with_context_above.lines) == 4
         assert "return cls(id=id, name=name)" in with_context_above.lines[0].line_content
         assert "class User(BaseModel):" in with_context_above.matched_lines[0].line_content
         assert with_context_above.num_matched_lines == 1
         # Check line numbers
-        assert with_context_above.lines[0].line_number == 28
-        assert with_context_above.lines[1].line_number == 29
-        assert with_context_above.lines[2].line_number == 30
-        assert with_context_above.lines[3].line_number == 31
+        assert with_context_above.lines[0].line_number == 33
+        assert with_context_above.lines[1].line_number == 34
+        assert with_context_above.lines[2].line_number == 35
+        assert with_context_above.lines[3].line_number == 36
         # Check match types
         assert with_context_above.lines[0].match_type == LineType.BEFORE_MATCH
         assert with_context_above.lines[1].match_type == LineType.BEFORE_MATCH
@@ -131,14 +131,14 @@ class TestProjectBasics:
         assert with_context_above.lines[3].match_type == LineType.MATCH
 
         # Scenario 3b: Only context below
-        with_context_below = project.retrieve_content_around_line(file_path, 31, 0, 3)
+        with_context_below = project.retrieve_content_around_line(file_path, 36, 0, 3)
         assert len(with_context_below.lines) == 4
         assert "class User(BaseModel):" in with_context_below.matched_lines[0].line_content
         assert with_context_below.num_matched_lines == 1
-        assert with_context_below.lines[0].line_number == 31
-        assert with_context_below.lines[1].line_number == 32
-        assert with_context_below.lines[2].line_number == 33
-        assert with_context_below.lines[3].line_number == 34
+        assert with_context_below.lines[0].line_number == 36
+        assert with_context_below.lines[1].line_number == 37
+        assert with_context_below.lines[2].line_number == 38
+        assert with_context_below.lines[3].line_number == 39
         # Check match types
         assert with_context_below.lines[0].match_type == LineType.MATCH
         assert with_context_below.lines[1].match_type == LineType.AFTER_MATCH
