@@ -103,22 +103,8 @@ def start_ls_context(
         language, repo_path, ignored_paths, trace_lsp_communication, ls_specific_settings, additional_workspace_folders, solidlsp_dir
     )
     log.info(f"Starting language server for {language} {repo_path}")
-    ls.start()
-    try:
-        log.info(f"Language server started for {language} {repo_path}")
+    with ls.start_server_context():
         yield ls
-    finally:
-        log.info(f"Stopping language server for {language} {repo_path}")
-        try:
-            ls.stop(shutdown_timeout=5)
-        except Exception as e:
-            log.warning(f"Warning: Error stopping language server: {e}")
-            # try to force cleanup
-            if hasattr(ls, "server") and hasattr(ls.server, "process"):
-                try:
-                    ls.server.process.terminate()
-                except:
-                    pass
 
 
 @contextmanager

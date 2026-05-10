@@ -1189,7 +1189,7 @@ class SolidLanguageServer(ABC):
         return match_path(relative_path, self.get_ignore_spec(), root_path=self.repository_root_path)
 
     @contextmanager
-    def start_server(self) -> Iterator["SolidLanguageServer"]:
+    def start_server_context(self) -> Iterator["SolidLanguageServer"]:
         self.start()
         yield self
         self.stop()
