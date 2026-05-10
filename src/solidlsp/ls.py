@@ -1188,65 +1188,6 @@ class SolidLanguageServer(ABC):
 
         return match_path(relative_path, self.get_ignore_spec(), root_path=self.repository_root_path)
 
-    def _shutdown(self, timeout: float = 5.0) -> None:
-        """
-        A robust shutdown process designed to terminate cleanly on all platforms, including Windows,
-        by explicitly closing all I/O pipes.
-        """
-        if not self.server.is_running():
-            log.debug("Server process not running, skipping shutdown.")
-            return
-
-        log.info(f"Initiating final robust shutdown with a {timeout}s timeout...")
-        process = self.server.process
-        if process is None:
-            log.debug("Server process is None, cannot shutdown.")
-            return
-
-        # --- Main Shutdown Logic ---
-        # Stage 1: Graceful Termination Request
-        # Send LSP shutdown and close stdin to signal no more input.
-        try:
-            log.debug("Sending LSP shutdown request...")
-            # Use a thread to timeout the LSP shutdown call since it can hang
-            shutdown_thread = threading.Thread(target=self.server.send_shutdown)
-            shutdown_thread.daemon = True
-            shutdown_thread.start()
-            shutdown_thread.join(timeout=2.0)  # 2 second timeout for LSP shutdown
-
-            if shutdown_thread.is_alive():
-                log.debug("LSP shutdown request timed out, proceeding to terminate...")
-            else:
-                log.debug("LSP shutdown request completed.")
-
-            if process.stdin and not process.stdin.closed:
-                process.stdin.close()
-            log.debug("Stage 1 shutdown complete.")
-        except Exception as e:
-            log.debug(f"Exception during graceful shutdown: {e}")
-            # Ignore errors here, we are proceeding to terminate anyway.
-
-        # Stage 2: Terminate and Wait for Process to Exit
-        log.debug(f"Terminating process {process.pid}, current status: {process.poll()}")
-        process.terminate()
-
-        # Stage 3: Wait for process termination with timeout
-        try:
-            log.debug(f"Waiting for process {process.pid} to terminate...")
-            exit_code = process.wait(timeout=timeout)
-            log.info(f"Language server process terminated successfully with exit code {exit_code}.")
-        except subprocess.TimeoutExpired:
-            # If termination failed, forcefully kill the process
-            log.warning(f"Process {process.pid} termination timed out, killing process forcefully...")
-            process.kill()
-            try:
-                exit_code = process.wait(timeout=2.0)
-                log.info(f"Language server process killed successfully with exit code {exit_code}.")
-            except subprocess.TimeoutExpired:
-                log.error(f"Process {process.pid} could not be killed within timeout.")
-        except Exception as e:
-            log.error(f"Error during process shutdown: {e}")
-
     @contextmanager
     def start_server(self) -> Iterator["SolidLanguageServer"]:
         self.start()
@@ -3123,7 +3064,7 @@ class SolidLanguageServer(ABC):
         :param shutdown_timeout: time, in seconds, to wait for the server to shutdown gracefully before killing it
         """
         try:
-            self._shutdown(timeout=shutdown_timeout)
+            self.server.stop(timeout=shutdown_timeout)
         except Exception as e:
             log.warning(f"Exception while shutting down language server: {e}")
 

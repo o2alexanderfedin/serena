@@ -127,7 +127,6 @@ class LanguageServerInterface(ABC):
         """
         an object that can be used to send notifications to the server
         """
-        self._is_shutting_down = False
         self.request_id = 1
         """
         the next request id to use for requests
@@ -144,7 +143,11 @@ class LanguageServerInterface(ABC):
         self._notification_observers: list[Callable[[str, Any], None]] = []
         self._trace_log_fn = logger
         self.task_counter = 0
-        self._is_stopped = False
+        self._is_stopping = False
+        """
+        Flag indicating whether the interface is in the process of stopping (or already stopped).
+        Exception handlers should check this flag to avoid logging errors that are caused by the interface being stopped.
+        """
         self._incoming_messages_queue: Queue[bytes] = Queue()
         self._request_timeout = request_timeout
 
@@ -169,7 +172,7 @@ class LanguageServerInterface(ABC):
         """
         Starts communication with the language server
         """
-        self._is_stopped = False
+        self._is_stopping = False
         self._start()
 
     @abstractmethod
@@ -179,17 +182,24 @@ class LanguageServerInterface(ABC):
         language server
         """
 
-    @abstractmethod
-    def stop(self) -> None:
+    def stop(self, timeout: float = 5.0) -> None:
         """
-        Stops communication with the language server, freeing resources
-        """
+        Terminates communication with the language server, freeing resources
 
-    def send_shutdown(self) -> None:
+        :param timeout: the maximum time, in seconds, to wait for the language server to terminate before forcefully killing it
+            (if applicable)
+        """
+        self._is_stopping = True
+        self._stop(timeout)
+
+    @abstractmethod
+    def _stop(self, timeout: float) -> None:
+        pass
+
+    def _send_shutdown(self) -> None:
         """
         Signals shutdown to the server
         """
-        self._is_shutting_down = True
         log.info("Sending shutdown request to server")
         self.send.shutdown()
         log.info("Received shutdown response from server")
@@ -372,7 +382,7 @@ class LanguageServerInterface(ABC):
             except asyncio.CancelledError:
                 return
             except Exception as ex:
-                if not self._is_shutting_down:
+                if not self._is_stopping:
                     log.error("Error handling notification observer for method '%s': %s", method, ex, exc_info=ex)
 
         handler = self.on_notification_handlers.get(method)
@@ -384,7 +394,7 @@ class LanguageServerInterface(ABC):
         except asyncio.CancelledError:
             return
         except Exception as ex:
-            if not self._is_shutting_down:
+            if not self._is_stopping:
                 log.error("Error handling notification for method '%s': %s", method, ex, exc_info=ex)
 
 
@@ -466,14 +476,64 @@ class StdioLanguageServer(LanguageServerInterface):
             daemon=True,
         ).start()
 
-    def stop(self) -> None:
+    def _stop(self, timeout: float) -> None:
         """
-        Sends the terminate signal to the language server process and waits for it to exit, with a timeout, killing it if necessary
+        A robust shutdown process designed to terminate cleanly on all platforms, including Windows,
+        by explicitly closing all I/O pipes.
         """
+        if not self.is_running():
+            log.debug("Server process not running, skipping shutdown.")
+            return
+
+        log.info(f"Initiating final robust shutdown with a {timeout}s timeout...")
         process = self.process
-        self.process = None
-        if process:
-            self._cleanup_process(process)
+        if process is None:
+            log.debug("Server process is None, cannot shutdown.")
+            return
+
+        # --- Main Shutdown Logic ---
+        # Stage 1: Graceful Termination Request
+        # Send LSP shutdown and close stdin to signal no more input.
+        try:
+            log.debug("Sending LSP shutdown request...")
+            # Use a thread to timeout the LSP shutdown call since it can hang
+            shutdown_thread = threading.Thread(target=self._send_shutdown)
+            shutdown_thread.daemon = True
+            shutdown_thread.start()
+            shutdown_thread.join(timeout=2.0)  # 2 second timeout for LSP shutdown
+
+            if shutdown_thread.is_alive():
+                log.debug("LSP shutdown request timed out, proceeding to terminate...")
+            else:
+                log.debug("LSP shutdown request completed.")
+
+            if process.stdin and not process.stdin.closed:
+                process.stdin.close()
+            log.debug("Stage 1 shutdown complete.")
+        except Exception as e:
+            log.debug(f"Exception during graceful shutdown: {e}")
+            # Ignore errors here, we are proceeding to terminate anyway.
+
+        # Stage 2: Terminate and Wait for Process to Exit
+        log.debug(f"Terminating process {process.pid}, current status: {process.poll()}")
+        process.terminate()
+
+        # Stage 3: Wait for process termination with timeout
+        try:
+            log.debug(f"Waiting for process {process.pid} to terminate...")
+            exit_code = process.wait(timeout=timeout)
+            log.info(f"Language server process terminated successfully with exit code {exit_code}.")
+        except subprocess.TimeoutExpired:
+            # If termination failed, forcefully kill the process
+            log.warning(f"Process {process.pid} termination timed out, killing process forcefully...")
+            process.kill()
+            try:
+                exit_code = process.wait(timeout=2.0)
+                log.info(f"Language server process killed successfully with exit code {exit_code}.")
+            except subprocess.TimeoutExpired:
+                log.error(f"Process {process.pid} could not be killed within timeout.")
+        except Exception as e:
+            log.error(f"Error during process shutdown: {e}")
 
     def _cleanup_process(self, process: subprocess.Popen[bytes]) -> None:
         """Clean up a process: close stdin, terminate/kill process, close stdout/stderr."""
@@ -492,9 +552,10 @@ class StdioLanguageServer(LanguageServerInterface):
         self._safely_close_pipe(process.stdout)
         self._safely_close_pipe(process.stderr)
 
-    def _safely_close_pipe(self, pipe: Any) -> None:
+    @staticmethod
+    def _safely_close_pipe(pipe: IO[AnyStr] | None) -> None:
         """Safely close a pipe, ignoring any exceptions."""
-        if pipe:
+        if pipe and not pipe.closed:
             try:
                 pipe.close()
             except Exception:
@@ -589,7 +650,7 @@ class StdioLanguageServer(LanguageServerInterface):
                 "Unexpected error while reading stdout from language server process", self.language, cause=e
             )
         log.info("Language server stdout reader thread has terminated")
-        if not self._is_shutting_down:
+        if not self._is_stopping:
             if exception is None:
                 exception = LanguageServerTerminatedException("Language server stdout read process terminated unexpectedly", self.language)
             log.error(str(exception))
@@ -612,7 +673,7 @@ class StdioLanguageServer(LanguageServerInterface):
                 log.log(level, line_str)
         except Exception as e:
             log.error("Error while reading stderr from language server process: %s", e, exc_info=e)
-        if not self._is_shutting_down:
+        if not self._is_stopping:
             log.error("Language server stderr reader thread terminated unexpectedly")
         else:
             log.info("Language server stderr reader thread has terminated")
