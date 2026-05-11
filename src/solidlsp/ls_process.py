@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from queue import Empty, Queue
 from typing import IO, Any, AnyStr
 
-import psutil
 from sensai.util.string import ToStringMixin
 
 from solidlsp.ls_config import Language
@@ -33,7 +32,7 @@ from solidlsp.lsp_protocol_handler.server import (
     make_request,
     make_response,
 )
-from solidlsp.util.subprocess_util import quote_arg, subprocess_kwargs
+from solidlsp.util.subprocess_util import quote_arg, subprocess_kwargs, terminate_process_tree_with_kill_fallback
 
 log = logging.getLogger(__name__)
 
@@ -503,42 +502,21 @@ class StdioLanguageServer(LanguageServerInterface):
         by explicitly closing all I/O pipes.
         """
         log.info(f"Initiating final robust shutdown with a {timeout}s timeout...")
-        process = self.process
-        if process is None:
+        if self.process is None:
             log.debug("Server process is None, cannot shutdown.")
             return
 
         try:
-            # --- Main Shutdown Logic ---
-            # Stage 1: Graceful Termination Request
-            # Send LSP shutdown and close stdin to signal no more input.
+            # send LSP shutdown and close stdin to signal no more input
             try:
                 self._send_shutdown_in_thread()
-                self._safely_close_pipe(process.stdin)
-                log.debug("Stage 1 shutdown complete.")
+                self._safely_close_pipe(self.process.stdin)
             except Exception as e:
                 log.debug(f"Exception during graceful shutdown: {e}")
                 # Ignore errors here, we are proceeding to terminate anyway.
 
-            # Stage 2: Terminate and Wait for Process to Exit
-            log.debug(f"Terminating process {process.pid}, current status: {process.poll()}")
-            self._signal_process_tree(process, terminate=True)
-            try:
-                log.debug(f"Waiting for process {process.pid} to terminate...")
-                exit_code = process.wait(timeout=timeout)
-                log.info(f"Language server process terminated successfully with exit code {exit_code}.")
-            except subprocess.TimeoutExpired:
-                # If termination failed, forcefully kill the process
-                log.warning(f"Process {process.pid} termination timed out, killing process forcefully...")
-                self._signal_process_tree(process, terminate=False)
-                try:
-                    exit_code = process.wait(timeout=2.0)
-                    log.info(f"Language server process killed successfully with exit code {exit_code}.")
-                except subprocess.TimeoutExpired:
-                    log.error(f"Process {process.pid} could not be killed within timeout.")
-
-            except Exception as e:
-                log.error(f"Error during process shutdown: {e}")
+            # terminate the process
+            terminate_process_tree_with_kill_fallback(self.process, terminate_timeout=timeout, process_name=f"LS[{self.language.value}]")
         finally:
             self.process = None
 
@@ -550,38 +528,6 @@ class StdioLanguageServer(LanguageServerInterface):
                 pipe.close()
             except Exception:
                 pass
-
-    def _signal_process_tree(self, process: subprocess.Popen[bytes], terminate: bool = True) -> None:
-        """
-        Sends a signal (terminate or kill) to the given process and all its children.
-
-        :param terminate: if True, signal terminate, otherwise signal kill
-        """
-
-        def signal_process(p: subprocess.Popen | psutil.Process) -> None:
-            try:
-                if terminate:
-                    p.terminate()
-                else:
-                    p.kill()
-            except:
-                pass
-
-        # Try to get the parent process
-        parent = None
-        try:
-            parent = psutil.Process(process.pid)
-        except (psutil.NoSuchProcess, psutil.AccessDenied, Exception):
-            pass
-
-        # If we have the parent process and it's running, signal the entire tree
-        if parent and parent.is_running():
-            for child in parent.children(recursive=True):
-                signal_process(child)
-            signal_process(parent)
-        # Otherwise, fall back to direct process signaling
-        else:
-            signal_process(process)
 
     def _read_bytes_from_process(self, process, stream, num_bytes) -> bytes:  # type: ignore
         """Read exactly num_bytes from process stdout"""
