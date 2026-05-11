@@ -193,6 +193,8 @@ class LanguageServerInterface(ABC):
             return
 
         self._is_stopping = True
+
+        log.info(f"Initiating shutdown with a {timeout}s timeout...")
         self._stop(timeout)
 
     @abstractmethod
@@ -236,7 +238,7 @@ class LanguageServerInterface(ABC):
 
     def _handle_body(self, body: bytes) -> None:
         """
-        Parse the body text received from the language server process and invoke the appropriate handler
+        Parses the body text received from the language server process and invokes the appropriate handler
         """
         try:
             self._receive_payload(json.loads(body))
@@ -497,11 +499,6 @@ class StdioLanguageServer(LanguageServerInterface):
         ).start()
 
     def _stop(self, timeout: float) -> None:
-        """
-        A robust shutdown process designed to terminate cleanly on all platforms, including Windows,
-        by explicitly closing all I/O pipes.
-        """
-        log.info(f"Initiating final robust shutdown with a {timeout}s timeout...")
         if self.process is None:
             log.debug("Server process is None, cannot shutdown.")
             return
@@ -514,7 +511,6 @@ class StdioLanguageServer(LanguageServerInterface):
             except Exception as e:
                 log.debug(f"Exception during graceful shutdown: {e}")
                 # Ignore errors here, we are proceeding to terminate anyway.
-
             # terminate the process
             terminate_process_tree_with_kill_fallback(self.process, terminate_timeout=timeout, process_name=f"LS[{self.language.value}]")
         finally:
@@ -610,9 +606,6 @@ class StdioLanguageServer(LanguageServerInterface):
             log.info("Language server stderr reader thread has terminated")
 
     def _send_payload(self, payload: StringDict) -> None:
-        """
-        Send the payload to the server by writing to its stdin asynchronously.
-        """
         if not self.process or not self.process.stdin:
             return
         self._trace("solidlsp", "ls", payload)
