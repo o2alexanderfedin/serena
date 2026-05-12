@@ -49,7 +49,7 @@ def test_pylsp_server_boots_and_initializes(tmp_path: Path) -> None:
     (tmp_path / "x.py").write_text("def hello() -> int:\n    return 1\n")
     cfg = LanguageServerConfig(code_language=Language.PYTHON)
     srv = PylspServer(cfg, str(tmp_path), SolidLSPSettings())
-    with srv.start_server():
+    with srv.start_server_context():
         symbols = srv.request_document_symbols("x.py")
         all_symbols = list(symbols.iter_symbols())
         assert any("hello" in str(s.get("name", "")) for s in all_symbols), all_symbols

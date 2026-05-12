@@ -54,7 +54,7 @@ def test_basedpyright_boots_and_pulls_diagnostics(tmp_path: Path) -> None:
 
     cfg = LanguageServerConfig(code_language=Language.PYTHON)
     srv = BasedpyrightServer(cfg, str(tmp_path), SolidLSPSettings())
-    with srv.start_server():
+    with srv.start_server_context():
         with srv.open_file("bad.py"):
             report = srv.request_pull_diagnostics(uri=bad.as_uri())
         # Pull report contains items[]; with our deliberate type error, >=1.

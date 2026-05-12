@@ -51,7 +51,7 @@ def _start(srv: SolidLanguageServer):
     """Bring the server's child process up; Stage 1A T9 facade ``wait_for_indexing``
     is called inside start_server's bootstrap chain — but for T9 we just need
     the LSP to be alive long enough for a workspace/symbol probe."""
-    cm = srv.start_server()
+    cm = srv.start_server_context()
     cm.__enter__()  # type: ignore[attr-defined]
     return cm
 

@@ -51,7 +51,7 @@ def rust_lsp(seed_rust_root: Path) -> Iterator[SolidLanguageServer]:
     # src/solidlsp/ls_config.py:596), not ``language``.
     cfg = LanguageServerConfig(code_language=Language.RUST)
     srv = SolidLanguageServer.create(cfg, str(seed_rust_root))
-    with srv.start_server():
+    with srv.start_server_context():
         yield srv
 
 
@@ -59,7 +59,7 @@ def rust_lsp(seed_rust_root: Path) -> Iterator[SolidLanguageServer]:
 def python_lsp_pylsp(seed_python_root: Path) -> Iterator[SolidLanguageServer]:
     cfg = LanguageServerConfig(code_language=Language.PYTHON)
     srv = SolidLanguageServer.create(cfg, str(seed_python_root))
-    with srv.start_server():
+    with srv.start_server_context():
         yield srv
 
 

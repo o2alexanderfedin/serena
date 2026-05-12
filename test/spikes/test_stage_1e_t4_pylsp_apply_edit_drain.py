@@ -37,7 +37,7 @@ def test_pylsp_inline_drains_apply_edit_payload(tmp_path: Path) -> None:
 
     cfg = LanguageServerConfig(code_language=Language.PYTHON)
     srv = PylspServer(cfg, str(tmp_path), SolidLSPSettings())
-    with srv.start_server():
+    with srv.start_server_context():
         # Open the document so pylsp's in-memory buffer is populated and
         # keep it open for the duration of the codeAction + executeCommand
         # round-trip.

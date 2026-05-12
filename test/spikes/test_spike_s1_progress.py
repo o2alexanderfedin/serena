@@ -67,7 +67,7 @@ def test_s1_progress_forwarding(rust_lsp, seed_rust_root: Path, results_dir: Pat
         "$/progress",
         lambda p: cold_events.append(p) if isinstance(p, dict) else None,
     )
-    with srv2.start_server():
+    with srv2.start_server_context():
         # Let cold-start indexing run; wait_for_indexing() drains the indexing-class
         # tokens once they all reach kind=end (T9). Falls through on timeout.
         srv2.wait_for_indexing(timeout_s=60.0)

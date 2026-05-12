@@ -59,7 +59,7 @@ def test_ruff_boots_and_offers_organize_imports(tmp_path: Path) -> None:
 
     cfg = LanguageServerConfig(code_language=Language.PYTHON)
     srv = RuffServer(cfg, str(tmp_path), SolidLSPSettings())
-    with srv.start_server():
+    with srv.start_server_context():
         with srv.open_file("messy.py"):
             actions = srv.request_code_actions(
                 str(src),

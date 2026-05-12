@@ -68,7 +68,7 @@ def test_s2_snippet_false(seed_rust_root: Path, results_dir: Path) -> None:
 
     lib_path = str(seed_rust_root / "src" / "lib.rs")
 
-    with srv.start_server():
+    with srv.start_server_context():
         time.sleep(3.0)  # cold-start indexing
         with srv.open_file("src/lib.rs"):
             time.sleep(1.5)
