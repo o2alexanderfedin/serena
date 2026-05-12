@@ -5,7 +5,7 @@ the same payload; remove_notification_listener(handle) detaches; the legacy
 on_notification(method, cb) still replaces the single primary listener
 without affecting added listeners. Also pins the three pre-T1 dispatch
 behaviors that _dispatch_notification preserves: asyncio.CancelledError
-swallow, _is_shutting_down log gate, and the "Unhandled method" warning
+swallow, _is_stopping log gate, and the "Unhandled method" warning
 for methods with neither primary nor listeners.
 """
 
@@ -18,24 +18,24 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from solidlsp.ls_process import LanguageServerProcess
+from solidlsp.ls_process import StdioLanguageServer
 
 
 @pytest.fixture
-def handler() -> LanguageServerProcess:
+def handler() -> StdioLanguageServer:
     # Bypass __init__ on purpose: T1 listener subsystem is self-contained, and
-    # constructing a real LanguageServerProcess here would require a child LSP
+    # constructing a real StdioLanguageServer here would require a child LSP
     # process. Manually populate only the fields the listener subsystem reads.
-    h = LanguageServerProcess.__new__(LanguageServerProcess)
+    h = StdioLanguageServer.__new__(StdioLanguageServer)
     h.on_notification_handlers = {}
     h.on_notification_listeners = {}
     h._listener_seq = 0
     h._listener_lock = threading.Lock()
-    h._is_shutting_down = False
+    h._is_stopping = False
     return h
 
 
-def test_add_and_remove_listener_receive_payload(handler: LanguageServerProcess) -> None:
+def test_add_and_remove_listener_receive_payload(handler: StdioLanguageServer) -> None:
     a = MagicMock()
     b = MagicMock()
     ha = handler.add_notification_listener("$/progress", a)
@@ -49,7 +49,7 @@ def test_add_and_remove_listener_receive_payload(handler: LanguageServerProcess)
     b.assert_called_with({"value": 2})
 
 
-def test_legacy_on_notification_does_not_clobber_listeners(handler: LanguageServerProcess) -> None:
+def test_legacy_on_notification_does_not_clobber_listeners(handler: StdioLanguageServer) -> None:
     listener = MagicMock()
     primary = MagicMock()
     handler.add_notification_listener("$/progress", listener)
@@ -60,7 +60,7 @@ def test_legacy_on_notification_does_not_clobber_listeners(handler: LanguageServ
 
 
 def test_listener_exception_does_not_break_other_listeners(
-    handler: LanguageServerProcess, caplog: pytest.LogCaptureFixture
+    handler: StdioLanguageServer, caplog: pytest.LogCaptureFixture
 ) -> None:
     bad = MagicMock(side_effect=RuntimeError("boom"))
     good = MagicMock()
@@ -72,20 +72,20 @@ def test_listener_exception_does_not_break_other_listeners(
     assert any("Error in notification listener" in rec.getMessage() for rec in caplog.records)
 
 
-def test_cancelled_error_in_listener_is_swallowed(handler: LanguageServerProcess) -> None:
+def test_cancelled_error_in_listener_is_swallowed(handler: StdioLanguageServer) -> None:
     cancelled = MagicMock(side_effect=asyncio.CancelledError())
     handler.add_notification_listener("$/progress", cancelled)
     handler._dispatch_notification("$/progress", {"v": 1})  # must NOT raise
 
 
-def test_cancelled_error_in_primary_is_swallowed(handler: LanguageServerProcess) -> None:
+def test_cancelled_error_in_primary_is_swallowed(handler: StdioLanguageServer) -> None:
     cancelled = MagicMock(side_effect=asyncio.CancelledError())
     handler.on_notification("$/progress", cancelled)
     handler._dispatch_notification("$/progress", {"v": 1})  # must NOT raise
 
 
-def test_shutdown_gate_silences_log(handler: LanguageServerProcess, caplog: pytest.LogCaptureFixture) -> None:
-    handler._is_shutting_down = True
+def test_shutdown_gate_silences_log(handler: StdioLanguageServer, caplog: pytest.LogCaptureFixture) -> None:
+    handler._is_stopping = True
     bad = MagicMock(side_effect=RuntimeError("boom"))
     handler.add_notification_listener("$/progress", bad)
     with caplog.at_level(logging.ERROR, logger="solidlsp.ls_process"):
@@ -93,7 +93,7 @@ def test_shutdown_gate_silences_log(handler: LanguageServerProcess, caplog: pyte
     assert not any("Error in notification listener" in rec.getMessage() for rec in caplog.records)
 
 
-def test_unhandled_method_warning(handler: LanguageServerProcess, caplog: pytest.LogCaptureFixture) -> None:
+def test_unhandled_method_warning(handler: StdioLanguageServer, caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.WARNING, logger="solidlsp.ls_process"):
         handler._dispatch_notification("textDocument/foo", {})
     assert any("Unhandled method 'textDocument/foo'" in rec.getMessage() for rec in caplog.records)
