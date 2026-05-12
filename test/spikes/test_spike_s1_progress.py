@@ -95,7 +95,7 @@ def test_s1_progress_forwarding(rust_lsp, seed_rust_root: Path, results_dir: Pat
         f"- Post-start additive-listener events (session fixture): {len(post_start_events)}\n"
         f"- documentSymbol response: {type(symbols).__name__} (truthy={bool(symbols)})\n\n"
         "**API audit (post Stage 1A T1+T13):**\n\n"
-        "- `LanguageServerProcess.add_notification_listener` (`src/solidlsp/ls_process.py:516`) "
+        "- `StdioLanguageServer.add_notification_listener` (`src/solidlsp/ls_process.py:516`) "
         "is additive: multiple listeners coexist with the legacy primary handler, none clobber.\n"
         "- `rust_analyzer.py:734` subscribes `_on_progress` via the same additive channel; "
         "`wait_for_indexing()` watches `rustAnalyzer/{Fetching,Building,Indexing,...}` + "
