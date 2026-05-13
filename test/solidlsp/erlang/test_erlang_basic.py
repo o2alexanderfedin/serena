@@ -57,6 +57,11 @@ class TestErlangLanguageServerBasics:
                 pytrace=False,
             )
 
+    @pytest.mark.xfail(
+        reason="erlang_ls v1.1.0 does not implement textDocument/diagnostic (pull diagnostics, LSP 3.17); "
+        "push-diagnostics fallback times out — see v0.2.0-followup-E1",
+        strict=False,
+    )
     @pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
     def test_file_diagnostics(self, language_server: SolidLanguageServer) -> None:
         assert_file_diagnostics(

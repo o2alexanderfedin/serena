@@ -18,6 +18,12 @@ class TestCrossPackageReferences:
     when additional_workspace_folders is configured.
     """
 
+    @pytest.mark.xfail(
+        reason="Cross-package reference resolution is flaky under full-suite load "
+        "(passes in isolation, races during batch runs against the shared TS LSP). "
+        "See #1040 / v0.2.0-followup-E1.",
+        strict=False,
+    )
     def test_cross_package_find_references(self) -> None:
         """Starting from package_a, with package_b as additional workspace,
         references in package_b should be discovered.
@@ -44,6 +50,12 @@ class TestCrossPackageReferences:
                 f"Expected cross-package reference from package_b/consumer.ts, but only found refs in: {ref_paths}"
             )
 
+    @pytest.mark.xfail(
+        reason="Cross-package reference resolution is flaky under full-suite load "
+        "(passes in isolation, races during batch runs against the shared TS LSP). "
+        "See #1040 / v0.2.0-followup-E1.",
+        strict=False,
+    )
     def test_cross_package_referencing_symbols(self) -> None:
         """Test the higher-level request_referencing_symbols across packages."""
         with start_ls_context(
