@@ -998,6 +998,38 @@ _LANGUAGE_METADATA: dict[str, _StrategyView] = {
     # plus diagnostic-driven ``codeAction``. Adapter modules live under
     # ``solidlsp/language_servers/<lang>_*.py``; canonical file extensions
     # come from ``solidlsp.ls_config.Language._matcher``.
+    "ada": _StrategyView(
+        # v1.3.0: AdaCore Ada Language Server (ALS,
+        # https://github.com/AdaCore/ada_language_server). The SolidLSP adapter
+        # auto-downloads the official ALS binary release; launch command is the
+        # binary alone — ALS speaks LSP over stdio with no flags. Source:
+        # ``solidlsp/language_servers/ada_language_server.py`` line 137-139
+        # (``_create_launch_command`` returns ``[core_path]``). File extensions
+        # mirror ``Language.ADA._matcher`` in ``ls_config.py`` line 504.
+        # Ada has full LSP rename support, so we expose the universal
+        # ``rename_symbol`` + ``fix_lints`` pair.
+        language="ada",
+        display_name="Ada",
+        file_extensions=(".ads", ".adb", ".ada"),
+        lsp_server_cmd=("ada_language_server",),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
     "al": _StrategyView(
         # Microsoft Dynamics 365 Business Central / NAV scripting language.
         # The AL Language Server ships inside the ms-dynamics-smb.al VS Code
@@ -1006,6 +1038,47 @@ _LANGUAGE_METADATA: dict[str, _StrategyView] = {
         display_name="AL",
         file_extensions=(".al", ".dal"),
         lsp_server_cmd=("al-language-server",),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "angular": _StrategyView(
+        # v1.3.0: Angular Language Server (ngserver,
+        # https://github.com/angular/vscode-ng-language-service). Dual-process
+        # orchestration: ngserver delegates to a companion TypeScript server
+        # and a companion HTML server. The SolidLSP adapter auto-downloads
+        # ngserver + the four interdependent npm packages and launches with
+        # ``ngserver --stdio --tsProbeLocations <node_modules> --ngProbeLocations <node_modules>``
+        # (source: ``solidlsp/language_servers/angular_language_server.py``
+        # lines 224-231). The surface ``lsp_server_cmd`` records the
+        # user-visible binary + ``--stdio`` flag; probe-location paths are
+        # installer-managed at run time. File extensions mirror
+        # ``Language.ANGULAR._matcher`` in ``ls_config.py`` lines 516-520
+        # (``.html``/``.htm`` plus TypeScript variants ``.ts``/``.tsx``/``.mts``/
+        # ``.mtsx``/``.cts``/``.ctsx``). Angular templates support workspace
+        # rename via the TS companion, so we expose ``rename_symbol`` +
+        # ``fix_lints``.
+        language="angular",
+        display_name="Angular",
+        file_extensions=(
+            ".html", ".htm",
+            ".ts", ".tsx", ".mts", ".mtsx", ".cts", ".ctsx",
+        ),
+        lsp_server_cmd=("ngserver", "--stdio"),
         facades=(
             _Facade(
                 name="rename_symbol",
@@ -1062,6 +1135,34 @@ _LANGUAGE_METADATA: dict[str, _StrategyView] = {
                 trigger_phrases=("rename this", "refactor name"),
                 primitive_chain=("textDocument/rename",),
             ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "bsl": _StrategyView(
+        # v1.3.0: 1c-syntax/bsl-language-server (https://github.com/1c-syntax/bsl-language-server)
+        # for 1C:Enterprise and OneScript. Distributed as a Java JAR; the
+        # SolidLSP adapter auto-downloads the release JAR and launches via
+        # ``java -jar <jar_path>`` (source:
+        # ``solidlsp/language_servers/bsl_language_server.py`` lines 164-167).
+        # Requires Java 21+ on PATH. The surface ``lsp_server_cmd`` records
+        # the canonical ``java -jar bsl-language-server.jar`` shape; the
+        # installer rewrites the JAR path at run time. File extensions mirror
+        # ``Language.BSL._matcher`` in ``ls_config.py`` line 502.
+        # BSL LSP is diagnostics-focused — only ``fix_lints`` is safe to
+        # advertise on the headline.
+        language="bsl",
+        display_name="BSL (1C:Enterprise / OneScript)",
+        file_extensions=(".bsl", ".os"),
+        lsp_server_cmd=("java", "-jar", "bsl-language-server.jar"),
+        facades=(
             _Facade(
                 name="fix_lints",
                 summary="Apply LSP diagnostic quick-fixes",
@@ -1211,6 +1312,34 @@ _LANGUAGE_METADATA: dict[str, _StrategyView] = {
                 trigger_phrases=("rename this", "refactor name"),
                 primitive_chain=("textDocument/rename",),
             ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "html": _StrategyView(
+        # v1.3.0: vscode-html-language-server from Microsoft's
+        # vscode-langservers-extracted bundle
+        # (https://github.com/hrsh7th/vscode-langservers-extracted). The
+        # SolidLSP adapter installs the npm bundle and launches via
+        # ``vscode-html-language-server --stdio`` (source:
+        # ``solidlsp/language_servers/vscode_html_language_server.py`` lines
+        # 39, 112-113 — ``LS_BIN_NAME`` + ``_create_launch_command``).
+        # File extensions mirror ``Language.HTML._matcher`` in
+        # ``ls_config.py`` line 506. HTML LSP provides in-file element/id
+        # symbols only; cross-file refactor is not meaningful, so only
+        # ``fix_lints`` is advertised.
+        language="html",
+        display_name="HTML",
+        file_extensions=(".html", ".htm"),
+        lsp_server_cmd=("vscode-html-language-server", "--stdio"),
+        facades=(
             _Facade(
                 name="fix_lints",
                 summary="Apply LSP diagnostic quick-fixes",
@@ -1527,6 +1656,41 @@ _LANGUAGE_METADATA: dict[str, _StrategyView] = {
         display_name="Scala",
         file_extensions=(".scala", ".sbt"),
         lsp_server_cmd=("metals",),
+        facades=(
+            _Facade(
+                name="rename_symbol",
+                summary="Rename a symbol across the workspace",
+                trigger_phrases=("rename this", "refactor name"),
+                primitive_chain=("textDocument/rename",),
+            ),
+            _Facade(
+                name="fix_lints",
+                summary="Apply LSP diagnostic quick-fixes",
+                trigger_phrases=("fix lints", "apply quickfixes"),
+                primitive_chain=(
+                    "textDocument/codeAction[quickfix]",
+                    "workspace/applyEdit",
+                ),
+            ),
+        ),
+    ),
+    "scss": _StrategyView(
+        # v1.3.0: some-sass-language-server
+        # (https://github.com/wkillerud/some-sass). The SolidLSP adapter
+        # installs the npm bundle and launches via
+        # ``some-sass-language-server --stdio`` (source:
+        # ``solidlsp/language_servers/some_sass_language_server.py`` lines 43,
+        # 157-158 — ``LS_BIN_NAME`` + ``_create_launch_command``). File
+        # extensions mirror ``Language.SCSS._matcher`` in ``ls_config.py``
+        # lines 507-511: ``.scss`` + ``.sass`` plus ``.css`` (the same
+        # vscode-css-languageservice engine powers all three). some-sass
+        # offers ``@use``/``@forward`` workspace navigation and supports
+        # rename across files, so we expose the universal
+        # ``rename_symbol`` + ``fix_lints`` pair.
+        language="scss",
+        display_name="SCSS / Sass / CSS",
+        file_extensions=(".scss", ".sass", ".css"),
+        lsp_server_cmd=("some-sass-language-server", "--stdio"),
         facades=(
             _Facade(
                 name="rename_symbol",
