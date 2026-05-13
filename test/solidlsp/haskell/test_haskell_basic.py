@@ -93,6 +93,11 @@ class TestHaskellLanguageServer:
         extra = symbol_names - expected_symbols - {"Helper"}
         assert not extra, f"Unexpected symbols in Helper.hs: {extra}"
 
+    @pytest.mark.xfail(
+        reason="HLS requires cabal/ghc to resolve the executable cradle for app/Main.hs; "
+        "when cabal is not on PATH HLS returns empty symbols — see v0.2.0-followup-E1",
+        strict=False,
+    )
     @pytest.mark.parametrize("language_server", [Language.HASKELL], indirect=True)
     def test_main_module_imports(self, language_server: SolidLanguageServer):
         """

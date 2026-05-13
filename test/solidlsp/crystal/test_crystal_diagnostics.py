@@ -13,6 +13,10 @@ pytestmark = [
 
 
 class TestCrystalDiagnostics:
+    @pytest.mark.xfail(
+        reason="Crystalline LSP does not advertise diagnosticProvider capability — see v0.2.0-followup-E1",
+        strict=False,
+    )
     @pytest.mark.parametrize("language_server", [Language.CRYSTAL], indirect=True)
     def test_file_diagnostics(self, language_server: SolidLanguageServer) -> None:
         assert_file_diagnostics(
