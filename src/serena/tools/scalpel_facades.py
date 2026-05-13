@@ -4544,6 +4544,302 @@ def _bind_facade_dispatch_table() -> None:
     _FACADE_DISPATCH["scalpel_override_methods"] = lambda **kw: OverrideMethodsTool(none_agent).apply(**kw)
 
 
+# ---------------------------------------------------------------------------
+# R7 — v1.3.0 LSP retrieval facades
+#
+# Wraps four upstream Serena v1.3.0 tools (``FindDeclarationTool``,
+# ``FindImplementationsTool``, ``GetDiagnosticsForFileTool``,
+# ``GetDiagnosticsForSymbolTool``) under the PREFERRED: convention,
+# adding a runtime capability gate. The upstream tools remain in
+# ``serena.tools.symbol_tools`` and continue to be routable as the
+# AST/raw-LSP fallback (per CLAUDE.md tool-routing rule).
+#
+# The four facades all follow the same shape:
+#   1. Resolve project + coordinator.
+#   2. Capability gate via ``coord.supports_method(...)`` — short-circuit
+#      with a ``CAPABILITY_NOT_AVAILABLE`` envelope when the responsible
+#      LSP method is unsupported (spec § 4.7).
+#   3. Delegate to the upstream tool by composition, preserving the
+#      upstream JSON output unchanged.
+#
+# Naming: these four facades intentionally keep the ``Scalpel`` class
+# prefix because the upstream tools already own the unprefixed canonical
+# name (``find_declaration`` etc.). The registry dual-registration loop
+# skips the redundant ``scalpel_scalpel_*`` legacy alias for any class
+# whose canonical name already begins with ``scalpel_``.
+# ---------------------------------------------------------------------------
+
+
+def _delegate_to_upstream_tool(self: Tool, upstream_cls: type) -> Any:
+    """Construct an upstream tool sharing this facade's agent.
+
+    Tests instantiate facades via ``__new__`` (no agent), so we mirror
+    that pattern: bypass ``__init__`` and copy ``agent`` if present.
+    In production ``self.agent`` is set and propagation is automatic.
+
+    Returns ``Any`` so the caller can invoke the upstream's bespoke
+    ``apply(...)`` signature without type unification across the four
+    upstream tool variants.
+    """
+    # pyright cannot resolve the generic ``__new__`` overload for an
+    # unknown ``type`` parameter — the call is well-formed at runtime.
+    upstream: Any = object.__new__(upstream_cls)
+    if hasattr(self, "agent"):
+        upstream.agent = self.agent
+    return upstream
+
+
+def _gate_method_or_envelope(
+    *,
+    language: str,
+    method: str,
+    server_id: str,
+    coord: Any,
+) -> str | None:
+    """Return CAPABILITY_NOT_AVAILABLE JSON when the method is unsupported.
+
+    Returns ``None`` when the gate passes so the caller can proceed.
+    """
+    if coord.supports_method(server_id, method):
+        return None
+    return json.dumps(_capability_not_available_envelope(
+        language=language, kind=method, server_id=server_id,
+    ))
+
+
+def _infer_language_for_retrieval(relative_path: str) -> tuple[str, str]:
+    """Pick the (language, server_id) pair for a retrieval facade.
+
+    Heuristic mirrors ``_infer_language`` but specialised for the
+    retrieval surface where the server_id used in capability gating
+    must match what the multi-server coordinator actually launches.
+
+    Defaults to Python / pylsp-rope when the suffix is unknown — the
+    capability gate then surfaces honestly (``supports_method`` returns
+    False on any path that lacks the LSP server).
+    """
+    suffix = Path(relative_path).suffix
+    if suffix == ".rs":
+        return "rust", "rust-analyzer"
+    if suffix in (".py", ".pyi"):
+        return "python", "pylsp-rope"
+    if suffix in (".md", ".markdown"):
+        return "markdown", "marksman"
+    if suffix == ".java":
+        return "java", "jdtls"
+    return "python", "pylsp-rope"
+
+
+class ScalpelFindDeclarationTool(Tool):
+    """PREFERRED: find a symbol's declaration/definition via LSP textDocument/definition.
+
+    Wraps upstream ``FindDeclarationTool``. Capability-gated by
+    ``DynamicCapabilityRegistry`` — returns ``CAPABILITY_NOT_AVAILABLE``
+    envelope when the responsible server lacks textDocument/definition.
+    Delegates to the upstream tool's JSON shape when supported.
+    """
+
+    def apply(
+        self,
+        relative_path: str,
+        regex: str,
+        containing_symbol_name_path: str | None = None,
+        include_body: bool = False,
+        include_info: bool = False,
+    ) -> str:
+        r"""PREFERRED LSP path for finding a symbol's declaration.
+
+        :param relative_path: the relative path to the source file containing
+            the symbol for which to find the declaration.
+        :param regex: regular expression with one group; the group matches
+            the symbol to look up. Same shape as upstream
+            ``find_declaration``.
+        :param containing_symbol_name_path: optional name path of a containing
+            symbol whose body shall be searched instead of the full file.
+        :param include_body: whether to include the symbol's body in the
+            result. Default False.
+        :param include_info: whether to include additional info (hover-like).
+            Default False.
+        :return: upstream FindDeclaration JSON, or CAPABILITY_NOT_AVAILABLE
+            envelope when textDocument/definition is unsupported.
+        """
+        from serena.tools.symbol_tools import FindDeclarationTool
+        project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
+        language, server_id = _infer_language_for_retrieval(relative_path)
+        coord = coordinator_for_facade(language=language, project_root=project_root)
+        skip = _gate_method_or_envelope(
+            language=language, method="textDocument/definition",
+            server_id=server_id, coord=coord,
+        )
+        if skip is not None:
+            return skip
+        upstream = _delegate_to_upstream_tool(self, FindDeclarationTool)
+        return upstream.apply(
+            relative_path=relative_path,
+            regex=regex,
+            containing_symbol_name_path=containing_symbol_name_path,
+            include_body=include_body,
+            include_info=include_info,
+        )
+
+
+class ScalpelFindImplementationsTool(Tool):
+    """PREFERRED: find implementations of a symbol via LSP textDocument/implementation.
+
+    Wraps upstream ``FindImplementationsTool``. Capability-gated by
+    ``DynamicCapabilityRegistry`` — Pyright lacks
+    textDocument/implementation, so Python paths surface
+    ``CAPABILITY_NOT_AVAILABLE`` honestly (see reference_lsp_capability_gaps.md).
+    Rust via rust-analyzer is supported.
+    """
+
+    # noinspection PyDefaultArgument
+    def apply(
+        self,
+        name_path: str,
+        relative_path: str,
+        include_info: bool = False,
+        include_kinds: list[int] = [],  # noqa: B006  — match upstream signature
+        exclude_kinds: list[int] = [],  # noqa: B006
+        max_answer_chars: int = -1,
+    ) -> str:
+        """PREFERRED LSP path for finding implementations of a symbol.
+
+        :param name_path: for finding the symbol to find implementations for,
+            same logic as upstream ``find_symbol``.
+        :param relative_path: the relative path to the file containing the
+            symbol for which to find implementations.
+        :param include_info: whether to include additional info (hover-like).
+        :param include_kinds: same as upstream ``find_symbol``.
+        :param exclude_kinds: same as upstream ``find_symbol``.
+        :param max_answer_chars: same as upstream ``find_symbol``.
+        :return: upstream JSON list, or CAPABILITY_NOT_AVAILABLE envelope
+            when textDocument/implementation is unsupported.
+        """
+        from serena.tools.symbol_tools import FindImplementationsTool
+        project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
+        language, server_id = _infer_language_for_retrieval(relative_path)
+        coord = coordinator_for_facade(language=language, project_root=project_root)
+        skip = _gate_method_or_envelope(
+            language=language, method="textDocument/implementation",
+            server_id=server_id, coord=coord,
+        )
+        if skip is not None:
+            return skip
+        upstream = _delegate_to_upstream_tool(self, FindImplementationsTool)
+        return upstream.apply(
+            name_path=name_path,
+            relative_path=relative_path,
+            include_info=include_info,
+            include_kinds=include_kinds,
+            exclude_kinds=exclude_kinds,
+            max_answer_chars=max_answer_chars,
+        )
+
+
+class ScalpelGetDiagnosticsForFileTool(Tool):
+    """PREFERRED: get LSP diagnostics for a file, grouped by symbol.
+
+    Wraps upstream ``GetDiagnosticsForFileTool``. Gated on
+    textDocument/documentSymbol because the upstream tool maps diagnostics
+    to owner symbols via documentSymbol; without it the tool cannot do
+    its job. Diagnostics themselves come from publishDiagnostics
+    (push) or textDocument/diagnostic (pull) which most servers support.
+    """
+
+    def apply(
+        self,
+        relative_path: str,
+        start_line: int = 0,
+        end_line: int = -1,
+        min_severity: int = 4,
+        max_answer_chars: int = -1,
+    ) -> str:
+        """PREFERRED LSP path for retrieving diagnostics for a file.
+
+        :param relative_path: the relative path to the file to inspect.
+        :param start_line: the first 0-based line to include. Default 0.
+        :param end_line: the last 0-based line to include. Default -1
+            (until end of file).
+        :param min_severity: minimum LSP severity, 1=Error … 4=Hint.
+        :param max_answer_chars: same as upstream ``find_symbol``.
+        :return: upstream grouped-diagnostics JSON, or
+            CAPABILITY_NOT_AVAILABLE envelope when documentSymbol is
+            unsupported.
+        """
+        from serena.tools.symbol_tools import GetDiagnosticsForFileTool
+        project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
+        language, server_id = _infer_language_for_retrieval(relative_path)
+        coord = coordinator_for_facade(language=language, project_root=project_root)
+        skip = _gate_method_or_envelope(
+            language=language, method="textDocument/documentSymbol",
+            server_id=server_id, coord=coord,
+        )
+        if skip is not None:
+            return skip
+        upstream = _delegate_to_upstream_tool(self, GetDiagnosticsForFileTool)
+        return upstream.apply(
+            relative_path=relative_path,
+            start_line=start_line,
+            end_line=end_line,
+            min_severity=min_severity,
+            max_answer_chars=max_answer_chars,
+        )
+
+
+class ScalpelGetDiagnosticsForSymbolTool(Tool):
+    """PREFERRED: get LSP diagnostics for a symbol (and optionally its references).
+
+    Wraps upstream ``GetDiagnosticsForSymbolTool``. Gated on
+    textDocument/documentSymbol — required to resolve the symbol's
+    location before diagnostics can be grouped. Capability mismatch
+    surfaces CAPABILITY_NOT_AVAILABLE.
+    """
+
+    def apply(
+        self,
+        name_path: str,
+        reference_file: str = "",
+        check_symbol_references: bool = False,
+        min_severity: int = 4,
+        max_answer_chars: int = -1,
+    ) -> str:
+        """PREFERRED LSP path for symbol-scoped diagnostics.
+
+        :param name_path: the name path of the symbol to inspect.
+        :param reference_file: optional file path used to disambiguate the
+            symbol search.
+        :param check_symbol_references: also collect diagnostics for
+            referencing symbols. Default False.
+        :param min_severity: minimum LSP severity, 1=Error … 4=Hint.
+        :param max_answer_chars: same as upstream ``find_symbol``.
+        :return: upstream grouped-diagnostics JSON, or
+            CAPABILITY_NOT_AVAILABLE envelope when documentSymbol is
+            unsupported.
+        """
+        from serena.tools.symbol_tools import GetDiagnosticsForSymbolTool
+        project_root = Path(self.get_project_root()).expanduser().resolve(strict=False)
+        # No file-path hint for the symbol-scoped variant — fall back to
+        # ``reference_file`` if provided, else default to Python.
+        path_hint = reference_file or "x.py"
+        language, server_id = _infer_language_for_retrieval(path_hint)
+        coord = coordinator_for_facade(language=language, project_root=project_root)
+        skip = _gate_method_or_envelope(
+            language=language, method="textDocument/documentSymbol",
+            server_id=server_id, coord=coord,
+        )
+        if skip is not None:
+            return skip
+        upstream = _delegate_to_upstream_tool(self, GetDiagnosticsForSymbolTool)
+        return upstream.apply(
+            name_path=name_path,
+            reference_file=reference_file,
+            check_symbol_references=check_symbol_references,
+            min_severity=min_severity,
+            max_answer_chars=max_answer_chars,
+        )
+
+
 class TransactionCommitTool(Tool):
     """PREFERRED: commit a previewed transaction from dry_run_compose."""
 
@@ -4672,6 +4968,11 @@ __all__ = [
     "OverrideMethodsTool",
     "RenameHeadingTool",
     "RenameTool",
+    # R7 — v1.3.0 LSP retrieval facades.
+    "ScalpelFindDeclarationTool",
+    "ScalpelFindImplementationsTool",
+    "ScalpelGetDiagnosticsForFileTool",
+    "ScalpelGetDiagnosticsForSymbolTool",
     "SplitDocTool",
     "SplitFileTool",
     "TidyStructureTool",

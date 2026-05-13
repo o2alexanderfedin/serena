@@ -579,7 +579,14 @@ class ToolRegistry:
             # v2.0 wire-name cleanup (spec 2026-05-03 § 6.1): dual-register
             # every Scalpel facade/primitive under its legacy ``scalpel_*``
             # alias for the deprecation window.
-            if cls.__module__ in _SCALPEL_LEGACY_ALIAS_MODULES:
+            #
+            # R7 (v1.3.0 retrieval facades): new facades whose canonical name
+            # already starts with ``scalpel_`` (because they wrap an upstream
+            # tool of the same canonical name — see
+            # ``ScalpelFindDeclarationTool`` etc.) are exempt from the dual
+            # registration. They have no v1.x history to deprecate, and
+            # ``scalpel_scalpel_<name>`` would be both redundant and ugly.
+            if cls.__module__ in _SCALPEL_LEGACY_ALIAS_MODULES and not name.startswith("scalpel_"):
                 legacy_name = f"scalpel_{name}"
                 if legacy_name in self._tool_dict:
                     # Defensive: if a class already happens to derive a
