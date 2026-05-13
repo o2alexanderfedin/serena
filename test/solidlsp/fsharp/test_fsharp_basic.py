@@ -175,6 +175,7 @@ class TestFSharpLanguageServer:
         # This is acceptable as it depends on the LSP server's capabilities and timing
         assert hover_info is None or isinstance(hover_info, dict), "Hover info should be None or dict"
 
+    @pytest.mark.xfail(reason="F# LSP completion is host-toolchain dependent — see #1040 / v0.2.0-followup-E1", strict=False)
     @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
     def test_completion(self, language_server: SolidLanguageServer) -> None:
         """Test code completion functionality."""
