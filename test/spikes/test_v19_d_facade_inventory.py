@@ -65,10 +65,19 @@ def _enumerate_tools() -> list[str]:
     return out
 
 
-# Allow-list as of v1.9.3 / Item D close. 46 entries = 34 ergonomic facades
-# + 12 primitives/operators. To extend, append the new tool's snake_case
-# name AND its 3-user-request demand evidence to the v2.0 roadmap doc
-# referenced in the module docstring above.
+# Allow-list as of R7 (v1.3.0 retrieval facades). 50 entries = 38 ergonomic
+# facades + 12 primitives/operators. R7 added 4 new PREFERRED: retrieval
+# facades wrapping the v1.3.0 upstream LSP tools:
+#   * scalpel_find_declaration
+#   * scalpel_find_implementations
+#   * scalpel_get_diagnostics_for_file
+#   * scalpel_get_diagnostics_for_symbol
+# These intentionally keep the ``scalpel_`` prefix because the upstream
+# tools own the unprefixed canonical names (``find_declaration`` etc.)
+# and the registry skips redundant ``scalpel_scalpel_*`` aliases for them.
+# To extend, append the new tool's snake_case name AND its 3-user-request
+# demand evidence to the v2.0 roadmap doc referenced in the module
+# docstring above.
 EXPECTED_TOOLS = frozenset({
     "annotate_return_type",
     "apply_capability",
@@ -108,6 +117,11 @@ EXPECTED_TOOLS = frozenset({
     "rename",
     "rename_heading",
     "rollback",
+    # R7 — v1.3.0 retrieval facades (4).
+    "scalpel_find_declaration",
+    "scalpel_find_implementations",
+    "scalpel_get_diagnostics_for_file",
+    "scalpel_get_diagnostics_for_symbol",
     "split_doc",
     "split_file",
     "tidy_structure",
